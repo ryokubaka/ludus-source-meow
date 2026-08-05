@@ -94,28 +94,30 @@ locals {
 }
 
 source "proxmox-iso" "securityonion24" {
-  # Evidence (debug d940ab): stock ISO ks leaves no qemu-guest-agent → Packer
-  # never gets SSH IP (500 agent not running) → ansible/template never run.
-  # Also stock waits on "Press Enter to reboot". Custom ks fixes both.
+  # Kickstart on second CD (/dev/sr1). SO ISO is sr0 and embeds ks=cdrom → stock
+  # WARNING screen. StackOverflow/CentOS8: use explicit sr1, not LABEL/HTTP alone.
+  # https://stackoverflow.com/questions/65099940
   #
-  # ISO appends ks=cdrom — override with BOTH ks= and inst.ks= (last wins).
-  # Type immediately at boot menu (do NOT wait 75s first — menu auto-boots).
+  # Debug d940ab: Packer SSH via qemu-guest-agent never works on stock SO ks
+  # (agent package missing). communicator=none + shell-local uses DHCP lease IP.
   boot_command = [
     "<tab><wait>",
     " ip=dhcp inst.text inst.cmdline",
-    " ks=http://{{ .HTTPIP }}:{{ .HTTPPort }}/ks.cfg",
-    " inst.ks=http://{{ .HTTPIP }}:{{ .HTTPPort }}/ks.cfg",
+    " ks=cdrom:/dev/sr1:/ks.cfg",
+    " inst.ks=cdrom:/dev/sr1:/ks.cfg",
     "<enter>"
   ]
   boot_wait         = "12s"
   boot_key_interval = "50ms"
-  http_directory    = "./http"
 
-  communicator    = "ssh"
+  # Do not block on guest-agent IP discovery (stock path has no agent).
+  communicator = "none"
+
   cores           = "${var.vm_cpu_cores}"
   cpu_type        = "host"
   scsi_controller = "virtio-scsi-single"
-  qemu_agent      = true
+  # Enable agent in Proxmox config; guest package comes from our ks (or ansible).
+  qemu_agent = true
   disks {
     disk_size         = "${var.vm_disk_size}"
     format            = "${var.proxmox_storage_format}"
@@ -136,7 +138,7 @@ source "proxmox-iso" "securityonion24" {
     unmount           = true
     keep_cdrom_device = false
   }
-  # Offline fallback if HTTP ks unreachable from installer
+  # Second CD → guest /dev/sr1 (must appear in Packer log as Creating CD disk / OEMDRV)
   additional_iso_files {
     type             = "ide"
     index            = "1"
@@ -150,29 +152,30 @@ source "proxmox-iso" "securityonion24" {
     bridge = "${var.ludus_nat_interface}"
     model  = "virtio"
   }
-  node                   = "${var.proxmox_host}"
-  os                     = "${var.os}"
-  password               = "${var.proxmox_password}"
-  proxmox_url            = "${var.proxmox_url}"
-  template_description   = "${local.template_description}"
-  username               = "${var.proxmox_username}"
-  vm_name                = "${var.vm_name}"
-  ssh_password           = "${var.ssh_password}"
-  ssh_username           = "${var.ssh_username}"
-  ssh_timeout            = "120m"
-  ssh_handshake_attempts = 100
-  task_timeout           = "60m"
+  node                 = "${var.proxmox_host}"
+  os                   = "${var.os}"
+  password             = "${var.proxmox_password}"
+  proxmox_url          = "${var.proxmox_url}"
+  template_description = "${local.template_description}"
+  username             = "${var.proxmox_username}"
+  vm_name              = "${var.vm_name}"
+  task_timeout         = "60m"
 }
 
 build {
   sources = ["source.proxmox-iso.securityonion24"]
 
-  provisioner "ansible" {
-    playbook_file      = "ansible/reset-ssh-host-keys.yml"
-    use_proxy          = false
-    user               = "${var.ssh_username}"
-    extra_arguments    = ["--extra-vars", "{ansible_python_interpreter: /usr/bin/python3, ansible_password: ${var.ssh_password}, ansible_sudo_pass: ${var.ssh_password}}"]
-    ansible_env_vars   = ["ANSIBLE_HOME=${var.ansible_home}", "ANSIBLE_LOCAL_TEMP=${var.ansible_home}/tmp", "ANSIBLE_PERSISTENT_CONTROL_PATH_DIR=${var.ansible_home}/pc", "ANSIBLE_SSH_CONTROL_PATH_DIR=${var.ansible_home}/cp"]
-    skip_version_check = true
+  # Host-side provision: DHCP → SSH → ansible (no Packer guest-agent wait).
+  provisioner "shell-local" {
+    execute_command = ["bash", "-c", "{{.Vars}} {{.Script}}"]
+    env = {
+      VM_NAME      = "${var.vm_name}"
+      SSH_USER     = "${var.ssh_username}"
+      SSH_PASS     = "${var.ssh_password}"
+      PLAYBOOK     = "ansible/reset-ssh-host-keys.yml"
+      ANSIBLE_HOME = "${var.ansible_home}"
+      MAX_WAIT_SEC = "7200"
+    }
+    script = "scripts/packer-provision-via-dhcp.sh"
   }
 }

@@ -93,20 +93,17 @@ locals {
 }
 
 source "proxmox-iso" "securityonion3" {
-  # Same automation model as securityonion-2.4 — custom ks for guest agent +
-  # auto-reboot; so-setup deferred to range deploy.
   boot_command = [
     "<tab><wait>",
     " ip=dhcp inst.text inst.cmdline",
-    " ks=http://{{ .HTTPIP }}:{{ .HTTPPort }}/ks.cfg",
-    " inst.ks=http://{{ .HTTPIP }}:{{ .HTTPPort }}/ks.cfg",
+    " ks=cdrom:/dev/sr1:/ks.cfg",
+    " inst.ks=cdrom:/dev/sr1:/ks.cfg",
     "<enter>"
   ]
   boot_wait         = "12s"
   boot_key_interval = "50ms"
-  http_directory    = "./http"
+  communicator      = "none"
 
-  communicator    = "ssh"
   cores           = "${var.vm_cpu_cores}"
   cpu_type        = "host"
   scsi_controller = "virtio-scsi-single"
@@ -139,34 +136,34 @@ source "proxmox-iso" "securityonion3" {
     cd_files         = ["./http/ks.cfg"]
     cd_label         = "OEMDRV"
   }
-  memory = "${var.vm_memory}"
+  memory               = "${var.vm_memory}"
   network_adapters {
     bridge = "${var.ludus_nat_interface}"
     model  = "virtio"
   }
-  node                   = "${var.proxmox_host}"
-  os                     = "${var.os}"
-  password               = "${var.proxmox_password}"
-  proxmox_url            = "${var.proxmox_url}"
-  template_description   = "${local.template_description}"
-  username               = "${var.proxmox_username}"
-  vm_name                = "${var.vm_name}"
-  ssh_password           = "${var.ssh_password}"
-  ssh_username           = "${var.ssh_username}"
-  ssh_timeout            = "120m"
-  ssh_handshake_attempts = 100
-  task_timeout           = "60m"
+  node                 = "${var.proxmox_host}"
+  os                   = "${var.os}"
+  password             = "${var.proxmox_password}"
+  proxmox_url          = "${var.proxmox_url}"
+  template_description = "${local.template_description}"
+  username             = "${var.proxmox_username}"
+  vm_name              = "${var.vm_name}"
+  task_timeout         = "60m"
 }
 
 build {
   sources = ["source.proxmox-iso.securityonion3"]
 
-  provisioner "ansible" {
-    playbook_file      = "ansible/reset-ssh-host-keys.yml"
-    use_proxy          = false
-    user               = "${var.ssh_username}"
-    extra_arguments    = ["--extra-vars", "{ansible_python_interpreter: /usr/bin/python3, ansible_password: ${var.ssh_password}, ansible_sudo_pass: ${var.ssh_password}}"]
-    ansible_env_vars   = ["ANSIBLE_HOME=${var.ansible_home}", "ANSIBLE_LOCAL_TEMP=${var.ansible_home}/tmp", "ANSIBLE_PERSISTENT_CONTROL_PATH_DIR=${var.ansible_home}/pc", "ANSIBLE_SSH_CONTROL_PATH_DIR=${var.ansible_home}/cp"]
-    skip_version_check = true
+  provisioner "shell-local" {
+    execute_command = ["bash", "-c", "{{.Vars}} {{.Script}}"]
+    env = {
+      VM_NAME      = "${var.vm_name}"
+      SSH_USER     = "${var.ssh_username}"
+      SSH_PASS     = "${var.ssh_password}"
+      PLAYBOOK     = "ansible/reset-ssh-host-keys.yml"
+      ANSIBLE_HOME = "${var.ansible_home}"
+      MAX_WAIT_SEC = "7200"
+    }
+    script = "scripts/packer-provision-via-dhcp.sh"
   }
 }
