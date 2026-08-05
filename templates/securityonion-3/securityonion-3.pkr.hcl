@@ -93,7 +93,7 @@ locals {
 }
 
 source "proxmox-iso" "securityonion3" {
-  # Same model as securityonion-2.4 — Enter prompt ~10m after onion (console evidence).
+  # Same as SO 2.4: stock install → tty2 → force DHCP (offline ISO leaves NIC down).
   boot_command = [
     "<wait75s>",
     "yes<enter>",
@@ -105,11 +105,15 @@ source "proxmox-iso" "securityonion3" {
     "onion<enter>",
     "<wait10m>",
     "<enter>",
-    "<wait1m>",
-    "<enter>",
-    "<wait1m>",
-    "<enter>",
-    "<wait3m>"
+    "<wait3m>",
+    "<leftCtrlOn><leftAltOn><f2><leftAltOff><leftCtrlOff>",
+    "<wait3s>",
+    "onion<enter>",
+    "<wait2s>",
+    "onion<enter>",
+    "<wait3s>",
+    "echo onion | sudo -S bash -c 'systemctl enable --now NetworkManager sshd; nmcli networking on; for n in $(ls /sys/class/net | grep -v lo); do ip link set $n up; nmcli device set $n managed yes; nmcli device connect $n || dhclient -v $n || true; done; firewall-cmd --permanent --add-service=ssh; firewall-cmd --reload; true'<enter>",
+    "<wait30s>"
   ]
   boot_wait         = "15s"
   boot_key_interval = "100ms"

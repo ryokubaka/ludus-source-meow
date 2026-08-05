@@ -93,8 +93,10 @@ locals {
 }
 
 source "proxmox-iso" "securityonion24" {
-  # Stock ISO keystrokes. Console evidence: "Press Enter to reboot" ~10m after onion prompts.
-  # boot=order=scsi0;ide0: disk first after install (avoid ISO re-boot loop).
+  # Stock ISO keystrokes.
+  # Evidence 2026-08-05: OS reaches login (Oracle Linux 9.7) but lease_lines=0 —
+  # SO offline ISO install leaves NIC without DHCP. Ludus DHCP is 192.0.2.50-100.
+  # After reboot: tty2 login → force DHCP/sshd → shell-local SSH scan finds IP.
   boot_command = [
     "<wait75s>",
     "yes<enter>",
@@ -104,14 +106,18 @@ source "proxmox-iso" "securityonion24" {
     "onion<enter>",
     "<wait2s>",
     "onion<enter>",
-    # ~10m to reboot prompt; light Enter spam + wait for disk boot
     "<wait10m>",
     "<enter>",
-    "<wait1m>",
-    "<enter>",
-    "<wait1m>",
-    "<enter>",
-    "<wait3m>"
+    "<wait3m>",
+    # so-setup may grab tty1 — use tty2
+    "<leftCtrlOn><leftAltOn><f2><leftAltOff><leftCtrlOff>",
+    "<wait3s>",
+    "onion<enter>",
+    "<wait2s>",
+    "onion<enter>",
+    "<wait3s>",
+    "echo onion | sudo -S bash -c 'systemctl enable --now NetworkManager sshd; nmcli networking on; for n in $(ls /sys/class/net | grep -v lo); do ip link set $n up; nmcli device set $n managed yes; nmcli device connect $n || dhclient -v $n || true; done; firewall-cmd --permanent --add-service=ssh; firewall-cmd --reload; true'<enter>",
+    "<wait30s>"
   ]
   boot_wait         = "15s"
   boot_key_interval = "100ms"

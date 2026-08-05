@@ -11,7 +11,7 @@
 # (Packer log path — not users/*/packer or sources/*/templates)
 set -u
 
-SCRIPT_VERSION="H31-parallel-20260805"
+SCRIPT_VERSION="H32-netup-20260805"
 
 VM_NAME="${VM_NAME:-securityonion-3-x64-template}"
 SSH_USER="${SSH_USER:-onion}"
