@@ -21,27 +21,22 @@ ludus templates build -n <template-name>
 
 ### Security Onion notes
 
-- OS install is unattended via Packer HTTP kickstart; **so-setup is not run in Packer**.
-- Template creds: `onion` / `onion`
-- Disk 200G; first build downloads a large ISO and can take a long time.
-- SO ISO embeds `ks=cdrom` with an interactive **type yes** warning. That is *not*
-  Anaconda progress — it means our kickstart lost. Templates boot with
-  `ks=` + `inst.ks=` both set to Packer HTTP `ks.cfg` (`ip=dhcp` required) and
-  still attach an OEMDRV CD as fallback. If console shows the WARNING prompt,
-  abort and re-sync/rebuild — do not wait.
-- Real Anaconda progress: same Proxmox **Console** on the Packer build VM —
-  package install / formatting / `%post` copy, then reboot to login.
-- Packer needs `qemu_agent = true` plus `qemu-guest-agent` in kickstart — otherwise
-  Proxmox never reports a DHCP IP and SSH wait loops forever (`500 QEMU guest agent
-  is not running`). Agent probes fail during Anaconda; succeed after first reboot.
-- Templates use `boot_iso { iso_download_pve = true }` so Proxmox pulls the ISO onto
-  `iso_storage_pool` instead of filling `/opt/ludus/users/<user>/packer/packer_cache`
-  (SO ISOs are multi-GB; local cache download hits `no space left on device`).
-- Ensure the Proxmox ISO datastore has enough free space (~15–25 GB per SO ISO).
-- If a prior failed build left a partial ISO in packer_cache, clear it:
+- Uses the **stock SO ISO kickstart**. Custom HTTP/OEMDRV `ks.cfg` overrides keep
+  losing to the ISO’s embedded `ks=cdrom` (WARNING / type **yes** screen).
+- Packer `boot_command` waits ~75s, then types: `yes` → username `onion` →
+  password `onion` twice. After that Anaconda/`%post` runs unattended (long
+  rsync of SO + docker images).
+- **Finished template creds: `onion` / `onion`.** Ansible strips so-setup
+  autostart and installs `qemu-guest-agent`.
+- Monitor progress on the Packer build VM **Proxmox console**. You should see
+  the WARNING briefly, then prompts answered, then package install / copy.
+- `boot_iso { iso_download_pve = true }` — Proxmox pulls the ISO onto
+  `iso_storage_pool` (avoid filling user `packer_cache`).
+- Ensure ISO datastore has ~15–25 GB free per SO ISO.
+- Build budget ~1–2 h (`ssh_timeout` 120m).
 
 ```bash
-# on Ludus host
+# on Ludus host — clear leftover packer cache if needed
 rm -rf /opt/ludus/users/<user>/packer/packer_cache/downloaded_iso_path/*
 df -h /opt/ludus
 ```
@@ -50,6 +45,6 @@ df -h /opt/ludus
 
 1. Create `templates/<name>/`
 2. Add `<name>.pkr.hcl` with `description` and `icon_path` variables
-3. Linux: `http/` kickstart · Windows: `Autounattend.xml`
+3. Linux: kickstart or ISO-native automation · Windows: `Autounattend.xml`
 4. Document the `*-template` name in this README
 5. After `source add`, build: `ludus templates build -n <name>`

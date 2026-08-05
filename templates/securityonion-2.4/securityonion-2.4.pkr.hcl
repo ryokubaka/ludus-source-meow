@@ -94,28 +94,27 @@ locals {
 }
 
 source "proxmox-iso" "securityonion24" {
-  # SO ISO appends ks=cdrom (interactive "type yes"). inst.ks= alone does NOT
-  # override old-style ks= — set BOTH. Prefer HTTP ks (Packer server); OEMDRV
-  # CD is the offline fallback (LABEL=OEMDRV).
+  # Stock SO ISO ks=cdrom always wins over HTTP/OEMDRV overrides → interactive
+  # "type yes", then username, then password x2. Answer those via keystrokes.
+  # (DMI "Automated" spoof is fragile through Proxmox args / spaces.)
   boot_command = [
-    "<up><wait>",
-    "<tab><wait>",
-    " ip=dhcp inst.text inst.cmdline",
-    " ks=http://{{ .HTTPIP }}:{{ .HTTPPort }}/ks.cfg",
-    " inst.ks=http://{{ .HTTPIP }}:{{ .HTTPPort }}/ks.cfg",
-    "<enter>"
+    "<wait75s>",
+    "yes<enter>",
+    "<wait3s>",
+    "onion<enter>",
+    "<wait2s>",
+    "onion<enter>",
+    "<wait2s>",
+    "onion<enter>"
   ]
-  boot_wait         = "25s"
-  boot_key_interval = "50ms"
-  http_directory    = "./http"
+  boot_wait         = "15s"
+  boot_key_interval = "100ms"
 
   communicator    = "ssh"
   cores           = "${var.vm_cpu_cores}"
   cpu_type        = "host"
   scsi_controller = "virtio-scsi-single"
-  # Required for Packer to learn the DHCP IP via Proxmox. Agent package is
-  # installed in kickstart; probes fail during Anaconda then succeed after reboot.
-  qemu_agent = true
+  qemu_agent      = true
   disks {
     disk_size         = "${var.vm_disk_size}"
     format            = "${var.proxmox_storage_format}"
@@ -137,15 +136,6 @@ source "proxmox-iso" "securityonion24" {
     iso_download_pve  = true
     unmount           = true
     keep_cdrom_device = false
-  }
-  # Unattended kickstart — overrides interactive SO ISO ks.cfg
-  additional_iso_files {
-    type             = "ide"
-    index            = "1"
-    iso_storage_pool = "${var.iso_storage_pool}"
-    unmount          = true
-    cd_files         = ["./http/ks.cfg"]
-    cd_label         = "OEMDRV"
   }
   memory = "${var.vm_memory}"
   network_adapters {
@@ -170,11 +160,11 @@ build {
   sources = ["source.proxmox-iso.securityonion24"]
 
   provisioner "ansible" {
-    playbook_file    = "ansible/reset-ssh-host-keys.yml"
-    use_proxy        = false
-    user             = "${var.ssh_username}"
-    extra_arguments  = ["--extra-vars", "{ansible_python_interpreter: /usr/bin/python3, ansible_password: ${var.ssh_password}, ansible_sudo_pass: ${var.ssh_password}}"]
-    ansible_env_vars = ["ANSIBLE_HOME=${var.ansible_home}", "ANSIBLE_LOCAL_TEMP=${var.ansible_home}/tmp", "ANSIBLE_PERSISTENT_CONTROL_PATH_DIR=${var.ansible_home}/pc", "ANSIBLE_SSH_CONTROL_PATH_DIR=${var.ansible_home}/cp"]
+    playbook_file      = "ansible/reset-ssh-host-keys.yml"
+    use_proxy          = false
+    user               = "${var.ssh_username}"
+    extra_arguments    = ["--extra-vars", "{ansible_python_interpreter: /usr/bin/python3, ansible_password: ${var.ssh_password}, ansible_sudo_pass: ${var.ssh_password}}"]
+    ansible_env_vars   = ["ANSIBLE_HOME=${var.ansible_home}", "ANSIBLE_LOCAL_TEMP=${var.ansible_home}/tmp", "ANSIBLE_PERSISTENT_CONTROL_PATH_DIR=${var.ansible_home}/pc", "ANSIBLE_SSH_CONTROL_PATH_DIR=${var.ansible_home}/cp"]
     skip_version_check = true
   }
 }

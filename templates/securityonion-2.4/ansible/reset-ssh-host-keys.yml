@@ -1,7 +1,45 @@
-- name: Reset SSH Host Keys
+- name: Harden Security Onion Packer template
   hosts: all
+  become: true
   tasks:
-    - name: Find SSH Host Keys
+    - name: Install qemu-guest-agent
+      ansible.builtin.dnf:
+        name: qemu-guest-agent
+        state: present
+      failed_when: false
+
+    - name: Enable qemu-guest-agent service
+      ansible.builtin.service:
+        name: qemu-guest-agent
+        enabled: true
+        state: started
+      failed_when: false
+
+    - name: Allow password SSH
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+      loop:
+        - { regexp: '^#?PasswordAuthentication', line: 'PasswordAuthentication yes' }
+        - { regexp: '^#?PermitRootLogin', line: 'PermitRootLogin yes' }
+      notify: Restart sshd
+
+    - name: Prevent interactive so-setup on console login
+      ansible.builtin.shell: |
+        for f in /home/onion/.bash_profile /home/onion/.bashrc /root/.bash_profile /root/.bashrc; do
+          [ -f "$f" ] || continue
+          sed -i '/so-setup/d;/SecurityOnion\/setup/d' "$f" || true
+        done
+      args:
+        executable: /bin/bash
+
+    - name: Mark Ludus Packer template
+      ansible.builtin.copy:
+        dest: /etc/ludus-so-template
+        content: "securityonion-2.4-packer\n"
+
+    - name: Find SSH host keys
       ansible.builtin.find:
         paths: /etc/ssh/
         recurse: false
@@ -10,12 +48,11 @@
         patterns: 'ssh_host_.*'
       register: ssh_keys
 
-    - name: Remove SSH Host Keys
+    - name: Remove SSH host keys
       ansible.builtin.file:
         path: "{{ item.path }}"
         state: absent
       loop: "{{ ssh_keys.files }}"
-      become: true
 
     - name: Remove machine-id for unique clones
       ansible.builtin.file:
@@ -24,5 +61,10 @@
       loop:
         - /etc/machine-id
         - /var/lib/dbus/machine-id
-      become: true
       failed_when: false
+
+  handlers:
+    - name: Restart sshd
+      ansible.builtin.service:
+        name: sshd
+        state: restarted
