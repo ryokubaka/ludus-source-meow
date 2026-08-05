@@ -24,7 +24,11 @@ ludus templates build -n <template-name>
 - OS install is unattended via Packer HTTP kickstart; **so-setup is not run in Packer**.
 - Template creds: `onion` / `onion`
 - Disk 200G; first build downloads a large ISO and can take a long time.
-- `boot_command` may need tuning against the live ISO boot menu on first build.
+- SO ISO default kickstart asks you to type `yes` (disk wipe). Templates attach an
+  **OEMDRV** CD with our unattended `http/ks.cfg` and boot with
+  `inst.ks=hd:LABEL=OEMDRV:/ks.cfg` + `ip=dhcp` so that prompt never appears.
+- `qemu_agent = false` during build — guest agent is not present in Anaconda; Packer
+  waits on SSH after install (agent errors were a red herring).
 - Templates use `boot_iso { iso_download_pve = true }` so Proxmox pulls the ISO onto
   `iso_storage_pool` instead of filling `/opt/ludus/users/<user>/packer/packer_cache`
   (SO ISOs are multi-GB; local cache download hits `no space left on device`).

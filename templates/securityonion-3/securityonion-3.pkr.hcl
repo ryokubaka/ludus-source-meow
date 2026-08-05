@@ -93,13 +93,16 @@ locals {
 }
 
 source "proxmox-iso" "securityonion3" {
+  # SO ISO ships ks=cdrom with an interactive "type yes" disk wipe. Override it:
+  # 1) OEMDRV CD (Anaconda auto-picks LABEL=OEMDRV)
+  # 2) Explicit inst.ks=hd:LABEL=OEMDRV + ip=dhcp
   boot_command = [
     "<up><wait>",
     "<tab><wait>",
-    " inst.text inst.ks=http://{{ .HTTPIP }}:{{ .HTTPPort }}/ks.cfg",
+    " ip=dhcp inst.text inst.cmdline inst.ks=hd:LABEL=OEMDRV:/ks.cfg",
     "<enter>"
   ]
-  boot_wait         = "15s"
+  boot_wait         = "20s"
   boot_key_interval = "100ms"
   http_directory    = "./http"
 
@@ -107,6 +110,7 @@ source "proxmox-iso" "securityonion3" {
   cores           = "${var.vm_cpu_cores}"
   cpu_type        = "host"
   scsi_controller = "virtio-scsi-single"
+  qemu_agent      = false
   disks {
     disk_size         = "${var.vm_disk_size}"
     format            = "${var.proxmox_storage_format}"
@@ -118,16 +122,22 @@ source "proxmox-iso" "securityonion3" {
   }
   pool                     = "${var.proxmox_pool}"
   insecure_skip_tls_verify = "${var.proxmox_skip_tls_verify}"
-  # Download ISO on Proxmox (iso_storage_pool), not into Ludus packer_cache —
-  # SO ISOs are multi-GB and will ENOSPC the user packer cache otherwise.
   boot_iso {
-    type             = "ide"
-    iso_url          = "${var.iso_url}"
-    iso_checksum     = "${var.iso_checksum}"
-    iso_storage_pool = "${var.iso_storage_pool}"
-    iso_download_pve = true
-    unmount          = true
+    type              = "ide"
+    iso_url           = "${var.iso_url}"
+    iso_checksum      = "${var.iso_checksum}"
+    iso_storage_pool  = "${var.iso_storage_pool}"
+    iso_download_pve  = true
+    unmount           = true
     keep_cdrom_device = false
+  }
+  additional_iso_files {
+    type             = "ide"
+    index            = "1"
+    iso_storage_pool = "${var.iso_storage_pool}"
+    unmount          = true
+    cd_files         = ["./http/ks.cfg"]
+    cd_label         = "OEMDRV"
   }
   memory = "${var.vm_memory}"
   network_adapters {
