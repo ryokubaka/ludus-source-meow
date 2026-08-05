@@ -93,15 +93,22 @@ locals {
 }
 
 source "proxmox-iso" "securityonion3" {
+  # Same model as securityonion-2.4: stock ISO keystrokes + DHCP shell-local.
   boot_command = [
-    "<tab><wait>",
-    " ip=dhcp inst.text inst.cmdline",
-    " ks=cdrom:/dev/sr1:/ks.cfg",
-    " inst.ks=cdrom:/dev/sr1:/ks.cfg",
-    "<enter>"
+    "<wait75s>",
+    "yes<enter>",
+    "<wait3s>",
+    "onion<enter>",
+    "<wait2s>",
+    "onion<enter>",
+    "<wait2s>",
+    "onion<enter>",
+    "<wait55m>",
+    "<enter>",
+    "<wait3m>"
   ]
-  boot_wait         = "12s"
-  boot_key_interval = "50ms"
+  boot_wait         = "15s"
+  boot_key_interval = "100ms"
   communicator      = "none"
 
   cores           = "${var.vm_cpu_cores}"
@@ -128,14 +135,6 @@ source "proxmox-iso" "securityonion3" {
     unmount           = true
     keep_cdrom_device = false
   }
-  additional_iso_files {
-    type             = "ide"
-    index            = "1"
-    iso_storage_pool = "${var.iso_storage_pool}"
-    unmount          = true
-    cd_files         = ["./http/ks.cfg"]
-    cd_label         = "OEMDRV"
-  }
   memory = "${var.vm_memory}"
   network_adapters {
     bridge      = "${var.ludus_nat_interface}"
@@ -149,7 +148,7 @@ source "proxmox-iso" "securityonion3" {
   template_description = "${local.template_description}"
   username             = "${var.proxmox_username}"
   vm_name              = "${var.vm_name}"
-  task_timeout         = "60m"
+  task_timeout         = "180m"
 }
 
 build {
@@ -163,7 +162,7 @@ build {
       SSH_PASS     = "${var.ssh_password}"
       PLAYBOOK     = "ansible/reset-ssh-host-keys.yml"
       ANSIBLE_HOME = "${var.ansible_home}"
-      MAX_WAIT_SEC = "7200"
+      MAX_WAIT_SEC = "1800"
       EXPECT_MAC   = "BC:24:11:50:03:01"
     }
     script = "scripts/packer-provision-via-dhcp.sh"

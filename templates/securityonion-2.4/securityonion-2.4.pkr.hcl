@@ -53,7 +53,6 @@ variable "ssh_username" {
   default = "onion"
 }
 
-# Ludus injects these — must be declared, no defaults
 variable "proxmox_url" {
   type = string
 }
@@ -94,30 +93,35 @@ locals {
 }
 
 source "proxmox-iso" "securityonion24" {
-  # Kickstart on second CD (/dev/sr1). SO ISO is sr0 and embeds ks=cdrom → stock
-  # WARNING screen. StackOverflow/CentOS8: use explicit sr1, not LABEL/HTTP alone.
-  # https://stackoverflow.com/questions/65099940
-  #
-  # Debug d940ab: Packer SSH via qemu-guest-agent never works on stock SO ks
-  # (agent package missing). communicator=none + shell-local uses DHCP lease IP.
+  # Debug d940ab evidence: OEMDRV/sr1 kickstart never overrides SO ISO ks=cdrom
+  # (console always hits WARNING). Stock ISO path works when Packer types:
+  #   yes → user onion → password onion x2 → (long install) → Enter to reboot.
+  # Packer guest-agent SSH never works on stock SO (no agent package).
+  # communicator=none + shell-local: fixed MAC → dnsmasq lease → SSH → ansible
+  # (strips so-setup, installs qemu-guest-agent). so-setup stays a deploy-time role.
   boot_command = [
-    "<tab><wait>",
-    " ip=dhcp inst.text inst.cmdline",
-    " ks=cdrom:/dev/sr1:/ks.cfg",
-    " inst.ks=cdrom:/dev/sr1:/ks.cfg",
-    "<enter>"
+    "<wait75s>",
+    "yes<enter>",
+    "<wait3s>",
+    "onion<enter>",
+    "<wait2s>",
+    "onion<enter>",
+    "<wait2s>",
+    "onion<enter>",
+    # Stock ISO: "Initial Install Complete. Press [Enter] to reboot!"
+    "<wait55m>",
+    "<enter>",
+    "<wait3m>"
   ]
-  boot_wait         = "12s"
-  boot_key_interval = "50ms"
+  boot_wait         = "15s"
+  boot_key_interval = "100ms"
 
-  # Do not block on guest-agent IP discovery (stock path has no agent).
   communicator = "none"
 
   cores           = "${var.vm_cpu_cores}"
   cpu_type        = "host"
   scsi_controller = "virtio-scsi-single"
-  # Enable agent in Proxmox config; guest package comes from our ks (or ansible).
-  qemu_agent = true
+  qemu_agent      = true
   disks {
     disk_size         = "${var.vm_disk_size}"
     format            = "${var.proxmox_storage_format}"
@@ -138,20 +142,10 @@ source "proxmox-iso" "securityonion24" {
     unmount           = true
     keep_cdrom_device = false
   }
-  # Second CD → guest /dev/sr1 (must appear in Packer log as Creating CD disk / OEMDRV)
-  additional_iso_files {
-    type             = "ide"
-    index            = "1"
-    iso_storage_pool = "${var.iso_storage_pool}"
-    unmount          = true
-    cd_files         = ["./http/ks.cfg"]
-    cd_label         = "OEMDRV"
-  }
   memory = "${var.vm_memory}"
   network_adapters {
     bridge      = "${var.ludus_nat_interface}"
     model       = "virtio"
-    # Fixed MAC so shell-local can find DHCP lease without root `qm`.
     mac_address = "BC:24:11:50:02:04"
   }
   node                 = "${var.proxmox_host}"
@@ -161,13 +155,12 @@ source "proxmox-iso" "securityonion24" {
   template_description = "${local.template_description}"
   username             = "${var.proxmox_username}"
   vm_name              = "${var.vm_name}"
-  task_timeout         = "60m"
+  task_timeout         = "180m"
 }
 
 build {
   sources = ["source.proxmox-iso.securityonion24"]
 
-  # Host-side provision: DHCP → SSH → ansible (no Packer guest-agent wait).
   provisioner "shell-local" {
     execute_command = ["bash", "-c", "{{.Vars}} {{.Script}}"]
     env = {
@@ -176,7 +169,7 @@ build {
       SSH_PASS     = "${var.ssh_password}"
       PLAYBOOK     = "ansible/reset-ssh-host-keys.yml"
       ANSIBLE_HOME = "${var.ansible_home}"
-      MAX_WAIT_SEC = "7200"
+      MAX_WAIT_SEC = "1800"
       EXPECT_MAC   = "BC:24:11:50:02:04"
     }
     script = "scripts/packer-provision-via-dhcp.sh"
