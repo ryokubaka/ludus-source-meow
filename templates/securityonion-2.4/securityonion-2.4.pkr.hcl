@@ -111,12 +111,6 @@ source "proxmox-iso" "securityonion24" {
     "<enter>",
     "<wait2m>",
     "<enter>",
-    "<wait2m>",
-    "<enter>",
-    "<wait2m>",
-    "<enter>",
-    "<wait1m>",
-    "<enter>"
   ]
   boot_wait         = "15s"
   boot_key_interval = "100ms"
