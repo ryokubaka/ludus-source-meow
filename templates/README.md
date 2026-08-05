@@ -16,12 +16,20 @@ ludus templates build -n <template-name>
 
 | Template | Description |
 |---|---|
-| _(none yet)_ | Add a dir under `templates/` with a `*.pkr.hcl` |
+| `securityonion-2.4-x64-template` | Security Onion 2.4.211 base (Oracle Linux 9 ISO). `so-setup` at deploy. |
+| `securityonion-3-x64-template` | Security Onion 3.1.0 base. `so-setup` at deploy. |
+
+### Security Onion notes
+
+- OS install is unattended via Packer HTTP kickstart; **so-setup is not run in Packer**.
+- Template creds: `onion` / `onion`
+- Disk 200G; first build downloads a large ISO and can take a long time.
+- `boot_command` may need tuning against the live ISO boot menu on first build.
 
 ## Authoring checklist
 
 1. Create `templates/<name>/`
 2. Add `<name>.pkr.hcl` with `description` and `icon_path` variables
-3. Linux: `http/` preseed or kickstart · Windows: `Autounattend.xml`
+3. Linux: `http/` kickstart · Windows: `Autounattend.xml`
 4. Document the `*-template` name in this README
 5. After `source add`, build: `ludus templates build -n <name>`

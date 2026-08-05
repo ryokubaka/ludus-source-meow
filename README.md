@@ -35,15 +35,30 @@ See [Ludus Sources docs](https://docs.ludus.cloud/docs/using-ludus/sources) for 
 | Blueprint ID | Name | VMs | Description |
 |---|---|---|---|
 | [`starter-lab`](./blueprints/starter-lab/) | Starter Lab | 2 | Minimal Kali + Debian target — skeleton for new blueprints |
+| [`securityonion-lab`](./blueprints/securityonion-lab/) | Security Onion 2.4 Lab | 3 | Standalone SO 2.4 + target + Kali (LUX sniff) |
+| [`securityonion3-lab`](./blueprints/securityonion3-lab/) | Security Onion 3 Lab | 3 | Standalone SO 3 + target + Kali (LUX sniff) |
 
 ## Templates
 
-Packer templates live under [`templates/`](./templates/). Each subdirectory is one Ludus template.
-Once installed they appear in `ludus templates list`. None ship yet — see [`templates/README.md`](./templates/README.md).
+| Template | Description |
+|---|---|
+| `securityonion-2.4-x64-template` | SO 2.4.211 Packer base — see [`templates/README.md`](./templates/README.md) |
+| `securityonion-3-x64-template` | SO 3.1.0 Packer base |
+
+```bash
+ludus templates build -n securityonion-2.4-x64-template
+ludus templates build -n securityonion-3-x64-template
+```
+
+Security Onion labs expect **LUX** to attach the sniff NIC + hub-mode bridge during deploy (and reverse on delete). No manual Proxmox steps.
 
 ## Ansible content
 
-Roles and collections live under [`ansible/`](./ansible/). Prefer **git submodules** pinned to tags (BSL pattern) so Ludus pulls them with `--recurse-submodules` on `source add` / `source sync`. See [`ansible/README.md`](./ansible/README.md).
+| Role | Purpose |
+|---|---|
+| [`ludus_securityonion`](./ansible/roles/ludus_securityonion/) | Wait for sniff NIC; run `so-setup iso standalone-net` |
+
+Roles and collections live under [`ansible/`](./ansible/). See [`ansible/README.md`](./ansible/README.md).
 
 ## Layout
 

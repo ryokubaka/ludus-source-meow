@@ -1,0 +1,85 @@
+---
+- name: Check if Security Onion setup already completed
+  ansible.builtin.stat:
+    path: "{{ ludus_so_setup_marker }}"
+  register: ludus_so_marker
+
+- name: Skip setup when already complete
+  ansible.builtin.debug:
+    msg: "Security Onion setup marker present at {{ ludus_so_setup_marker }}; skipping."
+  when: ludus_so_marker.stat.exists
+
+- name: Run Security Onion setup flow
+  when: not ludus_so_marker.stat.exists
+  block:
+    - name: Locate so-setup binary
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop: "{{ ludus_so_setup_paths }}"
+      register: ludus_so_setup_candidates
+
+    - name: Select first existing so-setup path
+      ansible.builtin.set_fact:
+        ludus_so_setup_bin: "{{ (ludus_so_setup_candidates.results | selectattr('stat.exists') | map(attribute='stat.path') | list | first) | default('') }}"
+
+    - name: Fail when so-setup is missing
+      ansible.builtin.fail:
+        msg: >
+          so-setup not found under {{ ludus_so_setup_paths }}.
+          Build/install the Security Onion Packer template from ludus-source-meow.
+      when: ludus_so_setup_bin | length == 0
+
+    - name: Wait for sniff NIC (LUX attaches net1 during deploy)
+      ansible.builtin.shell: |
+        set -euo pipefail
+        count=$(ls -1 /sys/class/net | grep -cvE '^(lo|docker|veth|br-|tun|wg)' || true)
+        echo "nics=${count}"
+        test "${count}" -ge "{{ ludus_so_min_nics | int }}"
+      args:
+        executable: /bin/bash
+      register: ludus_so_nic_wait
+      until: ludus_so_nic_wait.rc == 0
+      retries: "{{ ((ludus_so_sniff_wait_timeout | int) / (ludus_so_sniff_wait_delay | int)) | int }}"
+      delay: "{{ ludus_so_sniff_wait_delay | int }}"
+      changed_when: false
+      failed_when: false
+
+    - name: Fail when sniff NIC never appeared
+      ansible.builtin.fail:
+        msg: >
+          Timed out waiting for {{ ludus_so_min_nics }} NICs (mgmt + sniff).
+          LUX should attach a sniff net1 during deploy (bridge-ageing hub + tagged NIC).
+          Check Proxmox qm config for this VM and LUX so-sniff workflow logs.
+      when: ludus_so_nic_wait.rc != 0
+
+    - name: Build so-setup test profile name
+      ansible.builtin.set_fact:
+        ludus_so_test_profile: "{{ ludus_so_install_type | lower }}-{{ ludus_so_setup_profile_suffix }}"
+
+    - name: Export ALLOW_CIDR for so-setup when provided
+      ansible.builtin.set_fact:
+        ludus_so_setup_env:
+          TESTING: "true"
+          ALLOW_CIDR: "{{ ludus_so_allow_cidr | default('0.0.0.0/0', true) }}"
+          WEBUSER: "{{ ludus_so_web_user }}"
+          WEBPASSWD1: "{{ ludus_so_web_password }}"
+          WEBPASSWD2: "{{ ludus_so_web_password }}"
+
+    - name: Run so-setup iso with test profile (best-effort automation)
+      ansible.builtin.command:
+        cmd: "{{ ludus_so_setup_bin }} iso {{ ludus_so_test_profile }}"
+      environment: "{{ ludus_so_setup_env }}"
+      become: true
+      register: ludus_so_setup_result
+      async: 7200
+      poll: 30
+      changed_when: true
+
+    - name: Write setup-complete marker
+      ansible.builtin.copy:
+        dest: "{{ ludus_so_setup_marker }}"
+        content: |
+          profile={{ ludus_so_test_profile }}
+          completed={{ ansible_date_time.iso8601 | default(lookup('pipe', 'date -Iseconds')) }}
+        mode: "0644"
+      become: true

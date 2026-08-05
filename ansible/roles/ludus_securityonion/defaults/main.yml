@@ -1,0 +1,30 @@
+---
+# Install type passed to so-setup test_profile: standalone (default) or eval
+ludus_so_install_type: standalone
+
+# so-setup profile suffix: net (DHCP/lab) or iso
+ludus_so_setup_profile_suffix: net
+
+# Seconds to wait for LUX to attach the sniff NIC (net1)
+ludus_so_sniff_wait_timeout: 1800
+ludus_so_sniff_wait_delay: 15
+
+# Minimum non-loopback interfaces required before so-setup (mgmt + sniff)
+ludus_so_min_nics: 2
+
+# SOC / web user for TESTING profiles (overridden by so-setup defaults when TESTING=true)
+ludus_so_web_user: "onionadmin@ludus.local"
+ludus_so_web_password: "0n10nAdm1n!"
+
+# CIDR allowed through SO host firewall to SOC (range /16 recommended)
+# Leave empty to use 0.0.0.0/0 in TESTING profile defaults
+ludus_so_allow_cidr: ""
+
+# Path to so-setup on ISO installs
+ludus_so_setup_paths:
+  - /root/SecurityOnion/setup/so-setup
+  - /home/onion/SecurityOnion/setup/so-setup
+  - /opt/so/setup/so-setup
+
+# Marker file written after successful setup
+ludus_so_setup_marker: /etc/ludus-so-setup-complete

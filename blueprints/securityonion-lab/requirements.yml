@@ -1,0 +1,5 @@
+# Role is vendored in this source under ansible/roles/ludus_securityonion
+roles:
+  - name: ludus_securityonion
+
+collections: []

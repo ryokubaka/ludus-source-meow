@@ -1,0 +1,18 @@
+---
+galaxy_info:
+  role_name: ludus_securityonion
+  author: ryokubaka
+  description: >
+    Wait for LUX-attached sniff NIC, then run Security Onion so-setup
+    (standalone-net by default) for Ludus ranges.
+  license: AGPL-3.0-or-later
+  min_ansible_version: "2.14"
+  platforms:
+    - name: EL
+      versions:
+        - "9"
+  galaxy_tags:
+    - securityonion
+    - ludus
+    - nsm
+dependencies: []

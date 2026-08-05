@@ -1,6 +1,6 @@
 manifest_version: 1
 name: "Ludus Source - Meow"
-description: "Custom Ludus blueprints, Packer templates, and Ansible roles & collections."
+description: "Custom Ludus blueprints including Security Onion 2.4/3 Standalone labs, Packer templates, and Ansible roles."
 authors:
   - "ryokubaka"
 homepage: https://github.com/ryokubaka/ludus-source-meow

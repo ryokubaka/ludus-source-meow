@@ -1,0 +1,76 @@
+# yaml-language-server: $schema=https://docs.ludus.cloud/schemas/range-config.json
+# =============================================================================
+# Security Onion 3 Standalone Lab
+# =============================================================================
+
+network:
+  inter_vlan_default: DROP
+  rules:
+    - name: Allow Kali to targets
+      vlan_src: 99
+      vlan_dst: 10
+      protocol: all
+      ports: all
+      action: ACCEPT
+    - name: Allow Kali to SO SOC HTTPS
+      vlan_src: 99
+      vlan_dst: 20
+      protocol: tcp
+      ports: 443
+      action: ACCEPT
+    - name: Allow WireGuard to SO SOC HTTPS
+      vlan_src: wireguard
+      vlan_dst: 20
+      protocol: tcp
+      ports: 443
+      action: ACCEPT
+    - name: Allow WireGuard to SO SSH
+      vlan_src: wireguard
+      vlan_dst: 20
+      protocol: tcp
+      ports: 22
+      action: ACCEPT
+
+ludus:
+  - vm_name: "{{ range_id }}-so"
+    hostname: "{{ range_id }}-so"
+    template: securityonion-3-x64-template
+    vlan: 20
+    ip_last_octet: 20
+    ram_gb: 32
+    cpus: 8
+    linux: true
+    testing:
+      snapshot: false
+      block_internet: false
+    roles:
+      - name: ludus_securityonion
+    role_vars:
+      ludus_so_install_type: standalone
+      ludus_so_allow_cidr: "10.{{ range_second_octet }}.0.0/16"
+      ludus_so_web_user: "onionadmin@ludus.local"
+      ludus_so_web_password: "0n10nAdm1n!"
+
+  - vm_name: "{{ range_id }}-target"
+    hostname: "{{ range_id }}-target"
+    template: debian-12-x64-server-template
+    vlan: 10
+    ip_last_octet: 10
+    ram_gb: 2
+    cpus: 2
+    linux: true
+    testing:
+      snapshot: true
+      block_internet: true
+
+  - vm_name: "{{ range_id }}-kali"
+    hostname: "{{ range_id }}-kali"
+    template: kali-x64-desktop-template
+    vlan: 99
+    ip_last_octet: 1
+    ram_gb: 4
+    cpus: 2
+    linux: true
+    testing:
+      snapshot: false
+      block_internet: false
