@@ -1,0 +1,13 @@
+manifest_version: 1
+id: starter-lab
+name: "Starter Lab"
+description: Minimal Kali attacker + Debian target — scaffold for new Meow blueprints.
+version: 0.1.0
+config: range-config.yml
+
+tags:
+  - starter
+  - linux
+  - kali
+
+min_ludus_version: "2.0.0"

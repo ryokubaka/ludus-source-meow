@@ -1,0 +1,15 @@
+# Pin Galaxy / off-Galaxy roles and collections used by this blueprint.
+# starter-lab uses only built-in Ludus templates and no custom roles — leave empty
+# or delete this file until you add dependencies.
+#
+# roles:
+#   - name: example.ludus_role
+#     src: https://github.com/you/ludus_role
+#     version: v1.0.0
+#
+# collections:
+#   - name: badsectorlabs.ludus_windows_utils
+#     version: ">=1.2.0"
+
+roles: []
+collections: []

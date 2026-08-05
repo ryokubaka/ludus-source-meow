@@ -1,0 +1,48 @@
+# yaml-language-server: $schema=https://docs.ludus.cloud/schemas/range-config.json
+# =============================================================================
+# Starter Lab — minimal blueprint skeleton
+# =============================================================================
+# Topology:
+#   VLAN 10 — Target network
+#     target (Debian 12)
+#   VLAN 99 — Attack network
+#     kali
+#
+# Uses only built-in Ludus templates. No custom roles.
+# RAM: ~6 GB (kali 4 + target 2)
+# =============================================================================
+
+network:
+  inter_vlan_default: DROP
+  rules:
+    - name: Allow Kali to targets
+      vlan_src: 99
+      vlan_dst: 10
+      protocol: all
+      ports: all
+      action: ACCEPT
+
+ludus:
+  - vm_name: "{{ range_id }}-target"
+    hostname: "{{ range_id }}-target"
+    template: debian-12-x64-server-template
+    vlan: 10
+    ip_last_octet: 10
+    ram_gb: 2
+    cpus: 2
+    linux: true
+    testing:
+      snapshot: true
+      block_internet: true
+
+  - vm_name: "{{ range_id }}-kali"
+    hostname: "{{ range_id }}-kali"
+    template: kali-x64-desktop-template
+    vlan: 99
+    ip_last_octet: 1
+    ram_gb: 4
+    cpus: 2
+    linux: true
+    testing:
+      snapshot: false
+      block_internet: false

@@ -1,0 +1,7 @@
+manifest_version: 1
+name: "Ludus Source - Meow"
+description: "Custom Ludus blueprints, Packer templates, and Ansible roles & collections."
+authors:
+  - "ryokubaka"
+homepage: https://github.com/ryokubaka/ludus-source-meow
+license: AGPL-3.0-or-later
