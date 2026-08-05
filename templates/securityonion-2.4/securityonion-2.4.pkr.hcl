@@ -111,8 +111,9 @@ source "proxmox-iso" "securityonion24" {
   cores           = "${var.vm_cpu_cores}"
   cpu_type        = "host"
   scsi_controller = "virtio-scsi-single"
-  # Avoid guest-agent IP probes during Anaconda (agent not installed yet).
-  qemu_agent = false
+  # Required for Packer to learn the DHCP IP via Proxmox. Agent package is
+  # installed in kickstart; probes fail during Anaconda then succeed after reboot.
+  qemu_agent = true
   disks {
     disk_size         = "${var.vm_disk_size}"
     format            = "${var.proxmox_storage_format}"
