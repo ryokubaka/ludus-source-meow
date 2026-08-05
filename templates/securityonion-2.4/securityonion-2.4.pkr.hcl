@@ -149,8 +149,10 @@ source "proxmox-iso" "securityonion24" {
   }
   memory = "${var.vm_memory}"
   network_adapters {
-    bridge = "${var.ludus_nat_interface}"
-    model  = "virtio"
+    bridge      = "${var.ludus_nat_interface}"
+    model       = "virtio"
+    # Fixed MAC so shell-local can find DHCP lease without root `qm`.
+    mac_address = "BC:24:11:50:02:04"
   }
   node                 = "${var.proxmox_host}"
   os                   = "${var.os}"
@@ -175,6 +177,7 @@ build {
       PLAYBOOK     = "ansible/reset-ssh-host-keys.yml"
       ANSIBLE_HOME = "${var.ansible_home}"
       MAX_WAIT_SEC = "7200"
+      EXPECT_MAC   = "BC:24:11:50:02:04"
     }
     script = "scripts/packer-provision-via-dhcp.sh"
   }

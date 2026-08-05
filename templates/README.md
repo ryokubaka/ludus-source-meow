@@ -20,8 +20,9 @@ Self-contained [Packer](https://packer.io/) templates for this source.
    creds `onion`/`onion`.
 3. **`communicator = "none"`** — Packer does **not** wait on QEMU guest-agent IP
    (stock SO path never had an agent → endless `500` / no ansible).
-4. **`shell-local`** on Ludus host: DHCP lease → SSH → ansible harden → then Packer
-   templates the VM.
+4. **`shell-local` as the Ludus user** (Ludus never runs Packer as root): fixed MAC
+   in HCL → readable dnsmasq lease → SSH → ansible. No `qm` / sudo on the host.
+5. Inside the guest, ansible uses `onion`’s passwordless sudo (kickstart).
 
 ### Verify the synced template is live
 
