@@ -93,17 +93,19 @@ locals {
 }
 
 source "proxmox-iso" "securityonion3" {
-  # SO ISO ships ks=cdrom with an interactive "type yes" disk wipe. Override it:
-  # 1) OEMDRV CD (Anaconda auto-picks LABEL=OEMDRV)
-  # 2) Explicit inst.ks=hd:LABEL=OEMDRV + ip=dhcp
+  # SO ISO appends ks=cdrom (interactive "type yes"). inst.ks= alone does NOT
+  # override old-style ks= — set BOTH. Prefer HTTP ks (Packer server); OEMDRV
+  # CD is the offline fallback (LABEL=OEMDRV).
   boot_command = [
     "<up><wait>",
     "<tab><wait>",
-    " ip=dhcp inst.text inst.cmdline inst.ks=hd:LABEL=OEMDRV:/ks.cfg",
+    " ip=dhcp inst.text inst.cmdline",
+    " ks=http://{{ .HTTPIP }}:{{ .HTTPPort }}/ks.cfg",
+    " inst.ks=http://{{ .HTTPIP }}:{{ .HTTPPort }}/ks.cfg",
     "<enter>"
   ]
-  boot_wait         = "20s"
-  boot_key_interval = "100ms"
+  boot_wait         = "25s"
+  boot_key_interval = "50ms"
   http_directory    = "./http"
 
   communicator    = "ssh"

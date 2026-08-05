@@ -24,9 +24,13 @@ ludus templates build -n <template-name>
 - OS install is unattended via Packer HTTP kickstart; **so-setup is not run in Packer**.
 - Template creds: `onion` / `onion`
 - Disk 200G; first build downloads a large ISO and can take a long time.
-- SO ISO default kickstart asks you to type `yes` (disk wipe). Templates attach an
-  **OEMDRV** CD with our unattended `http/ks.cfg` and boot with
-  `inst.ks=hd:LABEL=OEMDRV:/ks.cfg` + `ip=dhcp` so that prompt never appears.
+- SO ISO embeds `ks=cdrom` with an interactive **type yes** warning. That is *not*
+  Anaconda progress — it means our kickstart lost. Templates boot with
+  `ks=` + `inst.ks=` both set to Packer HTTP `ks.cfg` (`ip=dhcp` required) and
+  still attach an OEMDRV CD as fallback. If console shows the WARNING prompt,
+  abort and re-sync/rebuild — do not wait.
+- Real Anaconda progress: same Proxmox **Console** on the Packer build VM —
+  package install / formatting / `%post` copy, then reboot to login.
 - Packer needs `qemu_agent = true` plus `qemu-guest-agent` in kickstart — otherwise
   Proxmox never reports a DHCP IP and SSH wait loops forever (`500 QEMU guest agent
   is not running`). Agent probes fail during Anaconda; succeed after first reboot.
