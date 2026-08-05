@@ -118,27 +118,34 @@ source "proxmox-iso" "securityonion3" {
   }
   pool                     = "${var.proxmox_pool}"
   insecure_skip_tls_verify = "${var.proxmox_skip_tls_verify}"
-  iso_checksum             = "${var.iso_checksum}"
-  iso_url                  = "${var.iso_url}"
-  iso_storage_pool         = "${var.iso_storage_pool}"
-  memory                   = "${var.vm_memory}"
+  # Download ISO on Proxmox (iso_storage_pool), not into Ludus packer_cache —
+  # SO ISOs are multi-GB and will ENOSPC the user packer cache otherwise.
+  boot_iso {
+    type             = "ide"
+    iso_url          = "${var.iso_url}"
+    iso_checksum     = "${var.iso_checksum}"
+    iso_storage_pool = "${var.iso_storage_pool}"
+    iso_download_pve = true
+    unmount          = true
+    keep_cdrom_device = false
+  }
+  memory = "${var.vm_memory}"
   network_adapters {
     bridge = "${var.ludus_nat_interface}"
     model  = "virtio"
   }
-  node                 = "${var.proxmox_host}"
-  os                   = "${var.os}"
-  password             = "${var.proxmox_password}"
-  proxmox_url          = "${var.proxmox_url}"
-  template_description = "${local.template_description}"
-  username             = "${var.proxmox_username}"
-  vm_name              = "${var.vm_name}"
-  ssh_password         = "${var.ssh_password}"
-  ssh_username         = "${var.ssh_username}"
-  ssh_timeout          = "120m"
+  node                   = "${var.proxmox_host}"
+  os                     = "${var.os}"
+  password               = "${var.proxmox_password}"
+  proxmox_url            = "${var.proxmox_url}"
+  template_description   = "${local.template_description}"
+  username               = "${var.proxmox_username}"
+  vm_name                = "${var.vm_name}"
+  ssh_password           = "${var.ssh_password}"
+  ssh_username           = "${var.ssh_username}"
+  ssh_timeout            = "120m"
   ssh_handshake_attempts = 100
-  unmount_iso          = true
-  task_timeout         = "60m"
+  task_timeout           = "60m"
 }
 
 build {

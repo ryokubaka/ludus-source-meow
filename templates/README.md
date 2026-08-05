@@ -25,6 +25,17 @@ ludus templates build -n <template-name>
 - Template creds: `onion` / `onion`
 - Disk 200G; first build downloads a large ISO and can take a long time.
 - `boot_command` may need tuning against the live ISO boot menu on first build.
+- Templates use `boot_iso { iso_download_pve = true }` so Proxmox pulls the ISO onto
+  `iso_storage_pool` instead of filling `/opt/ludus/users/<user>/packer/packer_cache`
+  (SO ISOs are multi-GB; local cache download hits `no space left on device`).
+- Ensure the Proxmox ISO datastore has enough free space (~15–25 GB per SO ISO).
+- If a prior failed build left a partial ISO in packer_cache, clear it:
+
+```bash
+# on Ludus host
+rm -rf /opt/ludus/users/<user>/packer/packer_cache/downloaded_iso_path/*
+df -h /opt/ludus
+```
 
 ## Authoring checklist
 
