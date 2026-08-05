@@ -21,25 +21,19 @@ ludus templates build -n <template-name>
 
 ### Security Onion notes
 
-- Uses the **stock SO ISO kickstart**. Custom HTTP/OEMDRV `ks.cfg` overrides keep
-  losing to the ISO’s embedded `ks=cdrom` (WARNING / type **yes** screen).
-- Packer `boot_command` waits ~75s, then types: `yes` → username `onion` →
-  password `onion` twice. After that Anaconda/`%post` runs unattended (long
-  rsync of SO + docker images).
-- **Finished template creds: `onion` / `onion`.** Ansible strips so-setup
-  autostart and installs `qemu-guest-agent`.
-- Monitor progress on the Packer build VM **Proxmox console**. You should see
-  the WARNING briefly, then prompts answered, then package install / copy.
-- `boot_iso { iso_download_pve = true }` — Proxmox pulls the ISO onto
-  `iso_storage_pool` (avoid filling user `packer_cache`).
-- Ensure ISO datastore has ~15–25 GB free per SO ISO.
+- **Goal of Packer:** unattended OS + SSH + `qemu-guest-agent`, **no so-setup**.
+  Range deploy runs `ludus_securityonion` (`so-setup`) later.
+- Custom `http/ks.cfg` (HTTP + OEMDRV) overrides ISO `ks=cdrom`. Boot sets both
+  `ks=` and `inst.ks=` to Packer HTTP. Must type at the boot menu immediately
+  (no long pre-wait — menu auto-boots stock ks).
+- Custom ks: auto `reboot --eject`, installs/enables `qemu-guest-agent`, strips
+  so-setup shell hooks. Template creds: `onion` / `onion`.
+- **Success signals:** Packer log shows SSH connected → ansible → template
+  created. Console must **not** stop on WARNING/yes, Press Enter to reboot, or
+  so-setup TUI. If WARNING appears, boot override failed — abort.
+- `boot_iso { iso_download_pve = true }` — ISO on Proxmox datastore, not user
+  packer_cache. Keep ~15–25 GB free per SO ISO.
 - Build budget ~1–2 h (`ssh_timeout` 120m).
-
-```bash
-# on Ludus host — clear leftover packer cache if needed
-rm -rf /opt/ludus/users/<user>/packer/packer_cache/downloaded_iso_path/*
-df -h /opt/ludus
-```
 
 ## Authoring checklist
 

@@ -2,18 +2,24 @@
   hosts: all
   become: true
   tasks:
-    - name: Install qemu-guest-agent
+    # #region agent log
+    - name: Debug marker — ansible provisioner started (d940ab)
+      ansible.builtin.copy:
+        dest: /etc/ludus-so-ansible-debug.ndjson
+        content: |
+          {"sessionId":"d940ab","hypothesisId":"H5","location":"reset-ssh-host-keys.yml","message":"ansible_provisioner_started","data":{"ok":true},"timestamp":0,"runId":"post-fix"}
+    # #endregion
+
+    - name: Ensure qemu-guest-agent installed
       ansible.builtin.dnf:
         name: qemu-guest-agent
         state: present
-      failed_when: false
 
     - name: Enable qemu-guest-agent service
       ansible.builtin.service:
         name: qemu-guest-agent
         enabled: true
         state: started
-      failed_when: false
 
     - name: Allow password SSH
       ansible.builtin.lineinfile:
@@ -25,12 +31,13 @@
         - { regexp: '^#?PermitRootLogin', line: 'PermitRootLogin yes' }
       notify: Restart sshd
 
-    - name: Prevent interactive so-setup on console login
+    - name: Strip so-setup autostart from shell profiles
       ansible.builtin.shell: |
         for f in /home/onion/.bash_profile /home/onion/.bashrc /root/.bash_profile /root/.bashrc; do
           [ -f "$f" ] || continue
           sed -i '/so-setup/d;/SecurityOnion\/setup/d' "$f" || true
         done
+        rm -f /etc/profile.d/*so-setup* /etc/profile.d/*securityonion* 2>/dev/null || true
       args:
         executable: /bin/bash
 
@@ -38,6 +45,14 @@
       ansible.builtin.copy:
         dest: /etc/ludus-so-template
         content: "securityonion-3-packer\n"
+
+    # #region agent log
+    - name: Debug marker — ansible provisioner finished (d940ab)
+      ansible.builtin.copy:
+        dest: /etc/ludus-so-ansible-debug.ndjson
+        content: |
+          {"sessionId":"d940ab","hypothesisId":"H5","location":"reset-ssh-host-keys.yml","message":"ansible_provisioner_finished","data":{"ok":true},"timestamp":0,"runId":"post-fix"}
+    # #endregion
 
     - name: Find SSH host keys
       ansible.builtin.find:

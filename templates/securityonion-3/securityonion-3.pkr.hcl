@@ -93,20 +93,18 @@ locals {
 }
 
 source "proxmox-iso" "securityonion3" {
-  # Stock SO ISO ks=cdrom always wins over HTTP/OEMDRV overrides → interactive
-  # "type yes", then username, then password x2. Answer those via keystrokes.
+  # Same automation model as securityonion-2.4 — custom ks for guest agent +
+  # auto-reboot; so-setup deferred to range deploy.
   boot_command = [
-    "<wait75s>",
-    "yes<enter>",
-    "<wait3s>",
-    "onion<enter>",
-    "<wait2s>",
-    "onion<enter>",
-    "<wait2s>",
-    "onion<enter>"
+    "<tab><wait>",
+    " ip=dhcp inst.text inst.cmdline",
+    " ks=http://{{ .HTTPIP }}:{{ .HTTPPort }}/ks.cfg",
+    " inst.ks=http://{{ .HTTPIP }}:{{ .HTTPPort }}/ks.cfg",
+    "<enter>"
   ]
-  boot_wait         = "15s"
-  boot_key_interval = "100ms"
+  boot_wait         = "12s"
+  boot_key_interval = "50ms"
+  http_directory    = "./http"
 
   communicator    = "ssh"
   cores           = "${var.vm_cpu_cores}"
@@ -132,6 +130,14 @@ source "proxmox-iso" "securityonion3" {
     iso_download_pve  = true
     unmount           = true
     keep_cdrom_device = false
+  }
+  additional_iso_files {
+    type             = "ide"
+    index            = "1"
+    iso_storage_pool = "${var.iso_storage_pool}"
+    unmount          = true
+    cd_files         = ["./http/ks.cfg"]
+    cd_label         = "OEMDRV"
   }
   memory = "${var.vm_memory}"
   network_adapters {

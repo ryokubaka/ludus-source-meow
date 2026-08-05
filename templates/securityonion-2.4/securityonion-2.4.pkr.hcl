@@ -94,21 +94,22 @@ locals {
 }
 
 source "proxmox-iso" "securityonion24" {
-  # Stock SO ISO ks=cdrom always wins over HTTP/OEMDRV overrides → interactive
-  # "type yes", then username, then password x2. Answer those via keystrokes.
-  # (DMI "Automated" spoof is fragile through Proxmox args / spaces.)
+  # Evidence (debug d940ab): stock ISO ks leaves no qemu-guest-agent → Packer
+  # never gets SSH IP (500 agent not running) → ansible/template never run.
+  # Also stock waits on "Press Enter to reboot". Custom ks fixes both.
+  #
+  # ISO appends ks=cdrom — override with BOTH ks= and inst.ks= (last wins).
+  # Type immediately at boot menu (do NOT wait 75s first — menu auto-boots).
   boot_command = [
-    "<wait75s>",
-    "yes<enter>",
-    "<wait3s>",
-    "onion<enter>",
-    "<wait2s>",
-    "onion<enter>",
-    "<wait2s>",
-    "onion<enter>"
+    "<tab><wait>",
+    " ip=dhcp inst.text inst.cmdline",
+    " ks=http://{{ .HTTPIP }}:{{ .HTTPPort }}/ks.cfg",
+    " inst.ks=http://{{ .HTTPIP }}:{{ .HTTPPort }}/ks.cfg",
+    "<enter>"
   ]
-  boot_wait         = "15s"
-  boot_key_interval = "100ms"
+  boot_wait         = "12s"
+  boot_key_interval = "50ms"
+  http_directory    = "./http"
 
   communicator    = "ssh"
   cores           = "${var.vm_cpu_cores}"
@@ -126,8 +127,6 @@ source "proxmox-iso" "securityonion24" {
   }
   pool                     = "${var.proxmox_pool}"
   insecure_skip_tls_verify = "${var.proxmox_skip_tls_verify}"
-  # Download ISO on Proxmox (iso_storage_pool), not into Ludus packer_cache —
-  # SO ISOs are multi-GB and will ENOSPC the user packer cache otherwise.
   boot_iso {
     type              = "ide"
     iso_url           = "${var.iso_url}"
@@ -136,6 +135,15 @@ source "proxmox-iso" "securityonion24" {
     iso_download_pve  = true
     unmount           = true
     keep_cdrom_device = false
+  }
+  # Offline fallback if HTTP ks unreachable from installer
+  additional_iso_files {
+    type             = "ide"
+    index            = "1"
+    iso_storage_pool = "${var.iso_storage_pool}"
+    unmount          = true
+    cd_files         = ["./http/ks.cfg"]
+    cd_label         = "OEMDRV"
   }
   memory = "${var.vm_memory}"
   network_adapters {
