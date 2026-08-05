@@ -93,7 +93,7 @@ locals {
 }
 
 source "proxmox-iso" "securityonion3" {
-  # Same model as securityonion-2.4 (stock keystrokes + disk-first boot + DHCP shell-local).
+  # Same model as securityonion-2.4 — Enter prompt ~10m after onion (console evidence).
   boot_command = [
     "<wait75s>",
     "yes<enter>",
@@ -103,15 +103,11 @@ source "proxmox-iso" "securityonion3" {
     "onion<enter>",
     "<wait2s>",
     "onion<enter>",
-    "<wait40m>",
-    "<enter>",
     "<wait10m>",
     "<enter>",
-    "<wait10m>",
+    "<wait1m>",
     "<enter>",
-    "<wait10m>",
-    "<enter>",
-    "<wait5m>",
+    "<wait1m>",
     "<enter>",
     "<wait3m>"
   ]
@@ -123,7 +119,7 @@ source "proxmox-iso" "securityonion3" {
   cores           = "${var.vm_cpu_cores}"
   cpu_type        = "host"
   scsi_controller = "virtio-scsi-single"
-  qemu_agent      = true
+  qemu_agent      = false
   disks {
     disk_size         = "${var.vm_disk_size}"
     format            = "${var.proxmox_storage_format}"

@@ -93,10 +93,8 @@ locals {
 }
 
 source "proxmox-iso" "securityonion24" {
-  # Stock ISO keystrokes (OEMDRV ks override rejected by console evidence).
-  # H18: without boot=order=scsi0;ide0, Proxmox often reboots into ISO again
-  # (packer#10252) → no installed-OS DHCP/SSH. Disk-first; empty disk falls to ISO.
-  # H19: single 55m Enter miss → periodic Enter while waiting for reboot prompt.
+  # Stock ISO keystrokes. Console evidence: "Press Enter to reboot" ~10m after onion prompts.
+  # boot=order=scsi0;ide0: disk first after install (avoid ISO re-boot loop).
   boot_command = [
     "<wait75s>",
     "yes<enter>",
@@ -106,22 +104,27 @@ source "proxmox-iso" "securityonion24" {
     "onion<enter>",
     "<wait2s>",
     "onion<enter>",
-    # Install length varies; spam Enter for "Press [Enter] to reboot!"
+    # ~10m to reboot prompt; light Enter spam + wait for disk boot
     "<wait10m>",
     "<enter>",
-    "<wait2m>",
+    "<wait1m>",
     "<enter>",
+    "<wait1m>",
+    "<enter>",
+    "<wait3m>"
   ]
   boot_wait         = "15s"
   boot_key_interval = "100ms"
 
+  # none: stock SO has no guest-agent; Packer cannot learn IP via Proxmox API
+  # (packer-plugin-proxmox#91). shell-local scans Ludus DHCP pool .50-.100.
   communicator = "none"
   boot         = "order=scsi0;ide0"
+  qemu_agent   = false
 
   cores           = "${var.vm_cpu_cores}"
   cpu_type        = "host"
   scsi_controller = "virtio-scsi-single"
-  qemu_agent      = true
   disks {
     disk_size         = "${var.vm_disk_size}"
     format            = "${var.proxmox_storage_format}"
