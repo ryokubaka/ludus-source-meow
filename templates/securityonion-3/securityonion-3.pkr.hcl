@@ -93,7 +93,7 @@ locals {
 }
 
 source "proxmox-iso" "securityonion3" {
-  # Same model as securityonion-2.4: stock ISO keystrokes + DHCP shell-local.
+  # Same model as securityonion-2.4 (stock keystrokes + disk-first boot + DHCP shell-local).
   boot_command = [
     "<wait75s>",
     "yes<enter>",
@@ -103,13 +103,22 @@ source "proxmox-iso" "securityonion3" {
     "onion<enter>",
     "<wait2s>",
     "onion<enter>",
-    "<wait55m>",
+    "<wait40m>",
+    "<enter>",
+    "<wait10m>",
+    "<enter>",
+    "<wait10m>",
+    "<enter>",
+    "<wait10m>",
+    "<enter>",
+    "<wait5m>",
     "<enter>",
     "<wait3m>"
   ]
   boot_wait         = "15s"
   boot_key_interval = "100ms"
   communicator      = "none"
+  boot              = "order=scsi0;ide0"
 
   cores           = "${var.vm_cpu_cores}"
   cpu_type        = "host"
@@ -162,7 +171,7 @@ build {
       SSH_PASS     = "${var.ssh_password}"
       PLAYBOOK     = "ansible/reset-ssh-host-keys.yml"
       ANSIBLE_HOME = "${var.ansible_home}"
-      MAX_WAIT_SEC = "1800"
+      MAX_WAIT_SEC = "3600"
       EXPECT_MAC   = "BC:24:11:50:03:01"
     }
     script = "scripts/packer-provision-via-dhcp.sh"

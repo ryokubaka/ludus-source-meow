@@ -93,12 +93,10 @@ locals {
 }
 
 source "proxmox-iso" "securityonion24" {
-  # Debug d940ab evidence: OEMDRV/sr1 kickstart never overrides SO ISO ks=cdrom
-  # (console always hits WARNING). Stock ISO path works when Packer types:
-  #   yes → user onion → password onion x2 → (long install) → Enter to reboot.
-  # Packer guest-agent SSH never works on stock SO (no agent package).
-  # communicator=none + shell-local: fixed MAC → dnsmasq lease → SSH → ansible
-  # (strips so-setup, installs qemu-guest-agent). so-setup stays a deploy-time role.
+  # Stock ISO keystrokes (OEMDRV ks override rejected by console evidence).
+  # H18: without boot=order=scsi0;ide0, Proxmox often reboots into ISO again
+  # (packer#10252) → no installed-OS DHCP/SSH. Disk-first; empty disk falls to ISO.
+  # H19: single 55m Enter miss → periodic Enter while waiting for reboot prompt.
   boot_command = [
     "<wait75s>",
     "yes<enter>",
@@ -108,15 +106,23 @@ source "proxmox-iso" "securityonion24" {
     "onion<enter>",
     "<wait2s>",
     "onion<enter>",
-    # Stock ISO: "Initial Install Complete. Press [Enter] to reboot!"
-    "<wait55m>",
+    # Install length varies; spam Enter for "Press [Enter] to reboot!"
+    "<wait10m>",
     "<enter>",
-    "<wait3m>"
+    "<wait2m>",
+    "<enter>",
+    "<wait2m>",
+    "<enter>",
+    "<wait2m>",
+    "<enter>",
+    "<wait1m>",
+    "<enter>"
   ]
   boot_wait         = "15s"
   boot_key_interval = "100ms"
 
   communicator = "none"
+  boot         = "order=scsi0;ide0"
 
   cores           = "${var.vm_cpu_cores}"
   cpu_type        = "host"
@@ -169,7 +175,7 @@ build {
       SSH_PASS     = "${var.ssh_password}"
       PLAYBOOK     = "ansible/reset-ssh-host-keys.yml"
       ANSIBLE_HOME = "${var.ansible_home}"
-      MAX_WAIT_SEC = "1800"
+      MAX_WAIT_SEC = "3600"
       EXPECT_MAC   = "BC:24:11:50:02:04"
     }
     script = "scripts/packer-provision-via-dhcp.sh"

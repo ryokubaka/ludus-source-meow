@@ -8,7 +8,7 @@ SSH_USER="${SSH_USER:-onion}"
 SSH_PASS="${SSH_PASS:-onion}"
 PLAYBOOK="${PLAYBOOK:-ansible/reset-ssh-host-keys.yml}"
 ANSIBLE_HOME="${ANSIBLE_HOME:-}"
-MAX_WAIT_SEC="${MAX_WAIT_SEC:-7200}"
+MAX_WAIT_SEC="${MAX_WAIT_SEC:-3600}"
 POLL_SEC=15
 # Must match network_adapters.mac_address in securityonion-2.4.pkr.hcl
 EXPECT_MAC="${EXPECT_MAC:-BC:24:11:50:02:04}"
@@ -22,18 +22,22 @@ log_ndjson() {
 
 log_ndjson "H7" "provision_script_start" "{\"vm_name\":\"${VM_NAME}\",\"whoami\":\"$(whoami 2>/dev/null || echo unknown)\",\"expect_mac\":\"${EXPECT_MAC}\"}"
 
-find_ip() {
-  local mac_l f line ip
-  mac_l="$(echo "$EXPECT_MAC" | tr 'A-F' 'a-f')"
-  for f in \
+lease_files() {
+  printf '%s\n' \
     /var/lib/misc/dnsmasq.leases \
     /var/lib/dnsmasq/dnsmasq.leases \
     /var/lib/ludus/dnsmasq.leases \
     /opt/ludus/resources/dnsmasq/leases \
     /opt/ludus/dnsmasq.leases
-  do
+}
+
+find_ip() {
+  local mac_l mac_bare f line ip
+  mac_l="$(echo "$EXPECT_MAC" | tr 'A-F' 'a-f')"
+  mac_bare="$(echo "$mac_l" | tr -d ':')"
+  while IFS= read -r f; do
     [ -r "$f" ] || continue
-    line="$(grep -i "$mac_l" "$f" 2>/dev/null | tail -1 || true)"
+    line="$(grep -iE "$mac_l|$mac_bare" "$f" 2>/dev/null | tail -1 || true)"
     [ -n "$line" ] || continue
     # dnsmasq: <expiry> <mac> <ip> <hostname> <client-id>
     ip="$(echo "$line" | awk '{print $3}')"
@@ -41,9 +45,35 @@ find_ip() {
       echo "$ip"
       return 0
     fi
-  done
+  done < <(lease_files)
   # arp/neigh as unprivileged fallback
-  ip neigh show 2>/dev/null | grep -i "$mac_l" | awk '{print $1}' | head -1 || true
+  ip neigh show 2>/dev/null | grep -iE "$mac_l|$mac_bare" | awk '{print $1}' | head -1 || true
+}
+
+# H20/H21: lease file diagnostics (no secrets)
+lease_diag() {
+  local mac_l mac_bare f count hit sample
+  mac_l="$(echo "$EXPECT_MAC" | tr 'A-F' 'a-f')"
+  mac_bare="$(echo "$mac_l" | tr -d ':')"
+  f="none"
+  count=0
+  hit="no"
+  sample=""
+  while IFS= read -r candidate; do
+    [ -r "$candidate" ] || continue
+    f="$candidate"
+    count="$(wc -l <"$candidate" 2>/dev/null | tr -d ' ' || echo 0)"
+    if grep -iqE "$mac_l|$mac_bare" "$candidate" 2>/dev/null; then
+      hit="yes"
+      sample="$(grep -iE "$mac_l|$mac_bare" "$candidate" 2>/dev/null | tail -1 | awk '{print $2" "$3" "$4}')"
+    else
+      # first 5 macs only (field 2)
+      sample="$(awk '{print $2}' "$candidate" 2>/dev/null | head -5 | tr '\n' ',' | sed 's/,$//')"
+    fi
+    break
+  done < <(lease_files)
+  printf '{"lease_file":"%s","lease_count":%s,"mac_hit":"%s","sample":"%s"}' \
+    "$f" "${count:-0}" "$hit" "$sample"
 }
 
 ssh_ok() {
@@ -55,28 +85,38 @@ ssh_ok() {
 
 IP=""
 elapsed=0
-log_ndjson "H4" "wait_dhcp_ssh_begin" "{\"max\":${MAX_WAIT_SEC},\"mac\":\"${EXPECT_MAC}\"}"
+log_ndjson "H4" "wait_dhcp_ssh_begin" "{\"max\":${MAX_WAIT_SEC},\"mac\":\"${EXPECT_MAC}\",\"diag\":$(lease_diag)}"
 while [ "$elapsed" -lt "$MAX_WAIT_SEC" ]; do
   IP="$(find_ip || true)"
-  if [ -n "$IP" ] && ssh_ok "$IP"; then
-    break
-  fi
-  if [ $((elapsed % 120)) -eq 0 ]; then
-    readable="none"
-    for f in /var/lib/misc/dnsmasq.leases /var/lib/dnsmasq/dnsmasq.leases /var/lib/ludus/dnsmasq.leases; do
-      [ -r "$f" ] && readable="$f" && break
-    done
-    log_ndjson "H4" "wait_dhcp_ssh_poll" "{\"elapsed\":${elapsed},\"ip\":\"${IP:-none}\",\"lease_file\":\"${readable}\"}"
+  if [ -n "$IP" ]; then
+    if ssh_ok "$IP"; then
+      break
+    fi
+    # #region agent log
+    if [ $((elapsed % 120)) -eq 0 ]; then
+      log_ndjson "H22" "dhcp_ip_ssh_fail" "{\"elapsed\":${elapsed},\"ip\":\"${IP}\",\"diag\":$(lease_diag)}"
+    fi
+    # #endregion
+  else
+    # #region agent log
+    if [ $((elapsed % 120)) -eq 0 ]; then
+      log_ndjson "H18" "wait_dhcp_ssh_poll" "{\"elapsed\":${elapsed},\"ip\":\"none\",\"diag\":$(lease_diag)}"
+    fi
+    # #endregion
   fi
   sleep "$POLL_SEC"
   elapsed=$((elapsed + POLL_SEC))
   IP=""
 done
 
-if [ -z "$IP" ]; then
-  log_ndjson "H4" "dhcp_ip_timeout" "{\"mac\":\"${EXPECT_MAC}\",\"waited\":${elapsed}}"
+if [ -z "${IP:-}" ]; then
+  # final attempt
+  IP="$(find_ip || true)"
+fi
+if [ -z "${IP:-}" ] || ! ssh_ok "$IP"; then
+  log_ndjson "H4" "dhcp_ip_timeout" "{\"mac\":\"${EXPECT_MAC}\",\"waited\":${elapsed},\"last_ip\":\"${IP:-none}\",\"diag\":$(lease_diag)}"
   echo "ERROR: timed out waiting for DHCP/SSH for MAC ${EXPECT_MAC}" >&2
-  echo "HINT: confirm lease file is readable by $(whoami) and MAC matches Packer HCL." >&2
+  echo "HINT: confirm lease file is readable by $(whoami), MAC matches Packer HCL, boot=order=scsi0;ide0 so disk boots after install." >&2
   exit 1
 fi
 log_ndjson "H4" "ssh_ready" "{\"ip\":\"${IP}\",\"waited\":${elapsed}}"
