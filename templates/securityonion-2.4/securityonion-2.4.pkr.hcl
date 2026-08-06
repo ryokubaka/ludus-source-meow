@@ -94,9 +94,9 @@ locals {
 
 source "proxmox-iso" "securityonion24" {
   # Stock ISO keystrokes.
-  # Evidence 2026-08-05: OS reaches login (Oracle Linux 9.7) but lease_lines=0 —
-  # SO offline ISO install leaves NIC without DHCP. Ludus DHCP is 192.0.2.50-100.
-  # After reboot: tty2 login → force DHCP/sshd → shell-local SSH scan finds IP.
+  # Evidence: after reboot, onion login autostarts so-setup (hostname TUI).
+  # Ctrl+Alt+F2 + nmcli failed — keystrokes landed in so-setup; lease_lines stayed 0.
+  # Fix: login → Cancel so-setup → strip autostart → DHCP + sshd → shell-local scan.
   boot_command = [
     "<wait75s>",
     "yes<enter>",
@@ -109,15 +109,20 @@ source "proxmox-iso" "securityonion24" {
     "<wait10m>",
     "<enter>",
     "<wait3m>",
-    # so-setup may grab tty1 — use tty2
-    "<leftCtrlOn><leftAltOn><f2><leftAltOff><leftCtrlOff>",
-    "<wait3s>",
     "onion<enter>",
     "<wait2s>",
     "onion<enter>",
-    "<wait3s>",
-    "echo onion | sudo -S bash -c 'systemctl enable --now NetworkManager sshd; nmcli networking on; for n in $(ls /sys/class/net | grep -v lo); do ip link set $n up; nmcli device set $n managed yes; nmcli device connect $n || dhclient -v $n || true; done; firewall-cmd --permanent --add-service=ssh; firewall-cmd --reload; true'<enter>",
-    "<wait30s>"
+    "<wait20s>",
+    # Cancel so-setup hostname dialog (console evidence)
+    "<esc><wait2s>",
+    "<esc><wait2s>",
+    "<tab><enter><wait3s>",
+    "echo onion | sudo -S pkill -9 -f so-setup || true<enter>",
+    "<wait2s>",
+    "echo onion | sudo -S sed -i '/so-setup/d;/SecurityOnion\\/setup/d' /home/onion/.bash_profile /home/onion/.bashrc 2>/dev/null || true<enter>",
+    "<wait2s>",
+    "echo onion | sudo -S bash -c 'systemctl enable --now NetworkManager sshd; nmcli networking on; for n in $(ls /sys/class/net | grep -v lo); do ip link set $n up; nmcli device connect $n || dhclient -v $n || true; done; firewall-cmd --permanent --add-service=ssh; firewall-cmd --reload; true'<enter>",
+    "<wait45s>"
   ]
   boot_wait         = "15s"
   boot_key_interval = "100ms"

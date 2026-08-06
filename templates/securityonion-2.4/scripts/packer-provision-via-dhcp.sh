@@ -6,12 +6,13 @@
 #
 # H31: PACKER_HTTP_IP is NOT always the NAT /24 (often management).
 #      Discover pools from dnsmasq dhcp-range= and host interface addrs.
+# H33: so-setup hostname TUI blocks shell/DHCP — cancel + strip + nmcli.
 #
 # MUST be at: /opt/ludus/packer/securityonion-2.4/scripts/packer-provision-via-dhcp.sh
 # (Packer log path — not users/*/packer or sources/*/templates)
 set -u
 
-SCRIPT_VERSION="H32-netup-20260805"
+SCRIPT_VERSION="H33-cancel-sosetup-20260805"
 
 VM_NAME="${VM_NAME:-securityonion-2.4-x64-template}"
 SSH_USER="${SSH_USER:-onion}"
@@ -132,7 +133,7 @@ diag_json() {
     "$prefixes" "$ranges" "${lease_n:-0}" "${PACKER_HTTP_IP:-}"
 }
 
-log_ndjson "H31" "provision_script_start" \
+log_ndjson "H33" "provision_script_start" \
   "{\"script_version\":\"${SCRIPT_VERSION}\",\"vm_name\":\"${VM_NAME}\",\"whoami\":\"$(whoami 2>/dev/null || echo unknown)\",\"expect_mac\":\"${EXPECT_MAC}\",\"diag\":$(diag_json)}"
 
 if ! command -v sshpass >/dev/null 2>&1; then
@@ -143,17 +144,17 @@ fi
 
 IP=""
 elapsed=0
-log_ndjson "H31" "wait_pool_ssh_begin" "{\"max\":${MAX_WAIT_SEC},\"diag\":$(diag_json)}"
+log_ndjson "H33" "wait_pool_ssh_begin" "{\"max\":${MAX_WAIT_SEC},\"diag\":$(diag_json)}"
 while [ "$elapsed" -lt "$MAX_WAIT_SEC" ]; do
   # #region agent log
-  log_ndjson "H31" "scan_start" "{\"elapsed\":${elapsed},\"diag\":$(diag_json)}"
+  log_ndjson "H33" "scan_start" "{\"elapsed\":${elapsed},\"diag\":$(diag_json)}"
   # #endregion
   IP="$(find_ip || true)"
   if [ -n "$IP" ] && ssh_ok "$IP"; then
     break
   fi
   # #region agent log
-  log_ndjson "H31" "scan_miss" "{\"elapsed\":${elapsed},\"ip\":\"${IP:-none}\",\"diag\":$(diag_json)}"
+  log_ndjson "H33" "scan_miss" "{\"elapsed\":${elapsed},\"ip\":\"${IP:-none}\",\"diag\":$(diag_json)}"
   # #endregion
   sleep "$POLL_SEC"
   elapsed=$((elapsed + POLL_SEC))
@@ -162,12 +163,12 @@ done
 
 IP="$(find_ip || true)"
 if [ -z "${IP:-}" ] || ! ssh_ok "$IP"; then
-  log_ndjson "H31" "pool_ssh_timeout" "{\"waited\":${elapsed},\"diag\":$(diag_json)}"
+  log_ndjson "H33" "pool_ssh_timeout" "{\"waited\":${elapsed},\"diag\":$(diag_json)}"
   echo "ERROR: no onion SSH in template DHCP pools. prefixes=$(discover_prefixes)" >&2
   echo "HINT: check console = login (not ISO). paste dhcp_ranges from logs." >&2
   exit 1
 fi
-log_ndjson "H31" "ssh_ready" "{\"ip\":\"${IP}\",\"waited\":${elapsed}}"
+log_ndjson "H33" "ssh_ready" "{\"ip\":\"${IP}\",\"waited\":${elapsed}}"
 
 sshpass -p "$SSH_PASS" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
   "${SSH_USER}@${IP}" "echo '${SSH_PASS}' | sudo -S bash -c '

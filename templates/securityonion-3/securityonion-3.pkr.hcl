@@ -93,7 +93,7 @@ locals {
 }
 
 source "proxmox-iso" "securityonion3" {
-  # Same as SO 2.4: stock install → tty2 → force DHCP (offline ISO leaves NIC down).
+  # Same as SO 2.4: cancel so-setup → DHCP + sshd.
   boot_command = [
     "<wait75s>",
     "yes<enter>",
@@ -106,14 +106,19 @@ source "proxmox-iso" "securityonion3" {
     "<wait10m>",
     "<enter>",
     "<wait3m>",
-    "<leftCtrlOn><leftAltOn><f2><leftAltOff><leftCtrlOff>",
-    "<wait3s>",
     "onion<enter>",
     "<wait2s>",
     "onion<enter>",
-    "<wait3s>",
-    "echo onion | sudo -S bash -c 'systemctl enable --now NetworkManager sshd; nmcli networking on; for n in $(ls /sys/class/net | grep -v lo); do ip link set $n up; nmcli device set $n managed yes; nmcli device connect $n || dhclient -v $n || true; done; firewall-cmd --permanent --add-service=ssh; firewall-cmd --reload; true'<enter>",
-    "<wait30s>"
+    "<wait20s>",
+    "<esc><wait2s>",
+    "<esc><wait2s>",
+    "<tab><enter><wait3s>",
+    "echo onion | sudo -S pkill -9 -f so-setup || true<enter>",
+    "<wait2s>",
+    "echo onion | sudo -S sed -i '/so-setup/d;/SecurityOnion\\/setup/d' /home/onion/.bash_profile /home/onion/.bashrc 2>/dev/null || true<enter>",
+    "<wait2s>",
+    "echo onion | sudo -S bash -c 'systemctl enable --now NetworkManager sshd; nmcli networking on; for n in $(ls /sys/class/net | grep -v lo); do ip link set $n up; nmcli device connect $n || dhclient -v $n || true; done; firewall-cmd --permanent --add-service=ssh; firewall-cmd --reload; true'<enter>",
+    "<wait45s>"
   ]
   boot_wait         = "15s"
   boot_key_interval = "100ms"
