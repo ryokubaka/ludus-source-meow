@@ -14,11 +14,6 @@ ludus_so_sniff_tag: 10
 # Optional override when range_second_octet / LUDUS_RANGE_NUMBER unavailable
 ludus_so_range_number_override: ""
 
-# Optional SSH to Proxmox for bridge-ageing when Ludus host is not the hypervisor
-ludus_so_proxmox_ssh_host: ""
-ludus_so_proxmox_ssh_user: root
-ludus_so_proxmox_ssh_port: 22
-
 # Seconds to wait for sniff NIC to appear in the guest after hot-plug
 ludus_so_sniff_wait_timeout: 1800
 ludus_so_sniff_wait_delay: 15
