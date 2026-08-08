@@ -53,6 +53,7 @@ variable "ssh_username" {
   default = "onion"
 }
 
+# This block has to be in each file or packer won't be able to use the variables
 variable "proxmox_url" {
   type = string
 }
@@ -87,6 +88,7 @@ variable "ansible_home" {
 variable "ludus_nat_interface" {
   type = string
 }
+####
 
 locals {
   template_description = "Security Onion 3.2.0 template built ${legacy_isotime("2006-01-02 03:04:05")} username:password => onion:onion (so-setup not run)"
@@ -171,13 +173,14 @@ build {
   provisioner "shell-local" {
     execute_command = ["bash", "-c", "{{.Vars}} {{.Script}}"]
     env = {
-      VM_NAME      = "${var.vm_name}"
-      SSH_USER     = "${var.ssh_username}"
-      SSH_PASS     = "${var.ssh_password}"
-      PLAYBOOK     = "ansible/reset-ssh-host-keys.yml"
-      ANSIBLE_HOME = "${var.ansible_home}"
-      MAX_WAIT_SEC = "3600"
-      EXPECT_MAC   = "BC:24:11:50:03:01"
+      VM_NAME              = "${var.vm_name}"
+      SSH_USER             = "${var.ssh_username}"
+      SSH_PASS             = "${var.ssh_password}"
+      ANSIBLE_HOME         = "${var.ansible_home}"
+      PLAYBOOKS            = "ansible/ludus-linux-prereqs.yml ansible/securityonion-prep.yml ansible/reset-machine-id.yml ansible/reset-ssh-host-keys.yml"
+      SO_TEMPLATE_MARKER   = "securityonion-3-packer"
+      MAX_WAIT_SEC         = "3600"
+      EXPECT_MAC           = "BC:24:11:50:03:01"
     }
     script = "scripts/packer-provision-via-dhcp.sh"
   }

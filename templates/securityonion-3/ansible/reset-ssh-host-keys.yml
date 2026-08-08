@@ -1,62 +1,7 @@
-- name: Harden Security Onion Packer template
+# Matches ludus-source-bsl rocky-9 reset-ssh-host-keys pattern.
+- name: Reset SSH host keys
   hosts: all
-  become: true
   tasks:
-    # #region agent log
-    - name: Debug marker — ansible provisioner started (d940ab)
-      ansible.builtin.copy:
-        dest: /etc/ludus-so-ansible-debug.ndjson
-        content: |
-          {"sessionId":"d940ab","hypothesisId":"H5","location":"reset-ssh-host-keys.yml","message":"ansible_provisioner_started","data":{"ok":true},"timestamp":0,"runId":"post-fix"}
-    # #endregion
-
-    - name: Install qemu-guest-agent when available (optional — packer uses DHCP SSH scan)
-      ansible.builtin.dnf:
-        name: qemu-guest-agent
-        state: present
-      register: qemu_ga_pkg
-      failed_when: false
-
-    - name: Enable qemu-guest-agent when installed
-      ansible.builtin.service:
-        name: qemu-guest-agent
-        enabled: true
-        state: started
-      when: not qemu_ga_pkg.failed | default(true)
-
-    - name: Allow password SSH
-      ansible.builtin.lineinfile:
-        path: /etc/ssh/sshd_config
-        regexp: "{{ item.regexp }}"
-        line: "{{ item.line }}"
-      loop:
-        - { regexp: '^#?PasswordAuthentication', line: 'PasswordAuthentication yes' }
-        - { regexp: '^#?PermitRootLogin', line: 'PermitRootLogin yes' }
-      notify: Restart sshd
-
-    - name: Strip so-setup autostart from shell profiles
-      ansible.builtin.shell: |
-        for f in /home/onion/.bash_profile /home/onion/.bashrc /root/.bash_profile /root/.bashrc; do
-          [ -f "$f" ] || continue
-          sed -i '/so-setup/d;/SecurityOnion\/setup/d' "$f" || true
-        done
-        rm -f /etc/profile.d/*so-setup* /etc/profile.d/*securityonion* 2>/dev/null || true
-      args:
-        executable: /bin/bash
-
-    - name: Mark Ludus Packer template
-      ansible.builtin.copy:
-        dest: /etc/ludus-so-template
-        content: "securityonion-3-packer\n"
-
-    # #region agent log
-    - name: Debug marker — ansible provisioner finished (d940ab)
-      ansible.builtin.copy:
-        dest: /etc/ludus-so-ansible-debug.ndjson
-        content: |
-          {"sessionId":"d940ab","hypothesisId":"H5","location":"reset-ssh-host-keys.yml","message":"ansible_provisioner_finished","data":{"ok":true},"timestamp":0,"runId":"post-fix"}
-    # #endregion
-
     - name: Find SSH host keys
       ansible.builtin.find:
         paths: /etc/ssh/
@@ -71,18 +16,4 @@
         path: "{{ item.path }}"
         state: absent
       loop: "{{ ssh_keys.files }}"
-
-    - name: Remove machine-id for unique clones
-      ansible.builtin.file:
-        path: "{{ item }}"
-        state: absent
-      loop:
-        - /etc/machine-id
-        - /var/lib/dbus/machine-id
-      failed_when: false
-
-  handlers:
-    - name: Restart sshd
-      ansible.builtin.service:
-        name: sshd
-        state: restarted
+      become: true

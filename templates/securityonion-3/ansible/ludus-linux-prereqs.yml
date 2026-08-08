@@ -1,0 +1,101 @@
+# Ludus Linux template requirements:
+# https://docs.ludus.cloud/docs/using-ludus/templates#non-automated-os-template-builds
+# Guest agent, SSH, python3, sudo, DHCP.
+- name: Ludus Linux template prerequisites
+  hosts: all
+  become: true
+  tasks:
+    - name: Ensure python3 and sudo are installed
+      ansible.builtin.dnf:
+        name:
+          - python3
+          - python3-libselinux
+          - sudo
+        state: present
+
+    - name: Ensure template user has passwordless sudo
+      ansible.builtin.copy:
+        dest: /etc/sudoers.d/{{ ansible_user }}
+        content: "{{ ansible_user }} ALL=(ALL) NOPASSWD: ALL\n"
+        mode: "0440"
+        validate: "visudo -cf %s"
+
+    - name: Install qemu-guest-agent (required for Ludus)
+      ansible.builtin.shell: |
+        set -uo pipefail
+        if rpm -q qemu-guest-agent >/dev/null 2>&1; then
+          exit 0
+        fi
+
+        install_ok=0
+
+        dnf -y install qemu-guest-agent && install_ok=1 || true
+
+        if [ "$install_ok" -eq 0 ]; then
+          for dir in /nsm/repo /nsm/repo/Packages /run/install/repo/Packages /mnt/install/repo/Packages; do
+            [ -d "$dir" ] || continue
+            rpm="$(find "$dir" -maxdepth 2 -name 'qemu-guest-agent-*.rpm' 2>/dev/null | sort -V | tail -1)"
+            if [ -n "$rpm" ]; then
+              dnf -y install "$rpm" && install_ok=1 && break
+            fi
+          done
+        fi
+
+        if [ "$install_ok" -eq 0 ]; then
+          repo=/etc/yum.repos.d/ol9_kvm_utils.repo
+          if [ ! -f "$repo" ]; then
+            curl -sfL -o "$repo" \
+              https://yum.oracle.com/repo/OracleLinux/OL9/developer/kvm/utils/x86_64/ol9_kvm_utils.repo
+          fi
+          for rid in ol9_kvm_utils ol9_appstream ol9_baseos ol9_addons; do
+            dnf config-manager --enable "$rid" >/dev/null 2>&1 || true
+          done
+          dnf -y install qemu-guest-agent && install_ok=1 || true
+        fi
+
+        if [ "$install_ok" -eq 0 ]; then
+          echo "qemu-guest-agent not available in SO repos, /nsm/repo, or Oracle ol9_kvm_utils" >&2
+          exit 1
+        fi
+      args:
+        executable: /bin/bash
+      register: qemu_ga_install
+      changed_when: qemu_ga_install.rc == 0 and 'Nothing to do' not in qemu_ga_install.stdout
+
+    - name: Verify qemu-guest-agent package is installed
+      ansible.builtin.command: rpm -q qemu-guest-agent
+      changed_when: false
+
+    - name: Enable and start qemu-guest-agent
+      ansible.builtin.service:
+        name: qemu-guest-agent
+        enabled: true
+        state: started
+
+    - name: Ensure sshd is enabled
+      ansible.builtin.service:
+        name: sshd
+        enabled: true
+        state: started
+
+    - name: Allow password SSH for Ludus
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+      loop:
+        - { regexp: '^#?PasswordAuthentication', line: 'PasswordAuthentication yes' }
+        - { regexp: '^#?PermitRootLogin', line: 'PermitRootLogin yes' }
+      notify: Restart sshd
+
+    - name: Ensure NetworkManager provides DHCP on boot
+      ansible.builtin.service:
+        name: NetworkManager
+        enabled: true
+        state: started
+
+  handlers:
+    - name: Restart sshd
+      ansible.builtin.service:
+        name: sshd
+        state: restarted

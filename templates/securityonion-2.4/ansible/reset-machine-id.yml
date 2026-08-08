@@ -1,0 +1,29 @@
+- name: Reset machine-id for unique Ludus clones
+  hosts: all
+  become: true
+  tasks:
+    - name: Remove /etc/machine-id
+      ansible.builtin.file:
+        path: /etc/machine-id
+        state: absent
+      register: etc_machine_id
+
+    - name: Touch empty /etc/machine-id
+      ansible.builtin.file:
+        path: /etc/machine-id
+        state: touch
+        mode: "0444"
+      when: etc_machine_id is changed
+
+    - name: Remove /var/lib/dbus/machine-id
+      ansible.builtin.file:
+        path: /var/lib/dbus/machine-id
+        state: absent
+      register: var_lib_dbus_machine_id
+
+    - name: Touch empty /var/lib/dbus/machine-id
+      ansible.builtin.file:
+        path: /var/lib/dbus/machine-id
+        state: touch
+        mode: "0444"
+      when: var_lib_dbus_machine_id is changed

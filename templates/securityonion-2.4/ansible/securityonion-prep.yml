@@ -1,0 +1,19 @@
+# Security Onion-specific template prep (so-setup runs at range deploy, not packer).
+- name: Security Onion Packer template prep
+  hosts: all
+  become: true
+  tasks:
+    - name: Strip so-setup autostart from shell profiles
+      ansible.builtin.shell: |
+        for f in /home/onion/.bash_profile /home/onion/.bashrc /root/.bash_profile /root/.bashrc; do
+          [ -f "$f" ] || continue
+          sed -i '/so-setup/d;/SecurityOnion\/setup/d' "$f" || true
+        done
+        rm -f /etc/profile.d/*so-setup* /etc/profile.d/*securityonion* 2>/dev/null || true
+      args:
+        executable: /bin/bash
+
+    - name: Mark Ludus Packer template
+      ansible.builtin.copy:
+        dest: /etc/ludus-so-template
+        content: "{{ so_template_marker | default('securityonion-packer') }}\n"
