@@ -12,7 +12,7 @@
 # (Packer log path — not users/*/packer or sources/*/templates)
 set -u
 
-SCRIPT_VERSION="H33-cancel-sosetup-20260805"
+SCRIPT_VERSION="H34-ansible-cp-fix-20260808"
 
 VM_NAME="${VM_NAME:-securityonion-3-x64-template}"
 SSH_USER="${SSH_USER:-onion}"
@@ -183,12 +183,34 @@ INV="$(mktemp)"
 printf '[all]\n%s ansible_user=%s ansible_password=%s ansible_become_password=%s ansible_python_interpreter=/usr/bin/python3 ansible_ssh_common_args="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"\n' \
   "$IP" "$SSH_USER" "$SSH_PASS" "$SSH_PASS" >"$INV"
 
-export ANSIBLE_HOST_KEY_CHECKING=False
-if [ -n "${ANSIBLE_HOME}" ]; then
+setup_ansible_env() {
+  export ANSIBLE_HOST_KEY_CHECKING=False
+
+  if [ -z "${ANSIBLE_HOME}" ]; then
+    echo "ERROR: ANSIBLE_HOME unset — Ludus should pass var.ansible_home to packer" >&2
+    exit 1
+  fi
+
   export ANSIBLE_HOME
   export ANSIBLE_LOCAL_TEMP="${ANSIBLE_HOME}/tmp"
-  mkdir -p "${ANSIBLE_HOME}/tmp" 2>/dev/null || true
-fi
+  export ANSIBLE_SSH_CONTROL_PATH_DIR="${ANSIBLE_HOME}/cp"
+
+  if ! mkdir -p "${ANSIBLE_LOCAL_TEMP}" "${ANSIBLE_SSH_CONTROL_PATH_DIR}"; then
+    log_ndjson "H34" "ansible_home_mkdir_failed" "{\"ansible_home\":\"${ANSIBLE_HOME}\"}"
+    echo "ERROR: cannot create Ansible dirs under ${ANSIBLE_HOME}" >&2
+    exit 1
+  fi
+
+  if [ ! -w "${ANSIBLE_SSH_CONTROL_PATH_DIR}" ]; then
+    log_ndjson "H34" "ansible_cp_not_writable" "{\"path\":\"${ANSIBLE_SSH_CONTROL_PATH_DIR}\",\"whoami\":\"$(whoami)\"}"
+    echo "ERROR: ${ANSIBLE_SSH_CONTROL_PATH_DIR} not writable by $(whoami)" >&2
+    echo "HINT: on Ludus host: sudo mkdir -p ${ANSIBLE_SSH_CONTROL_PATH_DIR} ${ANSIBLE_LOCAL_TEMP} && sudo chown ludus:ludus ${ANSIBLE_SSH_CONTROL_PATH_DIR} ${ANSIBLE_LOCAL_TEMP}" >&2
+    exit 1
+  fi
+
+  log_ndjson "H34" "ansible_env_ready" "{\"ansible_home\":\"${ANSIBLE_HOME}\",\"cp\":\"${ANSIBLE_SSH_CONTROL_PATH_DIR}\"}"
+}
+setup_ansible_env
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLAYBOOK_PATH="$PLAYBOOK"

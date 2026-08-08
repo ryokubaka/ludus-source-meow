@@ -43,7 +43,7 @@ See [Ludus Sources docs](https://docs.ludus.cloud/docs/using-ludus/sources) for 
 | Template | Description |
 |---|---|
 | `securityonion-2.4-x64-template` | SO 2.4.211 Packer base — see [`templates/README.md`](./templates/README.md) |
-| `securityonion-3-x64-template` | SO 3.1.0 Packer base |
+| `securityonion-3-x64-template` | SO 3.2.0 Packer base |
 
 ```bash
 ludus templates build -n securityonion-2.4-x64-template

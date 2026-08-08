@@ -10,7 +10,7 @@ variable "icon_path" {
 
 variable "iso_checksum" {
   type    = string
-  default = "sha256:62FAB57E247C843D6A04F0796D8162C732B65D82FC3E4A59D087135B9FD32912"
+  default = "sha256:7465163C1D1ADFCDC3935530EAFB312E987C016941ADC11841B214553314D1FF"
 }
 
 variable "os" {
@@ -20,7 +20,7 @@ variable "os" {
 
 variable "iso_url" {
   type    = string
-  default = "https://download.securityonion.net/file/securityonion/securityonion-3.1.0-20260528.iso"
+  default = "https://download.securityonion.net/file/securityonion/securityonion-3.2.0-20260729.iso"
 }
 
 variable "vm_cpu_cores" {
@@ -89,7 +89,7 @@ variable "ludus_nat_interface" {
 }
 
 locals {
-  template_description = "Security Onion 3.1.0 template built ${legacy_isotime("2006-01-02 03:04:05")} username:password => onion:onion (so-setup not run)"
+  template_description = "Security Onion 3.2.0 template built ${legacy_isotime("2006-01-02 03:04:05")} username:password => onion:onion (so-setup not run)"
 }
 
 source "proxmox-iso" "securityonion3" {
