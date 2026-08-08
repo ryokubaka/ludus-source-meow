@@ -6,7 +6,7 @@
 # Ludus template DHCP pool (.50-.100) then run the same ansible playbooks BSL uses.
 set -u
 
-SCRIPT_VERSION="H36-qga-install-fix-20260808"
+SCRIPT_VERSION="H37-liburing-local-repo-20260808"
 
 VM_NAME="${VM_NAME:-securityonion-3-x64-template}"
 SSH_USER="${SSH_USER:-onion}"

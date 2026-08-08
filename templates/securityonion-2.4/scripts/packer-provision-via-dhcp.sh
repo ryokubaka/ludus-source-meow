@@ -8,7 +8,7 @@
 # Playbook order matches ludus-source-bsl: prereqs → app prep → machine-id → ssh keys.
 set -u
 
-SCRIPT_VERSION="H36-qga-install-fix-20260808"
+SCRIPT_VERSION="H37-liburing-local-repo-20260808"
 
 VM_NAME="${VM_NAME:-securityonion-2.4-x64-template}"
 SSH_USER="${SSH_USER:-onion}"

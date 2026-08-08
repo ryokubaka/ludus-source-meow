@@ -44,7 +44,7 @@ ludus:
       snapshot: false
       block_internet: false
     roles:
-      - name: ludus_securityonion
+      - name: ryokubaka.ludus_securityonion
     role_vars:
       ludus_so_install_type: standalone
       ludus_so_allow_cidr: "10.{{ range_second_octet }}.0.0/16"

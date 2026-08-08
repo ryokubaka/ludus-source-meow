@@ -1,6 +1,6 @@
 variable "description" {
   type    = string
-  default = "Security Onion 3 Standalone-ready base. so-setup runs at range deploy."
+  default = "Security Onion 3.2.0 Standalone-ready base (ISO securityonion-3.2.0-20260729). so-setup runs at range deploy."
 }
 
 variable "icon_path" {
@@ -130,7 +130,7 @@ source "proxmox-iso" "securityonion3" {
   cores           = "${var.vm_cpu_cores}"
   cpu_type        = "host"
   scsi_controller = "virtio-scsi-single"
-  qemu_agent      = false
+  qemu_agent      = true
   disks {
     disk_size         = "${var.vm_disk_size}"
     format            = "${var.proxmox_storage_format}"

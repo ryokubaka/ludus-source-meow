@@ -76,6 +76,8 @@ ludus-source-meow/
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for blueprint authoring rules and range-config conventions.
 
+See [CHANGELOG.md](./CHANGELOG.md) for release history.
+
 ## License
 
 AGPL-3.0-or-later — See [LICENSE](./LICENSE)

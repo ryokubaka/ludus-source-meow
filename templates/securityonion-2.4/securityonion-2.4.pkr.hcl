@@ -129,11 +129,13 @@ source "proxmox-iso" "securityonion24" {
   boot_wait         = "15s"
   boot_key_interval = "100ms"
 
-  # none: stock SO has no guest-agent; Packer cannot learn IP via Proxmox API
-  # (packer-plugin-proxmox#91). shell-local scans Ludus DHCP pool .50-.100.
+  # communicator=none: stock SO has no guest-agent at install time; Packer cannot
+  # learn IP via agent (proxmox#91). shell-local scans Ludus DHCP pool .50-.100.
+  # qemu_agent=true: Proxmox virtio channel must exist before guest-agent.service
+  # can start (independent of communicator / in-guest package install).
   communicator = "none"
   boot         = "order=scsi0;ide0"
-  qemu_agent   = false
+  qemu_agent   = true
 
   cores           = "${var.vm_cpu_cores}"
   cpu_type        = "host"
