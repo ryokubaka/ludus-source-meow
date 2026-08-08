@@ -30,3 +30,4 @@ Each bullet uses a single tag:
 - [Fix] **`ludus_securityonion` sniff MTU** — Do not force Proxmox `net1` `mtu=9000` (Ludus `vmbr` is 1500; guest virtio cannot exceed bridge). Pass `MTU=1500` to `so-setup`; strip erroneous jumbo MTU from existing `net1`.
 - [Add] **`ludus_securityonion` DNS preflight** — Fail before `so-setup` when SO repo hostnames do not resolve; documents `block_internet: false` and Ludus testing-mode DNS requirements.
 - [Add] **`ludus_securityonion` Ludus DNS setup** — Pin NM DNS to vlan `.254` and probe router forwarder with `dig` before `so-setup`.
+- [Fix] **`ludus_securityonion` stale bond0** — Remove leftover `bond0` from failed installs before `so-setup` (TESTING profile picks first NIC alphabetically; stale bond breaks `MNIC_IP`).

@@ -80,5 +80,7 @@ Ludus attaches only **one** NIC per VM at clone time; this role adds the second
 (sniff) NIC via Proxmox API before `so-setup`. Ludus range bridges use **MTU 1500**;
 virtio NICs cannot exceed the bridge MTU, so **`mtu=9000` on net1 will fail** in guest.
 SO may create `bond0` at jumbo MTU — this role passes **`MTU=1500`** to `so-setup`
-for virtio labs. Bridge `ageing_time 0` is attempted on the Ludus host when it can
-reach the range bridge (non-fatal if not).
+for virtio labs. A failed/partial install can leave **`bond0`** behind; the role removes
+it before `so-setup` so the TESTING profile selects **`ens18`** (mgmt) not **`bond0`**.
+Bridge `ageing_time 0` is attempted on the Ludus host when it can reach the range bridge
+(non-fatal if not).

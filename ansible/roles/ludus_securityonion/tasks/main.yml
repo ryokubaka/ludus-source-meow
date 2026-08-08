@@ -69,11 +69,17 @@
       ansible.builtin.include_tasks: preflight-dns.yml
       when: ludus_so_require_dns | default(true) | bool
 
+    - name: Prepare guest networking for so-setup
+      ansible.builtin.include_tasks: prepare-so-setup.yml
+
     - name: Export ALLOW_CIDR for so-setup when provided
       ansible.builtin.set_fact:
         ludus_so_setup_env:
           TESTING: "true"
+          TERM: "linux"
           MTU: "{{ ludus_so_bond_mtu | string }}"
+          MAINIP: "{{ ludus_so_main_ip }}"
+          MNIC_IP: "{{ ludus_so_main_ip }}"
           ALLOW_CIDR: "{{ ludus_so_allow_cidr | default('0.0.0.0/0', true) }}"
           WEBUSER: "{{ ludus_so_web_user }}"
           WEBPASSWD1: "{{ ludus_so_web_password }}"

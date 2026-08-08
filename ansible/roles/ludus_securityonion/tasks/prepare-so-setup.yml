@@ -1,0 +1,72 @@
+---
+# Partial/failed so-setup leaves bond0 behind. so-setup TESTING profile picks NICs via:
+#   nic_list=$(ls /sys/class/net | grep -v docker | grep -v lo)
+#   MNIC=$(echo "$nic_list" | head -1)   # alphabetical → bond0 wins over ens18
+# That yields empty MNIC_IP and "Could not determine MAINIP or MNIC_IP".
+- name: Detect management interface for so-setup
+  ansible.builtin.set_fact:
+    ludus_so_mnic: "{{ ansible_default_ipv4.interface }}"
+    ludus_so_main_ip: "{{ ansible_default_ipv4.address }}"
+
+- name: Detect sniff interface for so-setup
+  ansible.builtin.shell: |
+    set -euo pipefail
+    MGMT="{{ ludus_so_mnic }}"
+    for iface in $(ls -1 /sys/class/net | grep -vE '^(lo|docker|veth|br-|vir|bond|tun|wg)'); do
+      [[ "$iface" == "$MGMT" ]] && continue
+      echo "$iface"
+      exit 0
+    done
+    exit 1
+  args:
+    executable: /bin/bash
+  register: ludus_so_sniff_iface_detect
+  changed_when: false
+
+- name: Record sniff interface for so-setup
+  ansible.builtin.set_fact:
+    ludus_so_bnic: "{{ ludus_so_sniff_iface_detect.stdout | trim }}"
+
+- name: Remove stale Security Onion bond0 before so-setup
+  ansible.builtin.shell: |
+    set -euo pipefail
+    changed=0
+    while IFS= read -r con; do
+      [[ -z "$con" ]] && continue
+      nmcli con down "$con" 2>/dev/null || true
+      nmcli con delete "$con" 2>/dev/null || true
+      changed=1
+    done < <(nmcli -t -f NAME con show | grep -E '^(bond0|bond0-slave-)' || true)
+    if ip link show bond0 &>/dev/null; then
+      ip link set bond0 down 2>/dev/null || true
+      ip link delete bond0 2>/dev/null || true
+      changed=1
+    fi
+    if [[ "$changed" -eq 1 ]]; then
+      echo "removed-stale-bond0"
+    else
+      echo "no-stale-bond0"
+    fi
+  args:
+    executable: /bin/bash
+  become: true
+  register: ludus_so_bond_cleanup
+  changed_when: "'removed-stale-bond0' in ludus_so_bond_cleanup.stdout"
+
+- name: Verify so-setup will see management NIC first alphabetically
+  ansible.builtin.shell: |
+    set -euo pipefail
+    first=$(ls -1 /sys/class/net | grep -vE '^(lo|docker|veth|br-|vir|bond|tun|wg)' | head -1)
+    test "$first" = "{{ ludus_so_mnic }}"
+  args:
+    executable: /bin/bash
+  register: ludus_so_nic_order_check
+  changed_when: false
+
+- name: Fail when stale bond or extra interfaces block so-setup NIC detection
+  ansible.builtin.fail:
+    msg: >
+      After bond cleanup, first non-virtual interface is
+      {{ ludus_so_nic_order_check.stdout | default('unknown') }}, expected management NIC
+      {{ ludus_so_mnic }}. Check for leftover bond0 or unexpected interfaces before so-setup.
+  when: ludus_so_nic_order_check.rc != 0
