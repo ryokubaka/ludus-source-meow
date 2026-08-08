@@ -29,8 +29,9 @@
 
       Ludus DNS for VLAN N is 10.<range>.N.254 (must match this VM's vlan).
       Common fixes on Ludus ranges:
-        - Set testing.block_internet: false on the SO VM in range-config.yml
-        - Turn OFF Ludus testing mode (blocks outbound DNS), or allowlist repo hostnames in Testing UI
-        - From this VM: dig @10.X.Y.254 repo.securityonion.net
-        - Confirm the range router VM can reach upstream DNS/internet
+        - **Stop Testing Mode** on the range (blocks outbound DNS unless allowlisted)
+        - Allowlist `repo.securityonion.net` and `repo-alt.securityonion.net` if testing stays ON
+        - Set `testing.block_internet: false` on the SO VM in range-config.yml
+        - From this VM: `dig @10.X.Y.254 repo.securityonion.net` (use your vlan's .254)
+        - Confirm the range router VM is running and `network` rules were deployed
   when: ludus_so_dns_failures | length > 0

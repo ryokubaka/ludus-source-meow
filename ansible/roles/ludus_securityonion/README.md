@@ -42,26 +42,33 @@ Works with plain Ludus CLI/API deploy. No LUX required.
 ## DNS and internet (common setup failure)
 
 `so-setup` pulls packages from `repo.securityonion.net` / `repo-alt.securityonion.net`.
-The SO VM must resolve those names via **Ludus range router DNS**:
+The SO VM must resolve those via **Ludus range router DNS**:
 
 `10.<range_number>.<vlan>.254` (example: vlan 10 → `10.1.10.254`, vlan 20 → `10.1.20.254`)
+
+**Most common failure: Ludus Testing Mode is ON.** Testing blocks outbound DNS on the
+range router unless domains are allowlisted — `ping google.com` fails even when
+`resolv.conf` points at `10.1.10.254`.
 
 In `range-config.yml` for the SO VM:
 
 ```yaml
 testing:
-  block_internet: false   # required — default true blocks outbound DNS during testing
+  block_internet: false   # required on the SO VM
 ```
 
-Also ensure **Ludus testing mode is OFF**, or allowlist the repo hostnames in the Testing UI.
-Merged ranges (e.g. GOAD + SO) often omit `block_internet: false` on the SO VM — add it explicitly.
+**Fix order:**
+
+1. **Stop Testing Mode** on the range (LUX → Testing, or Ludus `testing/stop`).
+2. If testing must stay on, allowlist `repo.securityonion.net` and `repo-alt.securityonion.net`.
+3. Ensure `block_internet: false` on the SO VM; redeploy after `ludus source update meow`.
 
 Quick check from the SO VM:
 
 ```bash
-cat /etc/resolv.conf
-dig @10.1.10.254 repo.securityonion.net   # use your vlan's .254
-getent hosts repo.securityonion.net
+ping -c1 10.1.10.254                    # router reachable?
+dig @10.1.10.254 repo.securityonion.net # router forwarding DNS?
+getent hosts repo.securityonion.net     # system resolver
 ```
 
 ## Notes

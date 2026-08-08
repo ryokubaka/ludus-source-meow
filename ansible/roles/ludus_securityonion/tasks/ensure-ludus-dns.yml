@@ -1,0 +1,83 @@
+---
+- name: Require management IPv4 facts for Ludus DNS
+  ansible.builtin.assert:
+    that:
+      - ansible_default_ipv4.address is defined
+      - ansible_default_ipv4.address | length > 0
+      - ansible_default_ipv4.address is match('^10\\.')
+    fail_msg: >
+      Expected Ludus 10.x management address on {{ inventory_hostname }}
+      (got {{ ansible_default_ipv4.address | default('none') }}).
+
+- name: Derive Ludus router DNS from management address
+  ansible.builtin.set_fact:
+    ludus_so_mgmt_iface: "{{ ansible_default_ipv4.interface }}"
+    ludus_so_mgmt_ip: "{{ ansible_default_ipv4.address }}"
+    ludus_so_dns_server: >-
+      10.{{ ansible_default_ipv4.address.split('.')[1] }}.{{ ansible_default_ipv4.address.split('.')[2] }}.254
+
+- name: Configure NetworkManager to use Ludus router DNS
+  ansible.builtin.shell: |
+    set -euo pipefail
+    MGMT="{{ ludus_so_mgmt_iface }}"
+    DNS="{{ ludus_so_dns_server }}"
+    CON=$(nmcli -t -f NAME,DEVICE con show | awk -F: -v d="$MGMT" '$2==d {print $1; exit}')
+    if [[ -z "$CON" ]]; then
+      echo "No NetworkManager connection for device $MGMT" >&2
+      exit 1
+    fi
+    nmcli con mod "$CON" ipv4.dns "$DNS" ipv4.ignore-auto-dns yes ipv4.dns-priority -100
+    nmcli con up "$CON"
+    echo "dns=$DNS on $CON ($MGMT)"
+  args:
+    executable: /bin/bash
+  become: true
+  register: ludus_so_nm_dns
+  changed_when: "'dns=' in ludus_so_nm_dns.stdout"
+
+- name: Wait for resolv.conf to reference Ludus DNS
+  ansible.builtin.shell: |
+    set -euo pipefail
+    grep -q "{{ ludus_so_dns_server }}" /etc/resolv.conf
+  args:
+    executable: /bin/bash
+  register: ludus_so_resolv_wait
+  until: ludus_so_resolv_wait.rc == 0
+  retries: 10
+  delay: 2
+  changed_when: false
+
+- name: Test Ludus router DNS forwarder directly
+  ansible.builtin.command:
+    cmd: >-
+      dig @{{ ludus_so_dns_server }} +time=3 +tries=2 +short
+      {{ ludus_so_dns_router_test_host | default('repo.securityonion.net') }} A
+  register: ludus_so_router_dns_test
+  changed_when: false
+  failed_when: false
+
+- name: Fail when Ludus router does not resolve external DNS
+  ansible.builtin.fail:
+    msg: |
+      Ludus router {{ ludus_so_dns_server }} did not resolve
+      {{ ludus_so_dns_router_test_host | default('repo.securityonion.net') }}
+      from {{ inventory_hostname }} (mgmt {{ ludus_so_mgmt_ip }} on {{ ludus_so_mgmt_iface }}).
+
+      dig output:
+      {{ ludus_so_router_dns_test.stdout | default('') }}
+      {{ ludus_so_router_dns_test.stderr | default('') }}
+
+      resolv.conf:
+      {{ lookup('file', '/etc/resolv.conf') }}
+
+      This is almost always Ludus testing mode or firewall — not a Security Onion bug:
+        1. Stop Testing Mode on this range (LUX Testing page or ludus API testing/stop).
+           Testing mode blocks outbound DNS unless domains are allowlisted.
+        2. If testing must stay ON, allowlist at minimum:
+           repo.securityonion.net, repo-alt.securityonion.net
+        3. In range-config.yml for the SO VM set:
+           testing: { block_internet: false }
+        4. From this VM: ping -c1 {{ ludus_so_dns_server }}
+           then dig @{{ ludus_so_dns_server }} google.com
+        5. Confirm range router VM is running and network rules were deployed.
+  when: ludus_so_router_dns_test.stdout | default('') | trim | length == 0
