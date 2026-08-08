@@ -19,7 +19,17 @@
 - name: Set range bridge and sniff net1 spec
   ansible.builtin.set_fact:
     ludus_so_vmbr: "vmbr{{ 1000 + (ludus_so_range_number_resolved | int) }}"
-    ludus_so_net1_spec: "virtio,bridge=vmbr{{ 1000 + (ludus_so_range_number_resolved | int) }},tag={{ ludus_so_sniff_tag }},firewall=0"
+    ludus_so_net1_base: >-
+      virtio,bridge=vmbr{{ 1000 + (ludus_so_range_number_resolved | int) }},tag={{ ludus_so_sniff_tag }},firewall=0
+
+- name: Append optional MTU to sniff net1 spec
+  ansible.builtin.set_fact:
+    ludus_so_net1_spec: >-
+      {{
+        ludus_so_net1_base ~ (',mtu=' ~ (ludus_so_sniff_mtu | string))
+        if ludus_so_sniff_mtu | default('') | string | length > 0
+        else ludus_so_net1_base
+      }}
 
 - name: Resolve Proxmox node hint for this VM
   ansible.builtin.set_fact:
@@ -140,6 +150,28 @@
       or ('tag=' ~ (ludus_so_sniff_tag | string)) not in ludus_so_existing_net1
     )
 
+- name: Detect sniff net1 with wrong jumbo MTU (Ludus bridges are 1500)
+  ansible.builtin.set_fact:
+    ludus_so_net1_has_bad_mtu: >-
+      {{
+        ludus_so_existing_net1 | length > 0
+        and (
+          'mtu=9000' in ludus_so_existing_net1
+          or 'mtu=9216' in ludus_so_existing_net1
+        )
+      }}
+
+- name: Detect sniff net1 spec drift (optional MTU override)
+  ansible.builtin.set_fact:
+    ludus_so_net1_needs_spec_update: >-
+      {{
+        ludus_so_existing_net1 | length > 0
+        and ('bridge=' ~ ludus_so_vmbr) in ludus_so_existing_net1
+        and ('tag=' ~ (ludus_so_sniff_tag | string)) in ludus_so_existing_net1
+        and ludus_so_existing_net1 != ludus_so_net1_spec
+        and not (ludus_so_net1_has_bad_mtu | default(false) | bool)
+      }}
+
 - name: Add sniff net1 on Proxmox
   ansible.builtin.uri:
     url: "{{ ludus_so_proxmox_url }}/api2/json/nodes/{{ ludus_so_pve_node }}/qemu/{{ ludus_so_pve_vmid }}/config"
@@ -156,13 +188,53 @@
   register: ludus_so_net1_add
   when: ludus_so_existing_net1 | length == 0
 
+- name: Fix sniff net1 jumbo MTU on Proxmox
+  ansible.builtin.uri:
+    url: "{{ ludus_so_proxmox_url }}/api2/json/nodes/{{ ludus_so_pve_node }}/qemu/{{ ludus_so_pve_vmid }}/config"
+    method: PUT
+    headers:
+      Authorization: "{{ ludus_so_pve_auth }}"
+    body_format: form-urlencoded
+    body:
+      net1: "{{ ludus_so_net1_spec }}"
+    status_code: [200]
+    validate_certs: false
+  delegate_to: localhost
+  become: false
+  register: ludus_so_net1_mtu_fix
+  when: ludus_so_net1_has_bad_mtu | default(false) | bool
+
+- name: Update sniff net1 spec on Proxmox
+  ansible.builtin.uri:
+    url: "{{ ludus_so_proxmox_url }}/api2/json/nodes/{{ ludus_so_pve_node }}/qemu/{{ ludus_so_pve_vmid }}/config"
+    method: PUT
+    headers:
+      Authorization: "{{ ludus_so_pve_auth }}"
+    body_format: form-urlencoded
+    body:
+      net1: "{{ ludus_so_net1_spec }}"
+    status_code: [200]
+    validate_certs: false
+  delegate_to: localhost
+  become: false
+  register: ludus_so_net1_spec_update
+  when: ludus_so_net1_needs_spec_update | default(false) | bool
+
 - name: Report sniff net1 status
   ansible.builtin.debug:
     msg: >-
       {{
         'added net1=' ~ ludus_so_net1_spec ~ ' on VMID ' ~ (ludus_so_pve_vmid | string)
         if ludus_so_existing_net1 | length == 0
-        else 'net1 already sniff-ready on VMID ' ~ (ludus_so_pve_vmid | string)
+        else (
+          'removed jumbo MTU from net1 on VMID ' ~ (ludus_so_pve_vmid | string)
+          if ludus_so_net1_has_bad_mtu | default(false) | bool
+          else (
+            'updated net1 on VMID ' ~ (ludus_so_pve_vmid | string)
+            if ludus_so_net1_needs_spec_update | default(false) | bool
+            else 'net1 already sniff-ready on VMID ' ~ (ludus_so_pve_vmid | string)
+          )
+        )
       }}
 
 - name: Enable Ludus bridge hub-mode for packet capture (best effort)

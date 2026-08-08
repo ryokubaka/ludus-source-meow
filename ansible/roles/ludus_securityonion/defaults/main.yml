@@ -11,6 +11,13 @@ ludus_so_attach_sniff_nic: true
 # VLAN tag on the range bridge for sniff traffic (targets VLAN in SO lab blueprints)
 ludus_so_sniff_tag: 10
 
+# Optional Proxmox net1 MTU override (empty = inherit Ludus vmbr, usually 1500).
+# Do NOT set 9000 unless the Proxmox range bridge is jumbo end-to-end.
+ludus_so_sniff_mtu: ""
+
+# Bond/monitor MTU passed to so-setup (virtio labs use 1500, not SO jumbo defaults)
+ludus_so_bond_mtu: 1500
+
 # Optional override when range_second_octet / LUDUS_RANGE_NUMBER unavailable
 ludus_so_range_number_override: ""
 
@@ -37,3 +44,9 @@ ludus_so_setup_paths:
 
 # Marker file written after successful setup
 ludus_so_setup_marker: /etc/ludus-so-setup-complete
+
+# Fail fast when SO repo hostnames do not resolve (needs working Ludus DNS + internet)
+ludus_so_require_dns: true
+ludus_so_dns_check_hosts:
+  - repo.securityonion.net
+  - repo-alt.securityonion.net

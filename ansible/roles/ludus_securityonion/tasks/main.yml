@@ -61,10 +61,15 @@
       ansible.builtin.set_fact:
         ludus_so_test_profile: "{{ ludus_so_install_type | lower }}-{{ ludus_so_setup_profile_suffix }}"
 
+    - name: Preflight DNS for so-setup repo pulls
+      ansible.builtin.include_tasks: preflight-dns.yml
+      when: ludus_so_require_dns | default(true) | bool
+
     - name: Export ALLOW_CIDR for so-setup when provided
       ansible.builtin.set_fact:
         ludus_so_setup_env:
           TESTING: "true"
+          MTU: "{{ ludus_so_bond_mtu | string }}"
           ALLOW_CIDR: "{{ ludus_so_allow_cidr | default('0.0.0.0/0', true) }}"
           WEBUSER: "{{ ludus_so_web_user }}"
           WEBPASSWD1: "{{ ludus_so_web_password }}"

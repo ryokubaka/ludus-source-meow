@@ -1,0 +1,36 @@
+---
+- name: Resolve Security Onion repo hostnames
+  ansible.builtin.command:
+    cmd: getent ahostsv4 {{ item }}
+  loop: "{{ ludus_so_dns_check_hosts }}"
+  register: ludus_so_dns_results
+  changed_when: false
+  failed_when: false
+
+- name: Collect DNS preflight failures
+  ansible.builtin.set_fact:
+    ludus_so_dns_failures: >-
+      {{ ludus_so_dns_results.results | selectattr('rc', 'ne', 0) | map(attribute='item') | list }}
+
+- name: Read resolv.conf for diagnostics
+  ansible.builtin.slurp:
+    src: /etc/resolv.conf
+  register: ludus_so_resolv
+  failed_when: false
+
+- name: Fail when SO repo hostnames do not resolve
+  ansible.builtin.fail:
+    msg: |
+      Cannot resolve {{ ludus_so_dns_failures | join(', ') }} from {{ inventory_hostname }}.
+      so-setup needs outbound DNS for Security Onion repo pulls.
+
+      resolv.conf:
+      {{ ludus_so_resolv.content | default('') | b64decode }}
+
+      Ludus DNS for VLAN N is 10.<range>.N.254 (must match this VM's vlan).
+      Common fixes on Ludus ranges:
+        - Set testing.block_internet: false on the SO VM in range-config.yml
+        - Turn OFF Ludus testing mode (blocks outbound DNS), or allowlist repo hostnames in Testing UI
+        - From this VM: dig @10.X.Y.254 repo.securityonion.net
+        - Confirm the range router VM can reach upstream DNS/internet
+  when: ludus_so_dns_failures | length > 0
