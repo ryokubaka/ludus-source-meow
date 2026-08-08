@@ -1,11 +1,11 @@
 #!/bin/bash
 # Automated Security Onion template testing (unit → sync → optional live VM → optional full build).
 #
-# Usage (from ludus-source-meow repo root or templates/):
-#   ./templates/scripts/run-automated-tests.sh unit              # ~1s, local
-#   ./templates/scripts/run-automated-tests.sh sync              # push to Ludus packer dir
-#   ./templates/scripts/run-automated-tests.sh integration       # guest-agent on live VM
-#   ./templates/scripts/run-automated-tests.sh full              # sync + ludus templates build
+# Usage (from ludus-source-meow repo root):
+#   ./scripts/run-automated-tests.sh unit              # ~1s, local
+#   ./scripts/run-automated-tests.sh sync              # push to Ludus packer dir
+#   ./scripts/run-automated-tests.sh integration       # guest-agent on live VM
+#   ./scripts/run-automated-tests.sh full              # sync + ludus templates build
 #
 # Env:
 #   SO_TEMPLATE=securityonion-2.4   (or securityonion-3)
@@ -15,7 +15,8 @@
 #   SO_TEST_IP=                   (optional; auto-scan on Ludus if unset)
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="${REPO_ROOT}/templates"
 SO_TEMPLATE="${SO_TEMPLATE:-securityonion-2.4}"
 LUDUS_HOST="${LUDUS_HOST:-10.0.20.40}"
 LUDUS_SSH_KEY="${LUDUS_SSH_KEY:-/tmp/ludus_root_key}"

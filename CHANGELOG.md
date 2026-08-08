@@ -5,17 +5,11 @@ All notable changes to [ludus-source-meow](https://github.com/ryokubaka/ludus-so
 Each bullet uses a single tag:
 
 - **[Add]** — New capability
-- **[Fix]** — Bug or wrong behavior (from **1.0.1** onward)
+- **[Fix]** — Bug or wrong behavior
 - **[Improve]** — UX polish or refactor without a new feature
 - **[Docs]** — Documentation improvement
 
 ---
-
-## [1.0.1] - 2026-08-08
-
-**Templates**
-- [Fix] **Range deploy DHCP** — Anaconda kickstart leaves `ens18.nmconnection` with `autoconnect=false`; cloned VMs never DHCP. Ansible + `%post` now force `connection.autoconnect yes` and `ipv4.method auto` on all ethernet NM profiles (SO 2.4 + 3).
-- [Fix] **Oracle Linux ansible credentials** — Ludus assigns SO VMs to inventory group `ol` but ships no `group_vars/ol.yml`; deploy SSH'd as controller user `ludus`. Added `ansible/group_vars/ol.yml` (`onion:onion`) + `templates/scripts/install-ol-group-vars.sh` for Ludus host install.
 
 ## [1.0.0] - 2026-08-08
 
@@ -24,7 +18,7 @@ Each bullet uses a single tag:
 - [Add] **`securityonion-3-x64-template`** — Packer base for Security Onion **3.2.0** (`securityonion-3.2.0-20260729.iso`).
 - [Add] **SO-specific Packer path** — Stock ISO has no guest-agent during install ([proxmox#91](https://github.com/hashicorp/packer-plugin-proxmox/issues/91)), so templates use `communicator=none` + shell-local DHCP SSH scan (`192.0.2.50–100`) instead of BSL's `communicator=ssh` + packer ansible provisioner. Same ansible playbooks and env as [ludus-source-bsl](https://github.com/badsectorlabs/ludus-source-bsl).
 - [Add] **Guest-agent provisioning** — Install `liburing` + `qemu-guest-agent` from ISO-local `/nsm/repo` (Oracle OL9 fallback); `qemu_agent=true` for Proxmox virtio channel; `install-qemu-guest-agent.sh` + ansible playbooks.
-- [Add] **Automated testing** — `templates/scripts/run-automated-tests.sh` (`unit` / `sync` / `integration` / `full`); unit tests in `tests/test-qemu-ga-logic.sh`; fast re-provision via `scripts/test-provision-against-vm.sh` (~30s–2min on live VM, no ISO).
+- [Add] **Automated testing** — `scripts/run-automated-tests.sh` (`unit` / `sync` / `integration` / `full`); unit tests in `tests/test-qemu-ga-logic.sh`; fast re-provision via per-template `scripts/test-provision-against-vm.sh` (~30s–2min on live VM, no ISO).
 - [Add] **Templates README** — Version pins, testing tiers, CIFS note (pause GOAD VMs 105/106/109 during builds when `storage-ludus` lock timeouts occur).
 
 **Blueprints**

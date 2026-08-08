@@ -4,7 +4,7 @@
 # ansible_user is unset and deploy falls back to the ludus controller user.
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LUDUS_HOST="${LUDUS_HOST:-10.0.20.40}"
 DEST="${LUDUS_GROUP_VARS_DIR:-/opt/ludus/ansible/range-management/group_vars/ol.yml}"
 SSH_KEY="${LUDUS_SSH_KEY:-/tmp/ludus_root_key}"

@@ -14,7 +14,7 @@ Follows [Ludus template guidance](https://docs.ludus.cloud/docs/using-ludus/temp
 - Linux template requirements: qemu-guest-agent, SSH, python3, sudo, DHCP
 - Ansible playbooks (BSL order): `ludus-linux-prereqs.yml` → `securityonion-prep.yml` → `reset-machine-id.yml` → `reset-ssh-host-keys.yml`
 - Credentials: `onion:onion` (SO default; exception to `localuser:password` convention)
-- **Oracle Linux inventory:** Ludus maps SO to ansible group `ol`. Install `ansible/group_vars/ol.yml` on the Ludus host once: `templates/scripts/install-ol-group-vars.sh`
+- **Oracle Linux inventory:** Ludus maps SO to ansible group `ol`. Install `ansible/group_vars/ol.yml` on the Ludus host once: `./scripts/install-ol-group-vars.sh`
 
 **SO-specific:** stock ISO has no guest-agent during install ([proxmox#91](https://github.com/hashicorp/packer-plugin-proxmox/issues/91)), so packer uses `communicator=none` + shell-local DHCP SSH scan instead of BSL's `communicator=ssh` + packer ansible provisioner. Same playbooks and ansible env vars as BSL.
 
@@ -39,10 +39,10 @@ ludus templates build -n securityonion-2.4-x64-template
 From repo root (uses ludus-ux SSH key via Docker if needed):
 
 ```bash
-./templates/scripts/run-automated-tests.sh unit          # ~1s local
-./templates/scripts/run-automated-tests.sh sync          # rsync to Ludus /opt/ludus/packer/
-./templates/scripts/run-automated-tests.sh integration   # live VM on Ludus (~1–2 min)
-./templates/scripts/run-automated-tests.sh full          # sync + ludus templates build
+./scripts/run-automated-tests.sh unit          # ~1s local
+./scripts/run-automated-tests.sh sync          # rsync to Ludus /opt/ludus/packer/
+./scripts/run-automated-tests.sh integration   # live VM on Ludus (~1–2 min)
+./scripts/run-automated-tests.sh full          # sync + ludus templates build
 ```
 
 Env: `SO_TEMPLATE=securityonion-2.4|securityonion-3`, `LUDUS_HOST=10.0.20.40`, `SO_TEST_IP=`.
