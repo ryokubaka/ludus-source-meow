@@ -28,6 +28,40 @@
         | default('', true)
       }}
 
+- name: Load Proxmox API credentials from Ludus deploy environment
+  ansible.builtin.set_fact:
+    ludus_so_proxmox_url: "{{ lookup('env', 'PROXMOX_URL') | default('', true) }}"
+    ludus_so_proxmox_user: "{{ lookup('env', 'PROXMOX_USERNAME') | default('', true) }}"
+    ludus_so_proxmox_token: "{{ lookup('env', 'PROXMOX_TOKEN') | default('', true) }}"
+    ludus_so_proxmox_secret: "{{ lookup('env', 'PROXMOX_SECRET') | default('', true) }}"
+    ludus_so_proxmox_invalid_cert: "{{ lookup('env', 'PROXMOX_INVALID_CERT') | default('false', true) }}"
+    ludus_so_proxmox_hostname: "{{ lookup('env', 'PROXMOX_HOSTNAME') | default('', true) }}"
+  delegate_to: localhost
+  no_log: true
+
+- name: Fail when Proxmox API environment is missing
+  ansible.builtin.fail:
+    msg: >
+      Proxmox API credentials not available (PROXMOX_URL / PROXMOX_USERNAME /
+      PROXMOX_TOKEN / PROXMOX_SECRET). Run this role during Ludus range deploy.
+  delegate_to: localhost
+  when: >
+    ludus_so_proxmox_url | length == 0
+    or ludus_so_proxmox_user | length == 0
+    or ludus_so_proxmox_token | length == 0
+    or ludus_so_proxmox_secret | length == 0
+
+- name: Build Proxmox API token authorization header
+  ansible.builtin.set_fact:
+    ludus_so_pve_auth: >-
+      PVEAPIToken={{
+        (ludus_so_proxmox_token ~ '=' ~ ludus_so_proxmox_secret)
+        if ('!' in ludus_so_proxmox_token)
+        else (ludus_so_proxmox_user ~ '!' ~ ludus_so_proxmox_token ~ '=' ~ ludus_so_proxmox_secret)
+      }}
+  delegate_to: localhost
+  no_log: true
+
 - name: Attach sniff net1 via Proxmox API (Ludus)
   ansible.builtin.script: attach-sniff-nic.sh
   delegate_to: localhost
@@ -42,12 +76,10 @@
     LUDUS_SO_PROXMOX_SSH_HOST: "{{ ludus_so_proxmox_ssh_host | default('', true) }}"
     LUDUS_SO_PROXMOX_SSH_USER: "{{ ludus_so_proxmox_ssh_user }}"
     LUDUS_SO_PROXMOX_SSH_PORT: "{{ ludus_so_proxmox_ssh_port | string }}"
-    PROXMOX_URL: "{{ lookup('env', 'PROXMOX_URL') | default('', true) }}"
-    PROXMOX_USERNAME: "{{ lookup('env', 'PROXMOX_USERNAME') | default('', true) }}"
-    PROXMOX_TOKEN: "{{ lookup('env', 'PROXMOX_TOKEN') | default('', true) }}"
-    PROXMOX_SECRET: "{{ lookup('env', 'PROXMOX_SECRET') | default('', true) }}"
-    PROXMOX_INVALID_CERT: "{{ lookup('env', 'PROXMOX_INVALID_CERT') | default('false', true) }}"
-    PROXMOX_HOSTNAME: "{{ lookup('env', 'PROXMOX_HOSTNAME') | default('', true) }}"
+    PROXMOX_URL: "{{ hostvars['localhost'].ludus_so_proxmox_url }}"
+    PROXMOX_INVALID_CERT: "{{ hostvars['localhost'].ludus_so_proxmox_invalid_cert }}"
+    PROXMOX_HOSTNAME: "{{ hostvars['localhost'].ludus_so_proxmox_hostname }}"
+    PVE_AUTH_HEADER: "{{ hostvars['localhost'].ludus_so_pve_auth }}"
 
 - name: Show sniff NIC attach output
   ansible.builtin.debug:
@@ -59,7 +91,6 @@
       Could not attach sniff net1 for {{ inventory_hostname }} on {{ ludus_so_vmbr }}
       (tag {{ ludus_so_sniff_tag }}).
       {{ ludus_so_attach.stderr | default(ludus_so_attach.msg) | default('unknown error') }}
-      Ensure this role runs during Ludus range deploy (Proxmox API env vars present).
   when: ludus_so_attach.rc != 0
 
 - name: Rescan PCI bus for hot-plugged virtio sniff NIC

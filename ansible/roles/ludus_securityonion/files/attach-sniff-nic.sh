@@ -1,12 +1,9 @@
 #!/usr/bin/env bash
 # Attach SO sniff net1 + hub-mode bridge ageing during Ludus range deploy.
-# Uses Proxmox API env vars injected by Ludus ansible (PROXMOX_URL, token, etc.).
 set -euo pipefail
 
 : "${PROXMOX_URL:?PROXMOX_URL not set — run during Ludus range deploy}"
-: "${PROXMOX_USERNAME:?PROXMOX_USERNAME not set}"
-: "${PROXMOX_TOKEN:?PROXMOX_TOKEN not set}"
-: "${PROXMOX_SECRET:?PROXMOX_SECRET not set}"
+: "${PVE_AUTH_HEADER:?PVE_AUTH_HEADER not set}"
 : "${LUDUS_SO_VM_NAME:?LUDUS_SO_VM_NAME not set}"
 : "${LUDUS_SO_VMBR:?LUDUS_SO_VMBR not set}"
 : "${LUDUS_SO_SNIFF_TAG:?LUDUS_SO_SNIFF_TAG not set}"
@@ -16,12 +13,23 @@ if [[ "${PROXMOX_INVALID_CERT:-false}" == "true" ]]; then
   CURL+=(-k)
 fi
 
-AUTH="Authorization: PVEAPIToken=${PROXMOX_USERNAME}!${PROXMOX_TOKEN}=${PROXMOX_SECRET}"
+AUTH="Authorization: ${PVE_AUTH_HEADER}"
 BASE="${PROXMOX_URL%/}/api2/json"
 NETSPEC="virtio,bridge=${LUDUS_SO_VMBR},tag=${LUDUS_SO_SNIFF_TAG},firewall=0"
 TARGET_NODE="${LUDUS_SO_TARGET_NODE:-}"
 
-lookup="$("${CURL[@]}" -H "$AUTH" "${BASE}/cluster/resources?type=vm")"
+set +e
+lookup="$("${CURL[@]}" -H "$AUTH" "${BASE}/cluster/resources?type=vm" 2>&1)"
+curl_rc=$?
+set -e
+if [[ $curl_rc -ne 0 ]]; then
+  echo "${lookup}" >&2
+  if [[ "${lookup}" == *"401"* ]]; then
+    echo "Proxmox API authentication failed (HTTP 401). Check this Ludus user's Proxmox API token." >&2
+  fi
+  exit "$curl_rc"
+fi
+
 read -r NODE VMID <<< "$(
   LUDUS_SO_VM_NAME="$LUDUS_SO_VM_NAME" LUDUS_SO_TARGET_NODE="$TARGET_NODE" python3 - <<'PY'
 import json, os, sys
