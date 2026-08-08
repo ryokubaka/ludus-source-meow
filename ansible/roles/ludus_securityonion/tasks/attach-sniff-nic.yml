@@ -1,0 +1,75 @@
+---
+- name: Compute Ludus range bridge for sniff NIC
+  ansible.builtin.set_fact:
+    ludus_so_range_number_resolved: >-
+      {{
+        range_second_octet
+        | default(lookup('env', 'LUDUS_RANGE_NUMBER'), true)
+        | default(ludus_so_range_number_override, true)
+      }}
+
+- name: Fail when Ludus range number is unknown
+  ansible.builtin.fail:
+    msg: >
+      Cannot compute vmbr for sniff NIC (need range_second_octet from Ludus deploy
+      or ludus_so_range_number_override).
+  when: ludus_so_range_number_resolved | default('') | string | length == 0
+
+- name: Set range bridge name
+  ansible.builtin.set_fact:
+    ludus_so_vmbr: "vmbr{{ 1000 + (ludus_so_range_number_resolved | int) }}"
+
+- name: Resolve Proxmox node for this VM
+  ansible.builtin.set_fact:
+    ludus_so_target_node: >-
+      {{
+        (vm_target_nodes | default({}))[inventory_hostname]
+        | default(lookup('env', 'PROXMOX_NODE'), true)
+        | default('', true)
+      }}
+
+- name: Attach sniff net1 via Proxmox API (Ludus)
+  ansible.builtin.script: attach-sniff-nic.sh
+  delegate_to: localhost
+  become: false
+  register: ludus_so_attach
+  changed_when: "'added net1' in (ludus_so_attach.stdout | default(''))"
+  environment:
+    LUDUS_SO_VM_NAME: "{{ inventory_hostname }}"
+    LUDUS_SO_VMBR: "{{ ludus_so_vmbr }}"
+    LUDUS_SO_SNIFF_TAG: "{{ ludus_so_sniff_tag | string }}"
+    LUDUS_SO_TARGET_NODE: "{{ ludus_so_target_node }}"
+    LUDUS_SO_PROXMOX_SSH_HOST: "{{ ludus_so_proxmox_ssh_host | default('', true) }}"
+    LUDUS_SO_PROXMOX_SSH_USER: "{{ ludus_so_proxmox_ssh_user }}"
+    LUDUS_SO_PROXMOX_SSH_PORT: "{{ ludus_so_proxmox_ssh_port | string }}"
+    PROXMOX_URL: "{{ lookup('env', 'PROXMOX_URL') | default('', true) }}"
+    PROXMOX_USERNAME: "{{ lookup('env', 'PROXMOX_USERNAME') | default('', true) }}"
+    PROXMOX_TOKEN: "{{ lookup('env', 'PROXMOX_TOKEN') | default('', true) }}"
+    PROXMOX_SECRET: "{{ lookup('env', 'PROXMOX_SECRET') | default('', true) }}"
+    PROXMOX_INVALID_CERT: "{{ lookup('env', 'PROXMOX_INVALID_CERT') | default('false', true) }}"
+    PROXMOX_HOSTNAME: "{{ lookup('env', 'PROXMOX_HOSTNAME') | default('', true) }}"
+
+- name: Show sniff NIC attach output
+  ansible.builtin.debug:
+    msg: "{{ ludus_so_attach.stdout_lines | default([]) }}"
+
+- name: Fail when sniff NIC attach failed
+  ansible.builtin.fail:
+    msg: >-
+      Could not attach sniff net1 for {{ inventory_hostname }} on {{ ludus_so_vmbr }}
+      (tag {{ ludus_so_sniff_tag }}).
+      {{ ludus_so_attach.stderr | default(ludus_so_attach.msg) | default('unknown error') }}
+      Ensure this role runs during Ludus range deploy (Proxmox API env vars present).
+  when: ludus_so_attach.rc != 0
+
+- name: Rescan PCI bus for hot-plugged virtio sniff NIC
+  ansible.builtin.shell: |
+    set -euo pipefail
+    if [[ -w /sys/bus/pci/rescan ]]; then
+      echo 1 > /sys/bus/pci/rescan
+    fi
+  args:
+    executable: /bin/bash
+  become: true
+  changed_when: false
+  failed_when: false

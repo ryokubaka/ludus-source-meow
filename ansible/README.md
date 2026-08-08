@@ -8,7 +8,7 @@ Place each role under [`roles/`](./roles/) — either a normal directory or a **
 
 | Role | Purpose |
 |---|---|
-| [`ludus_securityonion`](./roles/ludus_securityonion/) | Wait for LUX sniff NIC; run Security Onion `so-setup` (standalone-net default) |
+| [`ludus_securityonion`](./roles/ludus_securityonion/) | Attach sniff NIC via Proxmox API; run Security Onion `so-setup` (standalone-net default) |
 
 Example submodule (run from repo root):
 

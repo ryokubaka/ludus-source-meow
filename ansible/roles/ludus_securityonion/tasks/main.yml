@@ -29,7 +29,11 @@
           Build/install the Security Onion Packer template from ludus-source-meow.
       when: ludus_so_setup_bin | length == 0
 
-    - name: Wait for sniff NIC (LUX attaches net1 during deploy)
+    - name: Attach sniff NIC on Proxmox (Ludus API)
+      ansible.builtin.include_tasks: attach-sniff-nic.yml
+      when: ludus_so_attach_sniff_nic | bool
+
+    - name: Wait for sniff NIC in guest (mgmt + sniff)
       ansible.builtin.shell: |
         set -euo pipefail
         count=$(ls -1 /sys/class/net | grep -cvE '^(lo|docker|veth|br-|tun|wg)' || true)
@@ -48,8 +52,9 @@
       ansible.builtin.fail:
         msg: >
           Timed out waiting for {{ ludus_so_min_nics }} NICs (mgmt + sniff).
-          LUX should attach a sniff net1 during deploy (bridge-ageing hub + tagged NIC).
-          Check Proxmox qm config for this VM and LUX so-sniff workflow logs.
+          Check Proxmox: qm config {{ inventory_hostname }} should include net1
+          (bridge {{ ludus_so_vmbr | default('vmbr10XX') }}, tag {{ ludus_so_sniff_tag }}).
+          Last NIC count: {{ ludus_so_nic_wait.stdout | default('unknown') }}.
       when: ludus_so_nic_wait.rc != 0
 
     - name: Build so-setup test profile name

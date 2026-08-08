@@ -35,8 +35,8 @@ See [Ludus Sources docs](https://docs.ludus.cloud/docs/using-ludus/sources) for 
 | Blueprint ID | Name | VMs | Description |
 |---|---|---|---|
 | [`starter-lab`](./blueprints/starter-lab/) | Starter Lab | 2 | Minimal Kali + Debian target — skeleton for new blueprints |
-| [`securityonion-lab`](./blueprints/securityonion-lab/) | Security Onion 2.4 Lab | 3 | Standalone SO 2.4 + target + Kali (LUX sniff) |
-| [`securityonion3-lab`](./blueprints/securityonion3-lab/) | Security Onion 3 Lab | 3 | Standalone SO 3 + target + Kali (LUX sniff) |
+| [`securityonion-lab`](./blueprints/securityonion-lab/) | Security Onion 2.4 Lab | 3 | Standalone SO 2.4 + target + Kali |
+| [`securityonion3-lab`](./blueprints/securityonion3-lab/) | Security Onion 3 Lab | 3 | Standalone SO 3.2 + target + Kali |
 
 ## Templates
 
@@ -50,13 +50,13 @@ ludus templates build -n securityonion-2.4-x64-template
 ludus templates build -n securityonion-3-x64-template
 ```
 
-Security Onion labs expect **LUX** to attach the sniff NIC + hub-mode bridge during deploy (and reverse on delete). No manual Proxmox steps.
+Security Onion labs use the `ludus_securityonion` role to attach a sniff NIC (`net1`) via Proxmox API during deploy and run `so-setup`. [LUX](https://github.com/ryokubaka/ludus-ux) may also attach the same NIC (idempotent). Set bridge `ageing_time 0` on the range `vmbr` for packet capture — see [Ludus docs](https://docs.ludus.cloud/docs/networking#packet-capture).
 
 ## Ansible content
 
 | Role | Purpose |
 |---|---|
-| [`ludus_securityonion`](./ansible/roles/ludus_securityonion/) | Wait for sniff NIC; run `so-setup iso standalone-net` |
+| [`ludus_securityonion`](./ansible/roles/ludus_securityonion/) | Attach sniff NIC; run `so-setup iso standalone-net` |
 
 Roles and collections live under [`ansible/`](./ansible/). See [`ansible/README.md`](./ansible/README.md).
 

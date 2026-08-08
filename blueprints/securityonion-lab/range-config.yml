@@ -6,7 +6,7 @@
 # VLAN 20 — Security Onion management / SOC
 # VLAN 99 — attacker
 #
-# LUX attaches SO net1 (sniff, tag=10) + bridge-ageing 0 during deploy.
+# LUX may also attach SO net1 during deploy (idempotent). Role attaches net1 via Proxmox API if missing.
 # RAM: ~38 GB (SO 32 + target 2 + kali 4)
 # =============================================================================
 

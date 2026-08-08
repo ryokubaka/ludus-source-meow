@@ -38,4 +38,4 @@ graph TB
 | SOC | onionadmin@ludus.local | 0n10nAdm1n! | Console |
 | Kali | kali | kali | attacker |
 
-SOC: `https://10.X.20.20` — LUX owns sniff enable/disable (no manual host steps).
+SOC: `https://10.X.20.20` — `ludus_securityonion` attaches sniff `net1` during deploy.

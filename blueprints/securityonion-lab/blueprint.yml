@@ -1,7 +1,7 @@
 manifest_version: 1
 id: securityonion-lab
 name: "Security Onion 2.4 Lab"
-description: Standalone Security Onion 2.4 with Kali + Debian target; LUX attaches sniff NIC for VLAN 10 traffic.
+description: Standalone Security Onion 2.4 with Kali + Debian target; ludus_securityonion attaches sniff NIC for VLAN 10 traffic.
 version: 0.1.0
 config: range-config.yml
 

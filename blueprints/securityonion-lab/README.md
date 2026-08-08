@@ -1,6 +1,6 @@
 # Security Onion 2.4 Lab
 
-Standalone Security Onion 2.4 with a Debian target and Kali. LUX attaches the sniff NIC and enables Ludus bridge hub-mode so SO can ingest VLAN 10 traffic.
+Standalone Security Onion 2.4 with a Debian target and Kali. The `ludus_securityonion` role attaches SO sniff `net1` during Ludus deploy and enables bridge hub-mode for VLAN 10 capture.
 
 ## Quick Start
 
@@ -8,7 +8,7 @@ Standalone Security Onion 2.4 with a Debian target and Kali. LUX attaches the sn
 ludus source add https://github.com/ryokubaka/ludus-source-meow --all
 ludus templates build -n securityonion-2.4-x64-template
 ludus blueprint apply ryokubaka-ludus-source-meow/securityonion-lab
-# Deploy via LUX (recommended) or:
+# Deploy via Ludus CLI or LUX:
 ludus range deploy
 ```
 
@@ -54,12 +54,12 @@ graph TB
 
 SOC UI: `https://10.X.20.20`
 
-## LUX sniff lifecycle
+## Sniff NIC lifecycle
 
-During deploy, LUX (root SSH to Proxmox):
+During deploy, `ryokubaka.ludus_securityonion`:
 
-1. Sets `bridge-ageing 0` on `vmbr10XX`
-2. Adds SO `net1` tagged VLAN 10 (sniff, no IP)
-3. On range delete, removes `net1` and restores ageing when no sniff NICs remain
+1. Adds SO `net1` on Proxmox (tagged VLAN 10, no IP) via Ludus Proxmox API
+2. Sets `bridge-ageing 0` on `vmbr10XX` when the Ludus host can reach the bridge (local or SSH)
+3. Waits for the guest to see the second NIC, then runs `so-setup iso standalone-net`
 
-No manual host steps.
+[LUX](https://github.com/ryokubaka/ludus-ux) may perform the same Proxmox steps during deploy (idempotent) and cleans up on range delete.

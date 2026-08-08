@@ -22,8 +22,8 @@ Each bullet uses a single tag:
 - [Add] **Templates README** — Version pins, testing tiers, CIFS note (pause GOAD VMs 105/106/109 during builds when `storage-ludus` lock timeouts occur).
 
 **Blueprints**
-- [Add] **`securityonion-lab`** — SO 2.4 standalone + target + Kali (LUX sniff NIC); `requirements.yml` + `range-config.yml` use `ryokubaka.ludus_securityonion`.
+- [Add] **`securityonion-lab`** — SO 2.4 standalone + target + Kali; `requirements.yml` + `range-config.yml` use `ryokubaka.ludus_securityonion`.
 - [Add] **`securityonion3-lab`** — SO 3.2.0 standalone + target + Kali.
 
 **Ansible**
-- [Add] **`ludus_securityonion` role** — Wait for LUX-attached sniff NIC; run `so-setup iso standalone-net` (standalone-net default). Installed on Ludus as `ryokubaka.ludus_securityonion`.
+- [Add] **`ludus_securityonion` role** — Attach sniff `net1` via Proxmox API during Ludus deploy; wait for guest NIC; run `so-setup iso standalone-net`. No LUX required.
