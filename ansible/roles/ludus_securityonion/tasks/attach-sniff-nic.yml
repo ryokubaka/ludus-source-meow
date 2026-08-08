@@ -36,7 +36,6 @@
     ludus_so_proxmox_secret: "{{ lookup('env', 'PROXMOX_SECRET') | default('', true) }}"
     ludus_so_proxmox_invalid_cert: "{{ lookup('env', 'PROXMOX_INVALID_CERT') | default('false', true) }}"
     ludus_so_proxmox_hostname: "{{ lookup('env', 'PROXMOX_HOSTNAME') | default('', true) }}"
-  delegate_to: localhost
   no_log: true
 
 - name: Fail when Proxmox API environment is missing
@@ -44,7 +43,6 @@
     msg: >
       Proxmox API credentials not available (PROXMOX_URL / PROXMOX_USERNAME /
       PROXMOX_TOKEN / PROXMOX_SECRET). Run this role during Ludus range deploy.
-  delegate_to: localhost
   when: >
     ludus_so_proxmox_url | length == 0
     or ludus_so_proxmox_user | length == 0
@@ -59,7 +57,6 @@
         if ('!' in ludus_so_proxmox_token)
         else (ludus_so_proxmox_user ~ '!' ~ ludus_so_proxmox_token ~ '=' ~ ludus_so_proxmox_secret)
       }}
-  delegate_to: localhost
   no_log: true
 
 - name: Attach sniff net1 via Proxmox API (Ludus)
@@ -76,10 +73,10 @@
     LUDUS_SO_PROXMOX_SSH_HOST: "{{ ludus_so_proxmox_ssh_host | default('', true) }}"
     LUDUS_SO_PROXMOX_SSH_USER: "{{ ludus_so_proxmox_ssh_user }}"
     LUDUS_SO_PROXMOX_SSH_PORT: "{{ ludus_so_proxmox_ssh_port | string }}"
-    PROXMOX_URL: "{{ hostvars['localhost'].ludus_so_proxmox_url }}"
-    PROXMOX_INVALID_CERT: "{{ hostvars['localhost'].ludus_so_proxmox_invalid_cert }}"
-    PROXMOX_HOSTNAME: "{{ hostvars['localhost'].ludus_so_proxmox_hostname }}"
-    PVE_AUTH_HEADER: "{{ hostvars['localhost'].ludus_so_pve_auth }}"
+    PROXMOX_URL: "{{ ludus_so_proxmox_url }}"
+    PROXMOX_INVALID_CERT: "{{ ludus_so_proxmox_invalid_cert }}"
+    PROXMOX_HOSTNAME: "{{ ludus_so_proxmox_hostname }}"
+    PVE_AUTH_HEADER: "{{ ludus_so_pve_auth }}"
 
 - name: Show sniff NIC attach output
   ansible.builtin.debug:
