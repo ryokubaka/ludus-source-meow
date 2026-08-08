@@ -8,10 +8,29 @@ set -euo pipefail
 : "${LUDUS_SO_VMBR:?LUDUS_SO_VMBR not set}"
 : "${LUDUS_SO_SNIFF_TAG:?LUDUS_SO_SNIFF_TAG not set}"
 
-CURL=(curl -fsS)
-if [[ "${PROXMOX_INVALID_CERT:-false}" == "true" ]]; then
-  CURL+=(-k)
-fi
+curl_args() {
+  local -n out=$1
+  out=(curl -fsS)
+  local insecure="${PROXMOX_INVALID_CERT:-false}"
+  case "${insecure,,}" in
+    true|1|yes) out+=(-k) ;;
+  esac
+}
+
+pve_curl() {
+  local -a CURL=()
+  curl_args CURL
+  local out rc
+  out="$("${CURL[@]}" "$@" 2>&1)"
+  rc=$?
+  if [[ $rc -eq 60 ]]; then
+    echo "WARN: Proxmox TLS verify failed; retrying with insecure curl (-k)" >&2
+    out="$(curl -fsSk "$@" 2>&1)"
+    rc=$?
+  fi
+  printf '%s' "$out"
+  return "$rc"
+}
 
 AUTH="Authorization: ${PVE_AUTH_HEADER}"
 BASE="${PROXMOX_URL%/}/api2/json"
@@ -19,13 +38,15 @@ NETSPEC="virtio,bridge=${LUDUS_SO_VMBR},tag=${LUDUS_SO_SNIFF_TAG},firewall=0"
 TARGET_NODE="${LUDUS_SO_TARGET_NODE:-}"
 
 set +e
-lookup="$("${CURL[@]}" -H "$AUTH" "${BASE}/cluster/resources?type=vm" 2>&1)"
+lookup="$(pve_curl -H "$AUTH" "${BASE}/cluster/resources?type=vm")"
 curl_rc=$?
 set -e
 if [[ $curl_rc -ne 0 ]]; then
   echo "${lookup}" >&2
   if [[ "${lookup}" == *"401"* ]]; then
     echo "Proxmox API authentication failed (HTTP 401). Check this Ludus user's Proxmox API token." >&2
+  elif [[ $curl_rc -eq 60 ]]; then
+    echo "Proxmox TLS verification failed. Set proxmox_invalid_cert: true in Ludus config or fix the Proxmox CA." >&2
   fi
   exit "$curl_rc"
 fi
@@ -53,7 +74,7 @@ PY
   exit 1
 }
 
-cfg="$("${CURL[@]}" -H "$AUTH" "${BASE}/nodes/${NODE}/qemu/${VMID}/config")"
+cfg="$(pve_curl -H "$AUTH" "${BASE}/nodes/${NODE}/qemu/${VMID}/config")"
 net1="$(python3 - <<'PY'
 import json, sys
 data = json.load(sys.stdin)
@@ -69,7 +90,7 @@ if [[ -n "$net1" ]]; then
     exit 3
   fi
 else
-  "${CURL[@]}" -H "$AUTH" -X PUT --data-urlencode "net1=${NETSPEC}" \
+  pve_curl -H "$AUTH" -X PUT --data-urlencode "net1=${NETSPEC}" \
     "${BASE}/nodes/${NODE}/qemu/${VMID}/config" >/dev/null
   echo "added net1=${NETSPEC} on VMID ${VMID} (${LUDUS_SO_VM_NAME})"
 fi
