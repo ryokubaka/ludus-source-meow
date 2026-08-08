@@ -25,7 +25,7 @@ Follows [Ludus template guidance](https://docs.ludus.cloud/docs/using-ludus/temp
 4. shell-local SSH-scans Ludus DHCP **`192.0.2.50–100`**.
 5. Ansible hardens per Ludus Linux template requirements. `so-setup` runs at range deploy only.
 
-Sync to `/opt/ludus/packer/securityonion-2.4/`. Log must show `H35-ludus-template-align-20260808`, then four ansible playbooks completing.
+Sync to `/opt/ludus/packer/securityonion-2.4/`. Log must show `H36-qga-install-fix-20260808` and `PLAYBOOKS` (not old `PLAYBOOK=` / `H34`). Four ansible playbooks run in order.
 
 ```bash
 ludus templates build -n securityonion-2.4-x64-template

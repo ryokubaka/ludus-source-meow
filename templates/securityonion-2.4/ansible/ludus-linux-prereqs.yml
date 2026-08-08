@@ -1,17 +1,29 @@
 # Ludus Linux template requirements:
 # https://docs.ludus.cloud/docs/using-ludus/templates#non-automated-os-template-builds
-# Guest agent, SSH, python3, sudo, DHCP.
 - name: Ludus Linux template prerequisites
   hosts: all
   become: true
   tasks:
+    - name: Ensure curl and dnf plugins for guest-agent install
+      ansible.builtin.dnf:
+        name:
+          - curl
+          - ca-certificates
+          - dnf-plugins-core
+        state: present
+
     - name: Ensure python3 and sudo are installed
       ansible.builtin.dnf:
         name:
           - python3
-          - python3-libselinux
           - sudo
         state: present
+
+    - name: Ensure python3-libselinux when available
+      ansible.builtin.dnf:
+        name: python3-libselinux
+        state: present
+      failed_when: false
 
     - name: Ensure template user has passwordless sudo
       ansible.builtin.copy:
@@ -23,44 +35,72 @@
     - name: Install qemu-guest-agent (required for Ludus)
       ansible.builtin.shell: |
         set -uo pipefail
+        log() { echo "[qemu-ga] $*" >&2; }
+
         if rpm -q qemu-guest-agent >/dev/null 2>&1; then
+          log "already installed: $(rpm -q qemu-guest-agent)"
           exit 0
         fi
 
         install_ok=0
 
-        dnf -y install qemu-guest-agent && install_ok=1 || true
+        log "trying configured dnf repos"
+        if dnf -y install qemu-guest-agent; then
+          install_ok=1
+        fi
 
         if [ "$install_ok" -eq 0 ]; then
+          log "searching local SO/ISO repo paths"
           for dir in /nsm/repo /nsm/repo/Packages /run/install/repo/Packages /mnt/install/repo/Packages; do
             [ -d "$dir" ] || continue
             rpm="$(find "$dir" -maxdepth 2 -name 'qemu-guest-agent-*.rpm' 2>/dev/null | sort -V | tail -1)"
             if [ -n "$rpm" ]; then
-              dnf -y install "$rpm" && install_ok=1 && break
+              log "installing local rpm ${rpm}"
+              if dnf -y install "$rpm"; then
+                install_ok=1
+                break
+              fi
             fi
           done
         fi
 
         if [ "$install_ok" -eq 0 ]; then
+          log "trying Oracle Linux ol9_kvm_utils"
           repo=/etc/yum.repos.d/ol9_kvm_utils.repo
           if [ ! -f "$repo" ]; then
             curl -sfL -o "$repo" \
               https://yum.oracle.com/repo/OracleLinux/OL9/developer/kvm/utils/x86_64/ol9_kvm_utils.repo
           fi
-          for rid in ol9_kvm_utils ol9_appstream ol9_baseos ol9_addons; do
+          for rid in ol9_kvm_utils ol9_baseos ol9_appstream ol9_addons; do
             dnf config-manager --enable "$rid" >/dev/null 2>&1 || true
           done
-          dnf -y install qemu-guest-agent && install_ok=1 || true
+          if dnf -y --enablerepo=ol9_kvm_utils install qemu-guest-agent; then
+            install_ok=1
+          fi
         fi
 
         if [ "$install_ok" -eq 0 ]; then
-          echo "qemu-guest-agent not available in SO repos, /nsm/repo, or Oracle ol9_kvm_utils" >&2
+          log "trying direct RPM URL from ol9_kvm_utils"
+          rpm_url="$(dnf repoquery --enablerepo=ol9_kvm_utils --location qemu-guest-agent 2>/dev/null | head -1 || true)"
+          if [ -n "$rpm_url" ]; then
+            log "installing ${rpm_url}"
+            if dnf -y install "$rpm_url"; then
+              install_ok=1
+            fi
+          fi
+        fi
+
+        if ! rpm -q qemu-guest-agent >/dev/null 2>&1; then
+          log "FAILED — package not installed after all attempts"
+          dnf repolist enabled 2>&1 | head -30 >&2 || true
           exit 1
         fi
+
+        log "installed: $(rpm -q qemu-guest-agent)"
       args:
         executable: /bin/bash
       register: qemu_ga_install
-      changed_when: qemu_ga_install.rc == 0 and 'Nothing to do' not in qemu_ga_install.stdout
+      changed_when: "'installed:' in qemu_ga_install.stderr or 'installed:' in qemu_ga_install.stdout"
 
     - name: Verify qemu-guest-agent package is installed
       ansible.builtin.command: rpm -q qemu-guest-agent
