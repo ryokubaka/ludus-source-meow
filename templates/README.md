@@ -14,6 +14,7 @@ Follows [Ludus template guidance](https://docs.ludus.cloud/docs/using-ludus/temp
 - Linux template requirements: qemu-guest-agent, SSH, python3, sudo, DHCP
 - Ansible playbooks (BSL order): `ludus-linux-prereqs.yml` → `securityonion-prep.yml` → `reset-machine-id.yml` → `reset-ssh-host-keys.yml`
 - Credentials: `onion:onion` (SO default; exception to `localuser:password` convention)
+- **Oracle Linux inventory:** Ludus maps SO to ansible group `ol`. Install `ansible/group_vars/ol.yml` on the Ludus host once: `templates/scripts/install-ol-group-vars.sh`
 
 **SO-specific:** stock ISO has no guest-agent during install ([proxmox#91](https://github.com/hashicorp/packer-plugin-proxmox/issues/91)), so packer uses `communicator=none` + shell-local DHCP SSH scan instead of BSL's `communicator=ssh` + packer ansible provisioner. Same playbooks and ansible env vars as BSL.
 

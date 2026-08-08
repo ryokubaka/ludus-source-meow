@@ -77,6 +77,32 @@
         enabled: true
         state: started
 
+    # Anaconda kickstart leaves ens18.nmconnection with autoconnect=false; cloned
+    # range VMs boot with link up but never DHCP (Ludus waits on guest-agent IP).
+    - name: Enable DHCP autoconnect on all NetworkManager ethernet profiles
+      ansible.builtin.shell: |
+        set -euo pipefail
+        nmcli networking on
+        while IFS=: read -r name type; do
+          [ "$type" = "802-3-ethernet" ] || continue
+          nmcli con mod "$name" connection.autoconnect yes ipv4.method auto ipv6.method auto
+        done < <(nmcli -t -f NAME,TYPE con show)
+      args:
+        executable: /bin/bash
+      changed_when: true
+
+    - name: Create Ludus default DHCP connection when no ethernet profile exists
+      ansible.builtin.shell: |
+        set -euo pipefail
+        if nmcli -t -f TYPE con show | grep -qx 802-3-ethernet; then
+          exit 0
+        fi
+        nmcli con add type ethernet con-name ludus-dhcp ifname '' \
+          ipv4.method auto ipv6.method auto connection.autoconnect yes
+      args:
+        executable: /bin/bash
+      changed_when: true
+
   handlers:
     - name: Restart sshd
       ansible.builtin.service:

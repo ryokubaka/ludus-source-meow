@@ -11,6 +11,12 @@ Each bullet uses a single tag:
 
 ---
 
+## [1.0.1] - 2026-08-08
+
+**Templates**
+- [Fix] **Range deploy DHCP** — Anaconda kickstart leaves `ens18.nmconnection` with `autoconnect=false`; cloned VMs never DHCP. Ansible + `%post` now force `connection.autoconnect yes` and `ipv4.method auto` on all ethernet NM profiles (SO 2.4 + 3).
+- [Fix] **Oracle Linux ansible credentials** — Ludus assigns SO VMs to inventory group `ol` but ships no `group_vars/ol.yml`; deploy SSH'd as controller user `ludus`. Added `ansible/group_vars/ol.yml` (`onion:onion`) + `templates/scripts/install-ol-group-vars.sh` for Ludus host install.
+
 ## [1.0.0] - 2026-08-08
 
 **Templates**
