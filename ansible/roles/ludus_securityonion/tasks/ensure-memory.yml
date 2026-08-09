@@ -1,0 +1,75 @@
+---
+# so-setup standalone: "This install type will fail with less than 16 GB of memory."
+# Ludus ram_min_gb/balloon can leave the guest under that floor.
+- name: Read guest MemTotal (KiB)
+  ansible.builtin.slurp:
+    src: /proc/meminfo
+  register: ludus_so_meminfo_raw
+
+- name: Parse MemTotal
+  ansible.builtin.set_fact:
+    ludus_so_mem_total_kib: >-
+      {{
+        (ludus_so_meminfo_raw.content | b64decode).splitlines()
+        | select('match', '^MemTotal:')
+        | first
+        | regex_replace('^MemTotal:\\s*(\\d+)\\s*kB.*$', '\\1')
+        | int
+      }}
+    ludus_so_mem_min_kib: "{{ (ludus_so_mem_min_gb | default(16) | int) * 1024 * 1024 }}"
+
+- name: Report guest memory
+  ansible.builtin.debug:
+    msg: >-
+      MemTotal={{ (ludus_so_mem_total_kib | int / 1024 / 1024) | round(1) }} GiB
+      (need ≥ {{ ludus_so_mem_min_gb | default(16) }} GiB for so-setup {{ ludus_so_install_type }})
+
+- name: Raise Proxmox balloon floor when guest memory is too low
+  when:
+    - (ludus_so_mem_total_kib | int) < (ludus_so_mem_min_kib | int)
+    - ludus_so_proxmox_url | default('') | length > 0
+    - ludus_so_pve_vmid | default('') | string | length > 0
+    - ludus_so_pve_node | default('') | length > 0
+  block:
+    - name: Set Proxmox balloon to at least so-setup minimum (KiB → MiB)
+      ansible.builtin.uri:
+        url: "{{ ludus_so_proxmox_url }}/api2/json/nodes/{{ ludus_so_pve_node }}/qemu/{{ ludus_so_pve_vmid }}/config"
+        method: PUT
+        headers:
+          Authorization: "{{ ludus_so_pve_auth }}"
+        body_format: form-urlencoded
+        body:
+          balloon: "{{ [ludus_so_mem_min_gb | default(16) | int * 1024, 16384] | max }}"
+        status_code: [200]
+        validate_certs: false
+      delegate_to: localhost
+      become: false
+      no_log: true
+
+    - name: Wait for guest MemTotal after balloon raise
+      ansible.builtin.shell: |
+        set -euo pipefail
+        awk '/^MemTotal:/{print $2; exit}' /proc/meminfo
+      args:
+        executable: /bin/bash
+      register: ludus_so_mem_retry
+      until: (ludus_so_mem_retry.stdout | int) >= (ludus_so_mem_min_kib | int)
+      retries: 12
+      delay: 5
+      changed_when: false
+      failed_when: false
+
+    - name: Refresh MemTotal after balloon raise
+      ansible.builtin.set_fact:
+        ludus_so_mem_total_kib: "{{ ludus_so_mem_retry.stdout | default(ludus_so_mem_total_kib) | int }}"
+      when: ludus_so_mem_retry is defined and ludus_so_mem_retry.stdout | default('') | length > 0
+
+- name: Fail when guest memory is below so-setup minimum
+  ansible.builtin.fail:
+    msg: >
+      Guest MemTotal is {{ (ludus_so_mem_total_kib | int / 1024 / 1024) | round(1) }} GiB;
+      so-setup {{ ludus_so_install_type }} requires ≥ {{ ludus_so_mem_min_gb | default(16) }} GiB.
+      Set Ludus ram_min_gb ≥ 16 (balloon floor) and ram_gb ≥ 16, then
+      `qm set <vmid> --balloon 16384` (or 24576) and re-run provision.
+      Current Proxmox often has balloon=8192 while memory=24576.
+  when: (ludus_so_mem_total_kib | int) < (ludus_so_mem_min_kib | int)

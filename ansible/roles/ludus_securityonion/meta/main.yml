@@ -7,7 +7,7 @@ galaxy_info:
     (standalone-net by default) for Ludus ranges. No LUX required.
   license: AGPL-3.0-or-later
   min_ansible_version: "2.14"
-  version: "1.0.2"
+  version: "1.0.3"
   platforms:
     - name: EL
       versions:

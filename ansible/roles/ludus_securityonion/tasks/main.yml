@@ -85,6 +85,9 @@
     - name: Prepare guest networking for so-setup
       ansible.builtin.include_tasks: prepare-so-setup.yml
 
+    - name: Ensure guest has ≥16 GiB for so-setup standalone
+      ansible.builtin.include_tasks: ensure-memory.yml
+
     - name: Sanitize docker daemon.json (broken registry-mirrors)
       ansible.builtin.include_tasks: sanitize-docker-daemon.yml
       when: ludus_so_sanitize_docker_daemon | default(true) | bool

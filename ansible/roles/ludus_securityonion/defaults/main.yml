@@ -2,11 +2,23 @@
 # Install type passed to so-setup test_profile: standalone (default) or eval
 ludus_so_install_type: standalone
 
+# so-setup standalone refuses to run below this (GiB).
+ludus_so_mem_min_gb: 16
+
 # so-setup profile suffix: net (DHCP/lab) or iso
 ludus_so_setup_profile_suffix: net
 
 # Attach sniff net1 via Proxmox API during Ludus deploy (no LUX required)
 ludus_so_attach_sniff_nic: true
+
+# Optional Proxmox API overrides when PROXMOX_* env is unset (GOAD provision)
+ludus_so_proxmox_api_url: ""
+ludus_so_proxmox_api_user: ""
+ludus_so_proxmox_api_token: ""
+ludus_so_proxmox_api_secret: ""
+# Optional Proxmox VM name when inventory_hostname is short (GOAD: "so")
+ludus_so_proxmox_vm_name: ""
+
 
 # VLAN tag on the range bridge for sniff traffic (targets VLAN in SO lab blueprints)
 ludus_so_sniff_tag: 10
