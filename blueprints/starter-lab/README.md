@@ -54,5 +54,3 @@ graph TB
 
 - Ludus v2.0+
 - Templates built: `debian-12-x64-server-template`, `kali-x64-desktop-template`
-
-## Meow
