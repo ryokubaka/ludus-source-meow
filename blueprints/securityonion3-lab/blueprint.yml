@@ -1,8 +1,8 @@
 manifest_version: 1
 id: securityonion3-lab
 name: "Security Onion 3 Lab"
-description: Standalone Security Onion 3 with Kali + Debian target; ludus_securityonion attaches sniff NIC for VLAN 10 traffic.
-version: 1.0.0
+description: Standalone Security Onion 3 with meow.local DC + Win11, Kali Adaptix C2; ludus_securityonion attaches sniff NIC for VLAN 10 traffic.
+version: 1.1.0
 config: range-config.yml
 
 tags:
@@ -12,5 +12,8 @@ tags:
   - standalone
   - kali
   - detection
+  - windows
+  - ad
+  - adaptix
 
 min_ludus_version: "2.0.0"

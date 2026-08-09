@@ -3,6 +3,7 @@
 Deploys the Security Onion Elastic Agent to Ludus range endpoints.
 
 - Resolves the range SO manager (`{{ range_id }}-so` by default)
+- Waits for `/etc/ludus-so-setup-complete` on the manager
 - Opens SO hostgroup `elastic_agent_endpoint` for the range CIDR (`so-firewall`)
 - Fetches the Fleet enrollment token for `endpoints-initial`
 - Pulls the SO-bundled installer from `/nsm/elastic-fleet/so_agent-installers/`
@@ -11,6 +12,8 @@ Deploys the Security Onion Elastic Agent to Ludus range endpoints.
 Skips the SO manager itself. Apply this role on every endpoint VM that should enroll.
 
 ## Blueprint usage
+
+**`depends_on` must be nested under the role object** (Ludus cross-VM ordering). VM-level `depends_on` is ignored.
 
 ```yaml
 network:
@@ -21,32 +24,26 @@ network:
       protocol: tcp
       ports: [8220, 5055, 8443]
       action: ACCEPT
-    - name: Allow Kali to SO Fleet
-      vlan_src: 99
-      vlan_dst: 20
-      protocol: tcp
-      ports: [8220, 5055, 8443]
-      action: ACCEPT
 
 ludus:
   - vm_name: "{{ range_id }}-so"
     roles:
       - name: ryokubaka.ludus_securityonion
 
-  - vm_name: "{{ range_id }}-target"
+  - vm_name: "{{ range_id }}-dc01"
     roles:
       - name: ryokubaka.ludus_so_elastic_agent
-    depends_on:
-      - vm_name: "{{ range_id }}-so"
-        role: ryokubaka.ludus_securityonion
+        depends_on:
+          - vm_name: "{{ range_id }}-so"
+            role: ryokubaka.ludus_securityonion
 
-  - vm_name: "{{ range_id }}-win"
+  - vm_name: "{{ range_id }}-win11"
     windows: true
     roles:
       - name: ryokubaka.ludus_so_elastic_agent
-    depends_on:
-      - vm_name: "{{ range_id }}-so"
-        role: ryokubaka.ludus_securityonion
+        depends_on:
+          - vm_name: "{{ range_id }}-so"
+            role: ryokubaka.ludus_securityonion
 ```
 
 `requirements.yml`:
@@ -67,6 +64,7 @@ roles:
 | `ludus_so_agent_enrollment_token` | `""` | Skip Fleet API when set |
 | `ludus_so_agent_fleet_url` | `https://<mgr>:8220` | Fleet Server URL |
 | `ludus_so_agent_allow_cidr` | `10.<range>.0.0/16` | SO firewall hostgroup CIDR |
+| `ludus_so_agent_setup_wait_timeout` | `600` | Seconds to wait for SO setup marker |
 | `ludus_so_agent_force` | `false` | Reinstall even if marker present |
 | `ludus_so_agent_skip_manager` | `true` | Never enroll the SO VM |
 
@@ -76,3 +74,4 @@ roles:
 - Installers are ~200–300MB; first fetch caches under `/tmp/ludus-so-elastic-agent-cache` on the Ludus host.
 - Marker files: `/etc/ludus-so-elastic-agent-installed` (Linux), `C:\ProgramData\ludus-so-elastic-agent-installed` (Windows).
 - SO Fleet outputs use hostname **`manager`**. Role writes `manager → <SO IP>` into the guest hosts file (`ludus_so_agent_fix_manager_hosts`).
+- Adding SO to an existing range: put the agent role on endpoints with role-level `depends_on` SO as above, then `ludus range deploy` (or `--only-roles` after SO is up).

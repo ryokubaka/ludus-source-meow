@@ -1,10 +1,17 @@
 ---
 # Run once on SO manager: open hostgroup + fetch enrollment token for endpoints-initial.
 # Play host may be Windows — force Linux shell/become on every delegate_to SO task.
+#
+# Prefer Ludus role-level depends_on so this role runs after ludus_securityonion.
+# Also wait here so a mid-setup race (or hand-edited config) does not fail instantly.
 - name: Wait for SO setup marker on manager
   ansible.builtin.stat:
-    path: /etc/ludus-so-setup-complete
+    path: "{{ ludus_so_agent_setup_marker }}"
   register: ludus_so_agent_so_marker
+  until: ludus_so_agent_so_marker.stat.exists | default(false)
+  retries: "{{ ((ludus_so_agent_setup_wait_timeout | int) / (ludus_so_agent_setup_wait_sleep | int)) | int }}"
+  delay: "{{ ludus_so_agent_setup_wait_sleep | int }}"
+  ignore_errors: true
   delegate_to: "{{ ludus_so_agent_manager }}"
   become: true
   become_method: sudo
@@ -16,9 +23,16 @@
 - name: Fail when SO setup incomplete
   ansible.builtin.fail:
     msg: >
-      {{ ludus_so_agent_manager }} missing /etc/ludus-so-setup-complete.
-      Deploy ryokubaka.ludus_securityonion first (depends_on).
-  when: not ludus_so_agent_so_marker.stat.exists
+      {{ ludus_so_agent_manager }} missing {{ ludus_so_agent_setup_marker }}
+      after {{ ludus_so_agent_setup_wait_timeout }}s.
+      Nest depends_on under the agent role (not the VM):
+        roles:
+          - name: ryokubaka.ludus_so_elastic_agent
+            depends_on:
+              - vm_name: "{{ range_id }}-so"
+                role: ryokubaka.ludus_securityonion
+      Then redeploy so ludus_securityonion finishes before this role.
+  when: not (ludus_so_agent_so_marker.stat.exists | default(false))
 
 - name: Allow range CIDR in SO elastic_agent_endpoint hostgroup
   ansible.builtin.command:

@@ -10,6 +10,17 @@ Each bullet uses a single tag:
 
 ---
 
+## [1.1.0] - 2026-08-09
+
+**Blueprints**
+- [Add] **`securityonion-lab` / `securityonion3-lab` AD targets** — Replace Debian target with Win2019 DC (`meow.local` primary-dc) + domain-joined Win11; Fleet agent on both Windows hosts. Version `1.1.0`.
+- [Add] **Adaptix C2 on Kali** — `badsectorlabs.ludus_adaptix_c2` (server + client) on the attacker box; WireGuard → `:4321`. No elastic agent on Kali.
+- [Fix] **Agent `depends_on` placement** — Nest `depends_on` under the role object (Ludus ignores VM-level `depends_on`); SO role runs before Fleet agents when adding SO to an existing range.
+- [Docs] SO lab READMEs — updated topology, templates, Adaptix credentials.
+
+**Ansible**
+- [Improve] **`ludus_so_elastic_agent`** — Wait up to 10m for `/etc/ludus-so-setup-complete`; fail with role-level `depends_on` example if missing.
+
 ## [1.0.0] - 2026-08-09
 
 **Templates**

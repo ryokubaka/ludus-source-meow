@@ -2,9 +2,10 @@
 # =============================================================================
 # Security Onion 3 Standalone Lab
 # =============================================================================
-# VLAN 10 — targets (sniffed)
+# VLAN 10 — AD targets (sniffed): DC meow.local + Win11 member
 # VLAN 20 — Security Onion management / SOC
-# VLAN 99 — attacker
+# VLAN 99 — attacker (Kali + Adaptix C2)
+# RAM: SO 24 GB + DC 4 + Win11 4 + kali 4
 # =============================================================================
 
 network:
@@ -34,17 +35,14 @@ network:
       protocol: tcp
       ports: 22
       action: ACCEPT
+    - name: Allow WireGuard to Adaptix C2
+      vlan_src: wireguard
+      vlan_dst: 99
+      protocol: tcp
+      ports: "4321"
+      action: ACCEPT
     - name: Allow targets to SO Fleet
       vlan_src: 10
-      vlan_dst: 20
-      protocol: tcp
-      ports:
-        - 8220
-        - 5055
-        - 8443
-      action: ACCEPT
-    - name: Allow Kali to SO Fleet
-      vlan_src: 99
       vlan_dst: 20
       protocol: tcp
       ports:
@@ -76,22 +74,48 @@ ludus:
       ludus_so_web_user: "onionadmin@ludus.local"
       ludus_so_web_password: "0n10nAdm1n!"
 
-  - vm_name: "{{ range_id }}-target"
-    hostname: "{{ range_id }}-target"
-    template: debian-12-x64-server-template
+  - vm_name: "{{ range_id }}-dc01"
+    hostname: "{{ range_id }}-DC01"
+    template: win2019-server-x64-template
     vlan: 10
     ip_last_octet: 10
-    ram_gb: 2
+    ram_gb: 4
     cpus: 2
-    linux: true
+    windows:
+      sysprep: true
+    domain:
+      fqdn: meow.local
+      role: primary-dc
+    testing:
+      snapshot: true
+      block_internet: true
+    roles:
+      # depends_on must be under the role (not the VM) — Ludus cross-VM ordering
+      - name: ryokubaka.ludus_so_elastic_agent
+        depends_on:
+          - vm_name: "{{ range_id }}-so"
+            role: ryokubaka.ludus_securityonion
+
+  - vm_name: "{{ range_id }}-win11"
+    hostname: "{{ range_id }}-WIN11"
+    template: win11-22h2-x64-enterprise-template
+    vlan: 10
+    ip_last_octet: 11
+    ram_gb: 4
+    cpus: 2
+    windows:
+      sysprep: true
+    domain:
+      fqdn: meow.local
+      role: member
     testing:
       snapshot: true
       block_internet: true
     roles:
       - name: ryokubaka.ludus_so_elastic_agent
-    depends_on:
-      - vm_name: "{{ range_id }}-so"
-        role: ryokubaka.ludus_securityonion
+        depends_on:
+          - vm_name: "{{ range_id }}-so"
+            role: ryokubaka.ludus_securityonion
 
   - vm_name: "{{ range_id }}-kali"
     hostname: "{{ range_id }}-kali"
@@ -105,7 +129,7 @@ ludus:
       snapshot: false
       block_internet: false
     roles:
-      - name: ryokubaka.ludus_so_elastic_agent
-    depends_on:
-      - vm_name: "{{ range_id }}-so"
-        role: ryokubaka.ludus_securityonion
+      - name: badsectorlabs.ludus_adaptix_c2
+    role_vars:
+      ludus_adaptix_c2_install_server: true
+      ludus_adaptix_c2_install_client: true
