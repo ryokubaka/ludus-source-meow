@@ -1,0 +1,33 @@
+---
+# SO Fleet outputs embed hostname "manager". Endpoints need that name → SO IP.
+- name: Ensure manager hostname in Linux /etc/hosts
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    regexp: '^\s*\S+\s+manager(\s|$)'
+    line: "{{ ludus_so_agent_manager_ip_resolved }} manager"
+    state: present
+  become: true
+  when: ludus_so_agent_os == 'linux'
+
+# ansible.windows.win_lineinfile not always present on Ludus controllers — use PowerShell.
+- name: Ensure manager hostname in Windows hosts file
+  ansible.windows.win_shell: |
+    $hosts = 'C:\Windows\System32\drivers\etc\hosts'
+    $line = '{{ ludus_so_agent_manager_ip_resolved }} manager'
+    $content = @(Get-Content -Path $hosts -ErrorAction SilentlyContinue |
+      Where-Object { $_ -notmatch '^\s*\S+\s+manager(\s|$)' })
+    ($content + $line) | Set-Content -Path $hosts -Encoding ASCII
+    Select-String -Path $hosts -Pattern '\smanager(\s|$)' | ForEach-Object { $_.Line }
+  register: ludus_so_agent_hosts_win
+  changed_when: >
+    ludus_so_agent_manager_ip_resolved not in (ludus_so_agent_hosts_win.stdout | default(''))
+    or 'manager' not in (ludus_so_agent_hosts_win.stdout | default(''))
+  when: ludus_so_agent_os == 'windows'
+
+- name: Restart Elastic Agent on Windows after hosts heal
+  ansible.windows.win_service:
+    name: Elastic Agent
+    state: restarted
+  when:
+    - ludus_so_agent_os == 'windows'
+    - ludus_so_agent_hosts_win is changed

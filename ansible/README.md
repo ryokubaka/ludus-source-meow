@@ -8,7 +8,9 @@ Place each role under [`roles/`](./roles/) — either a normal directory or a **
 
 | Role | Purpose |
 |---|---|
-| _(none yet)_ | Add roles here; document them in this table |
+| [`ludus_securityonion`](./roles/ludus_securityonion/) | Attach sniff NIC via Proxmox API; run Security Onion `so-setup` (standalone-net default); heal `bond0` sniff enslavement |
+| [`ludus_so_elastic_security`](./roles/ludus_so_elastic_security/) | On SO manager: Elastic trial + Elastic Defend detect-mode protections + enable all prepackaged Kibana Security rules (GOAD-mod elk parity) |
+| [`ludus_so_elastic_agent`](./roles/ludus_so_elastic_agent/) | Deploy SO Elastic Agent to range endpoints (Linux/Windows) via Fleet `endpoints-initial`; maps `manager` → SO IP in hosts |
 
 Example submodule (run from repo root):
 

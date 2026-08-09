@@ -2,7 +2,7 @@ manifest_version: 1
 id: starter-lab
 name: "Starter Lab"
 description: Minimal Kali attacker + Debian target — scaffold for new Meow blueprints.
-version: 0.1.0
+version: 1.0.3
 config: range-config.yml
 
 tags:

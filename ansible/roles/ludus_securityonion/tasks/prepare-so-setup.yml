@@ -1,0 +1,112 @@
+---
+# Partial/failed so-setup leaves bond0 behind. TESTING profiles often exclude bond0
+# from MNIC auto-detect but not the bonding_masters sysfs entry, so MNIC becomes
+# bonding_masters and nmcli fails. Role passes MNIC/BNICS explicitly; still clean bonds.
+# Also: sniff NIC may grab DHCP and steal ansible_default_ipv4 — detect by ansible_host.
+- name: Detect management interface when not already set
+  ansible.builtin.include_tasks: detect-mgmt-iface.yml
+  when: ludus_so_mnic is not defined or ludus_so_main_ip is not defined
+
+- name: Detect sniff interface for so-setup
+  ansible.builtin.shell: |
+    set -euo pipefail
+    MGMT="{{ ludus_so_mnic }}"
+    for iface in $(ls -1 /sys/class/net | grep -vE '^(lo|docker|veth|br-|vir|bond|bonding_masters|tun|wg)'); do
+      [[ "$iface" == "$MGMT" ]] && continue
+      echo "$iface"
+      exit 0
+    done
+    exit 1
+  args:
+    executable: /bin/bash
+  register: ludus_so_sniff_iface_detect
+  changed_when: false
+
+- name: Record sniff interface for so-setup
+  ansible.builtin.set_fact:
+    ludus_so_bnic: "{{ ludus_so_sniff_iface_detect.stdout | trim }}"
+
+- name: Strip DHCP / addresses from sniff NIC (must not steal default route)
+  ansible.builtin.shell: |
+    set -euo pipefail
+    SNIFF="{{ ludus_so_bnic }}"
+    MGMT="{{ ludus_so_mnic }}"
+    [[ -n "$SNIFF" && "$SNIFF" != "$MGMT" ]] || { echo "skip-sniff-sanitize"; exit 0; }
+    changed=0
+    while IFS= read -r con; do
+      [[ -z "$con" ]] && continue
+      # Clear DNS first — nmcli rejects ipv4.dns when method=disabled.
+      nmcli con mod "$con" ipv4.dns "" ipv4.ignore-auto-dns yes 2>/dev/null || true
+      nmcli con mod "$con" ipv4.method disabled ipv6.method ignore 2>/dev/null || true
+      nmcli con mod "$con" connection.autoconnect yes 2>/dev/null || true
+      nmcli con up "$con" 2>/dev/null || true
+      changed=1
+    done < <(nmcli -t -f NAME,DEVICE con show | awk -F: -v d="$SNIFF" '$2==d {print $1}')
+    if ip -4 addr show dev "$SNIFF" scope global 2>/dev/null | grep -q inet; then
+      ip -4 addr flush dev "$SNIFF" scope global 2>/dev/null || true
+      changed=1
+    fi
+    # Drop any default route via sniff
+    while read -r via dev; do
+      [[ "$dev" == "$SNIFF" ]] || continue
+      ip route del default via "$via" dev "$SNIFF" 2>/dev/null || true
+      changed=1
+    done < <(ip -4 route show default | awk '{for(i=1;i<=NF;i++) if($i=="via") v=$(i+1); else if($i=="dev") d=$(i+1); print v, d}')
+    ip link set "$SNIFF" up 2>/dev/null || true
+    if [[ "$changed" -eq 1 ]]; then
+      echo "sanitized-sniff=$SNIFF"
+    else
+      echo "sniff-ok=$SNIFF"
+    fi
+  args:
+    executable: /bin/bash
+  become: true
+  register: ludus_so_sniff_sanitize
+  changed_when: "'sanitized-sniff=' in ludus_so_sniff_sanitize.stdout"
+
+- name: Remove stale Security Onion bond0 before so-setup
+  ansible.builtin.shell: |
+    set -euo pipefail
+    changed=0
+    while IFS= read -r con; do
+      [[ -z "$con" ]] && continue
+      nmcli con down "$con" 2>/dev/null || true
+      nmcli con delete "$con" 2>/dev/null || true
+      changed=1
+    done < <(nmcli -t -f NAME con show | grep -E '^(bond0|bond0-slave-|bonding_masters)' || true)
+    if ip link show bond0 &>/dev/null; then
+      nmcli dev disconnect bond0 2>/dev/null || true
+      ip link set bond0 down 2>/dev/null || true
+      ip link delete bond0 2>/dev/null || true
+      changed=1
+    fi
+    if [[ -f /sys/class/net/bonding_masters ]]; then
+      while read -r master; do
+        [[ -z "$master" ]] && continue
+        ip link set "$master" down 2>/dev/null || true
+        echo "-${master}" > /sys/class/net/bonding_masters 2>/dev/null || true
+        changed=1
+      done < /sys/class/net/bonding_masters
+    fi
+    if [[ "$changed" -eq 1 ]]; then
+      echo "removed-stale-bond0"
+    else
+      echo "no-stale-bond0"
+    fi
+  args:
+    executable: /bin/bash
+  become: true
+  register: ludus_so_bond_cleanup
+  changed_when: "'removed-stale-bond0' in ludus_so_bond_cleanup.stdout"
+
+- name: Confirm management and sniff NICs are distinct
+  ansible.builtin.assert:
+    that:
+      - ludus_so_mnic | length > 0
+      - ludus_so_bnic | length > 0
+      - ludus_so_mnic != ludus_so_bnic
+      - ludus_so_main_ip is match('^10\\.')
+    fail_msg: >
+      Bad NIC mapping for so-setup: MNIC={{ ludus_so_mnic | default('?') }}
+      BNICS={{ ludus_so_bnic | default('?') }} MAINIP={{ ludus_so_main_ip | default('?') }}.
+      ansible_host should be the static Ludus control IP on the mgmt NIC.

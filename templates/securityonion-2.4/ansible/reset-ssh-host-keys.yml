@@ -1,0 +1,19 @@
+# Matches ludus-source-bsl rocky-9 reset-ssh-host-keys pattern.
+- name: Reset SSH host keys
+  hosts: all
+  tasks:
+    - name: Find SSH host keys
+      ansible.builtin.find:
+        paths: /etc/ssh/
+        recurse: false
+        file_type: file
+        use_regex: true
+        patterns: 'ssh_host_.*'
+      register: ssh_keys
+
+    - name: Remove SSH host keys
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ ssh_keys.files }}"
+      become: true

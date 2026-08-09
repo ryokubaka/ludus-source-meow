@@ -1,0 +1,99 @@
+---
+# Switch Elastic Defend from SO default DataCollection (protections off)
+# to EDRComplete with malware/ransomware/memory/behavior in detect mode.
+# Mirrors GOAD-mod extensions/elk endpoint_integration.json protection modes.
+#
+# detect/prevent → always create alerts in Elastic/SO.
+# popup.*.enabled → whether the endpoint user sees a notification (boolean).
+# Note: device_control popups require deny_all USB policy — leave those alone.
+- name: Configure Elastic Defend protections (detect mode)
+  ansible.builtin.shell: |
+    set -euo pipefail
+    export NOROOT=1
+    # shellcheck disable=SC1091
+    source /usr/sbin/so-elastic-fleet-common
+
+    EP_ID=$(fleet_api 'package_policies?perPage=50' \
+      | jq -r '.items[] | select(.package.name=="endpoint") | .id' | head -1)
+    if [[ -z "$EP_ID" || "$EP_ID" == null ]]; then
+      echo "ERROR: no endpoint package policy found" >&2
+      exit 1
+    fi
+
+    RAW=$(fleet_api "package_policies/$EP_ID")
+    MODE='{{ ludus_so_elastic_security_defend_mode }}'
+    PRESET='{{ ludus_so_elastic_security_defend_preset }}'
+    # Ansible bool → jq JSON true/false
+    POPUP='{{ ludus_so_elastic_security_defend_user_notify | bool | lower }}'
+
+    BODY=$(MODE="$MODE" PRESET="$PRESET" POPUP="$POPUP" jq -c '
+      .item
+      | .inputs[0].config.integration_config.value.endpointConfig.preset = env.PRESET
+      | .inputs[0].config.policy.value.windows.malware = {"mode":env.MODE,"blocklist":true,"on_write_scan":true}
+      | .inputs[0].config.policy.value.windows.ransomware = {"mode":env.MODE,"supported":true}
+      | .inputs[0].config.policy.value.windows.memory_protection = {"mode":env.MODE,"supported":true}
+      | .inputs[0].config.policy.value.windows.behavior_protection = {"mode":env.MODE,"reputation_service":true,"supported":true}
+      | .inputs[0].config.policy.value.windows.attack_surface_reduction.credential_hardening.enabled = true
+      | .inputs[0].config.policy.value.windows.events = ((.inputs[0].config.policy.value.windows.events // {}) + {
+          "credential_access": true, "dll_and_driver_load": true, "dns": true, "file": true,
+          "network": true, "process": true, "registry": true, "security": true, "api": true
+        })
+      | .inputs[0].config.policy.value.windows.popup.malware = {"message":"","enabled": (env.POPUP == "true")}
+      | .inputs[0].config.policy.value.windows.popup.ransomware = {"message":"","enabled": (env.POPUP == "true")}
+      | .inputs[0].config.policy.value.windows.popup.memory_protection = {"message":"","enabled": (env.POPUP == "true")}
+      | .inputs[0].config.policy.value.windows.popup.behavior_protection = {"message":"","enabled": (env.POPUP == "true")}
+      | .inputs[0].config.policy.value.mac.malware = {"mode":env.MODE,"blocklist":true,"on_write_scan":true}
+      | .inputs[0].config.policy.value.mac.memory_protection = {"mode":env.MODE,"supported":true}
+      | .inputs[0].config.policy.value.mac.behavior_protection = {"mode":env.MODE,"reputation_service":true,"supported":true}
+      | .inputs[0].config.policy.value.mac.popup.malware = {"message":"","enabled": (env.POPUP == "true")}
+      | .inputs[0].config.policy.value.mac.popup.memory_protection = {"message":"","enabled": (env.POPUP == "true")}
+      | .inputs[0].config.policy.value.mac.popup.behavior_protection = {"message":"","enabled": (env.POPUP == "true")}
+      | .inputs[0].config.policy.value.linux.malware = {"mode":env.MODE,"blocklist":true,"on_write_scan":true}
+      | .inputs[0].config.policy.value.linux.memory_protection = {"mode":env.MODE,"supported":true}
+      | .inputs[0].config.policy.value.linux.behavior_protection = {"mode":env.MODE,"reputation_service":true,"supported":true}
+      | .inputs[0].config.policy.value.linux.popup.malware = {"message":"","enabled": (env.POPUP == "true")}
+      | .inputs[0].config.policy.value.linux.popup.memory_protection = {"message":"","enabled": (env.POPUP == "true")}
+      | .inputs[0].config.policy.value.linux.popup.behavior_protection = {"message":"","enabled": (env.POPUP == "true")}
+      | {
+          version: .version,
+          name: .name,
+          namespace: .namespace,
+          description: (.description // ""),
+          policy_id: .policy_id,
+          policy_ids: .policy_ids,
+          enabled: .enabled,
+          inputs: .inputs,
+          package: .package,
+          vars: (.vars // {})
+        }
+    ' <<<"$RAW")
+
+    RESP=$(curl -sS -K /opt/so/conf/elasticsearch/curl.config \
+      -H 'kbn-xsrf: true' -H 'Content-Type: application/json' \
+      -X PUT "http://localhost:5601/api/fleet/package_policies/${EP_ID}" -d "$BODY")
+
+    if ! echo "$RESP" | jq -e '.item.id' >/dev/null; then
+      echo "$RESP" | jq -c '{statusCode, message, error}' >&2
+      exit 1
+    fi
+    echo "$RESP" | jq -c '{
+      id: .item.id,
+      preset: .item.inputs[0].config.integration_config.value.endpointConfig.preset,
+      win_malware: .item.inputs[0].config.policy.value.windows.malware.mode,
+      win_ransomware: .item.inputs[0].config.policy.value.windows.ransomware.mode,
+      win_memory: .item.inputs[0].config.policy.value.windows.memory_protection.mode,
+      win_behavior: .item.inputs[0].config.policy.value.windows.behavior_protection.mode,
+      user_notify: .item.inputs[0].config.policy.value.windows.popup.malware.enabled,
+      popup: .item.inputs[0].config.policy.value.windows.popup
+    }'
+  args:
+    executable: /bin/bash
+  register: ludus_so_elastic_security_defend
+  become: true
+  changed_when: >
+    'detect' in (ludus_so_elastic_security_defend.stdout | default(''))
+    or 'prevent' in (ludus_so_elastic_security_defend.stdout | default(''))
+
+- name: Report Elastic Defend protection modes
+  ansible.builtin.debug:
+    msg: "{{ ludus_so_elastic_security_defend.stdout_lines | default([]) | last }}"

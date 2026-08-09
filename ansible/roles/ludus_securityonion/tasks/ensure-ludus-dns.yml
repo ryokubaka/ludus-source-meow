@@ -1,0 +1,157 @@
+---
+- name: Detect management interface (prefer ansible_host over default route)
+  ansible.builtin.include_tasks: detect-mgmt-iface.yml
+  when: ludus_so_mgmt_iface is not defined
+
+- name: Configure NetworkManager to use Ludus router DNS
+  ansible.builtin.shell: |
+    set -euo pipefail
+    MGMT="{{ ludus_so_mgmt_iface }}"
+    DNS="{{ ludus_so_dns_server }}"
+    CON=$(nmcli -t -f NAME,DEVICE con show | awk -F: -v d="$MGMT" '$2==d {print $1; exit}')
+    if [[ -z "$CON" ]]; then
+      echo "No NetworkManager connection for device $MGMT" >&2
+      exit 1
+    fi
+    nmcli con mod "$CON" ipv4.dns "$DNS" ipv4.ignore-auto-dns yes ipv4.dns-priority -100
+    nmcli con up "$CON"
+    echo "dns=$DNS on $CON ($MGMT)"
+  args:
+    executable: /bin/bash
+  become: true
+  register: ludus_so_nm_dns
+  changed_when: "'dns=' in ludus_so_nm_dns.stdout"
+
+- name: Pin global NetworkManager DNS to Ludus router
+  ansible.builtin.copy:
+    dest: /etc/NetworkManager/conf.d/90-ludus-dns.conf
+    mode: "0644"
+    content: |
+      # so-setup DHCP/bond churn clears per-connection DNS; keep a global fallback.
+      [global-dns]
+      servers={{ ludus_so_dns_server }}
+  become: true
+  register: ludus_so_nm_global_dns
+
+- name: Reload NetworkManager after global DNS pin
+  ansible.builtin.systemd:
+    name: NetworkManager
+    state: reloaded
+  become: true
+  when: ludus_so_nm_global_dns.changed | default(false)
+
+- name: Install NetworkManager dispatcher to keep Ludus DNS after so-setup reconfigs
+  ansible.builtin.copy:
+    dest: /etc/NetworkManager/dispatcher.d/30-ludus-dns
+    mode: "0755"
+    content: |
+      #!/bin/bash
+      # Keep Ludus vlan .254 DNS across NM/so-setup interface churn (bond0, etc.).
+      DNS="{{ ludus_so_dns_server }}"
+      MGMT="{{ ludus_so_mgmt_iface }}"
+      iface="$1"
+      action="$2"
+      case "$action" in
+        up|dhcp4-change|connectivity-change|reapply) ;;
+        *) exit 0 ;;
+      esac
+      CON=$(nmcli -t -f NAME,DEVICE con show --active 2>/dev/null | awk -F: -v d="$MGMT" '$2==d {print $1; exit}')
+      if [[ -n "$CON" ]]; then
+        nmcli con mod "$CON" ipv4.dns "$DNS" ipv4.ignore-auto-dns yes ipv4.dns-priority -100 >/dev/null 2>&1 || true
+      fi
+      if [[ -f /etc/resolv.conf ]] && ! grep -qE "^nameserver[[:space:]]+${DNS}$" /etc/resolv.conf 2>/dev/null; then
+        chattr -i /etc/resolv.conf 2>/dev/null || true
+        printf 'nameserver %s\n' "$DNS" > /etc/resolv.conf.ludus-tmp
+        grep -vE "^nameserver[[:space:]]+${DNS}$" /etc/resolv.conf 2>/dev/null >> /etc/resolv.conf.ludus-tmp || true
+        mv -f /etc/resolv.conf.ludus-tmp /etc/resolv.conf
+      fi
+  become: true
+
+- name: Install ludus-dns-keeper (re-pins DNS while so-setup runs)
+  # Keep this template free of bash `fn() {` blocks — Ansible Jinja mis-parses `{`.
+  ansible.builtin.copy:
+    dest: /usr/local/sbin/ludus-dns-keeper
+    mode: "0755"
+    content: |
+      #!/bin/bash
+      # Background keeper: so-setup NM/bond/repo steps rewrite resolv.conf and drop .254.
+      # Immutable bit blocks races where curl runs in the gap between wipe and rewrite.
+      set -euo pipefail
+      DNS="{{ ludus_so_dns_server }}"
+      MGMT="{{ ludus_so_mgmt_iface }}"
+      PIDFILE="/var/run/ludus-dns-keeper.pid"
+      echo $$ > "$PIDFILE"
+      trap 'chattr -i /etc/resolv.conf 2>/dev/null || true; rm -f "$PIDFILE"' EXIT
+      chattr -i /etc/resolv.conf 2>/dev/null || true
+      printf 'nameserver %s\n' "$DNS" > /etc/resolv.conf.ludus-tmp
+      grep -vE "^nameserver[[:space:]]+${DNS}$|^#" /etc/resolv.conf 2>/dev/null >> /etc/resolv.conf.ludus-tmp || true
+      mv -f /etc/resolv.conf.ludus-tmp /etc/resolv.conf
+      chattr +i /etc/resolv.conf 2>/dev/null || true
+      while true; do
+        if [[ ! -f /etc/resolv.conf ]] || ! grep -qE "^nameserver[[:space:]]+${DNS}$" /etc/resolv.conf 2>/dev/null; then
+          chattr -i /etc/resolv.conf 2>/dev/null || true
+          printf 'nameserver %s\n' "$DNS" > /etc/resolv.conf.ludus-tmp
+          grep -vE "^nameserver[[:space:]]+${DNS}$|^#" /etc/resolv.conf 2>/dev/null >> /etc/resolv.conf.ludus-tmp || true
+          mv -f /etc/resolv.conf.ludus-tmp /etc/resolv.conf
+          chattr +i /etc/resolv.conf 2>/dev/null || true
+          logger -t ludus-dns-keeper "restored nameserver ${DNS}" || true
+        elif ! lsattr /etc/resolv.conf 2>/dev/null | grep -q -- '-i-'; then
+          chattr +i /etc/resolv.conf 2>/dev/null || true
+        fi
+        CON=$(nmcli -t -f NAME,DEVICE con show --active 2>/dev/null | awk -F: -v d="$MGMT" '$2==d {print $1; exit}' || true)
+        if [[ -n "${CON:-}" ]]; then
+          cur=$(nmcli -g ipv4.dns con show "$CON" 2>/dev/null || true)
+          if [[ "$cur" != *"$DNS"* ]]; then
+            nmcli con mod "$CON" ipv4.dns "$DNS" ipv4.ignore-auto-dns yes ipv4.dns-priority -100 >/dev/null 2>&1 || true
+          fi
+        fi
+        sleep 2
+      done
+  become: true
+
+- name: Wait for resolv.conf to reference Ludus DNS
+  ansible.builtin.shell: |
+    set -euo pipefail
+    grep -q "{{ ludus_so_dns_server }}" /etc/resolv.conf
+  args:
+    executable: /bin/bash
+  register: ludus_so_resolv_wait
+  until: ludus_so_resolv_wait.rc == 0
+  retries: 10
+  delay: 2
+  changed_when: false
+
+- name: Test Ludus router DNS forwarder directly
+  ansible.builtin.command:
+    cmd: >-
+      dig @{{ ludus_so_dns_server }} +time=3 +tries=2 +short
+      {{ ludus_so_dns_router_test_host | default('repo.securityonion.net') }} A
+  register: ludus_so_router_dns_test
+  changed_when: false
+  failed_when: false
+
+- name: Fail when Ludus router does not resolve external DNS
+  ansible.builtin.fail:
+    msg: |
+      Ludus router {{ ludus_so_dns_server }} did not resolve
+      {{ ludus_so_dns_router_test_host | default('repo.securityonion.net') }}
+      from {{ inventory_hostname }} (mgmt {{ ludus_so_mgmt_ip }} on {{ ludus_so_mgmt_iface }}).
+
+      dig output:
+      {{ ludus_so_router_dns_test.stdout | default('') }}
+      {{ ludus_so_router_dns_test.stderr | default('') }}
+
+      resolv.conf:
+      {{ lookup('file', '/etc/resolv.conf') }}
+
+      This is almost always Ludus testing mode or firewall — not a Security Onion bug:
+        1. Stop Testing Mode on this range (LUX Testing page or ludus API testing/stop).
+           Testing mode blocks outbound DNS unless domains are allowlisted.
+        2. If testing must stay ON, allowlist at minimum:
+           repo.securityonion.net, repo-alt.securityonion.net
+        3. In range-config.yml for the SO VM set:
+           testing: { block_internet: false }
+        4. From this VM: ping -c1 {{ ludus_so_dns_server }}
+           then dig @{{ ludus_so_dns_server }} google.com
+        5. Confirm range router VM is running and network rules were deployed.
+  when: ludus_so_router_dns_test.stdout | default('') | trim | length == 0

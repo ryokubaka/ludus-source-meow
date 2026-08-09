@@ -1,0 +1,320 @@
+---
+# Proxmox sniff net1 via Ludus-injected API env (same vars as range-management/proxmox.py).
+- name: Compute Ludus range bridge for sniff NIC
+  ansible.builtin.set_fact:
+    ludus_so_range_number_resolved: >-
+      {{
+        range_second_octet
+        | default(lookup('env', 'LUDUS_RANGE_NUMBER'), true)
+        | default(ludus_so_range_number_override, true)
+      }}
+
+- name: Fail when Ludus range number is unknown
+  ansible.builtin.fail:
+    msg: >
+      Cannot compute vmbr for sniff NIC (need range_second_octet from Ludus deploy
+      or ludus_so_range_number_override).
+  when: ludus_so_range_number_resolved | default('') | string | length == 0
+
+- name: Set range bridge and sniff net1 spec
+  ansible.builtin.set_fact:
+    ludus_so_vmbr: "vmbr{{ 1000 + (ludus_so_range_number_resolved | int) }}"
+    ludus_so_net1_base: >-
+      virtio,bridge=vmbr{{ 1000 + (ludus_so_range_number_resolved | int) }},tag={{ ludus_so_sniff_tag }},firewall=0
+
+- name: Append optional MTU to sniff net1 spec
+  ansible.builtin.set_fact:
+    ludus_so_net1_spec: >-
+      {{
+        ludus_so_net1_base ~ (',mtu=' ~ (ludus_so_sniff_mtu | string))
+        if ludus_so_sniff_mtu | default('') | string | length > 0
+        else ludus_so_net1_base
+      }}
+
+- name: Resolve Proxmox node hint for this VM
+  ansible.builtin.set_fact:
+    ludus_so_target_node: >-
+      {{
+        (vm_target_nodes | default({}))[inventory_hostname]
+        | default(lookup('env', 'PROXMOX_NODE'), true)
+        | default('', true)
+      }}
+
+- name: Load Proxmox API credentials from Ludus deploy environment
+  ansible.builtin.set_fact:
+    ludus_so_proxmox_url: "{{ lookup('env', 'PROXMOX_URL') | default('', true) | regex_replace('/+$', '') }}"
+    ludus_so_proxmox_user: "{{ lookup('env', 'PROXMOX_USERNAME') | default('', true) }}"
+    ludus_so_proxmox_token: "{{ lookup('env', 'PROXMOX_TOKEN') | default('', true) }}"
+    ludus_so_proxmox_secret: "{{ lookup('env', 'PROXMOX_SECRET') | default('', true) }}"
+  no_log: true
+
+- name: Fail when Proxmox API environment is missing
+  ansible.builtin.fail:
+    msg: >
+      Proxmox API credentials not available (PROXMOX_URL / PROXMOX_USERNAME /
+      PROXMOX_TOKEN / PROXMOX_SECRET). Run this role during Ludus range deploy.
+  when: >
+    ludus_so_proxmox_url | length == 0
+    or ludus_so_proxmox_user | length == 0
+    or ludus_so_proxmox_token | length == 0
+    or ludus_so_proxmox_secret | length == 0
+
+- name: Build Proxmox API Authorization header (proxmox.py format)
+  ansible.builtin.set_fact:
+    ludus_so_pve_auth: >-
+      {{
+        ('PVEAPIToken=' ~ ludus_so_proxmox_token ~ '=' ~ ludus_so_proxmox_secret)
+        if ('!' in ludus_so_proxmox_token)
+        else ('PVEAPIToken=' ~ ludus_so_proxmox_user ~ '!' ~ ludus_so_proxmox_token ~ '=' ~ ludus_so_proxmox_secret)
+      }}
+  no_log: true
+
+- name: List Proxmox VMs in cluster
+  ansible.builtin.uri:
+    url: "{{ ludus_so_proxmox_url }}/api2/json/cluster/resources?type=vm"
+    method: GET
+    headers:
+      Authorization: "{{ ludus_so_pve_auth }}"
+    return_content: true
+    status_code: [200]
+    validate_certs: false
+  delegate_to: localhost
+  become: false
+  register: ludus_so_pve_resources
+  no_log: true
+
+- name: Select Proxmox VM by Ludus inventory name
+  ansible.builtin.set_fact:
+    ludus_so_pve_vm_matches: >-
+      {{
+        ludus_so_pve_resources.json.data
+        | selectattr('name', 'equalto', inventory_hostname)
+        | selectattr('type', 'equalto', 'qemu')
+        | list
+      }}
+
+- name: Fail when VM not found in Proxmox
+  ansible.builtin.fail:
+    msg: "VM {{ inventory_hostname }} not found in Proxmox cluster resources."
+  when: ludus_so_pve_vm_matches | length == 0
+
+- name: Filter Proxmox VM matches to expected node
+  ansible.builtin.set_fact:
+    ludus_so_pve_vm_matches: >-
+      {{
+        ludus_so_pve_vm_matches
+        | selectattr('node', 'equalto', ludus_so_target_node)
+        | list
+      }}
+  when: ludus_so_target_node | length > 0
+
+- name: Fail when VM not found on expected Proxmox node
+  ansible.builtin.fail:
+    msg: "VM {{ inventory_hostname }} not found on Proxmox node {{ ludus_so_target_node }}."
+  when:
+    - ludus_so_target_node | length > 0
+    - ludus_so_pve_vm_matches | length == 0
+
+- name: Set Proxmox node and vmid for this VM
+  ansible.builtin.set_fact:
+    ludus_so_pve_node: "{{ ludus_so_pve_vm_matches[0].node }}"
+    ludus_so_pve_vmid: "{{ ludus_so_pve_vm_matches[0].vmid }}"
+
+- name: Read current Proxmox VM network config
+  ansible.builtin.uri:
+    url: "{{ ludus_so_proxmox_url }}/api2/json/nodes/{{ ludus_so_pve_node }}/qemu/{{ ludus_so_pve_vmid }}/config"
+    method: GET
+    headers:
+      Authorization: "{{ ludus_so_pve_auth }}"
+    return_content: true
+    status_code: [200]
+    validate_certs: false
+  delegate_to: localhost
+  become: false
+  register: ludus_so_pve_config
+  no_log: true
+
+- name: Record existing net1 value
+  ansible.builtin.set_fact:
+    ludus_so_existing_net1: "{{ ludus_so_pve_config.json.data.net1 | default('') }}"
+
+- name: Fail when net1 already configured for a different sniff setup
+  ansible.builtin.fail:
+    msg: >-
+      VM {{ inventory_hostname }} (VMID {{ ludus_so_pve_vmid }}) net1={{ ludus_so_existing_net1 }};
+      expected bridge {{ ludus_so_vmbr }} tag {{ ludus_so_sniff_tag }}.
+  when: >
+    ludus_so_existing_net1 | length > 0
+    and (
+      ('bridge=' ~ ludus_so_vmbr) not in ludus_so_existing_net1
+      or ('tag=' ~ (ludus_so_sniff_tag | string)) not in ludus_so_existing_net1
+    )
+
+- name: Detect sniff net1 with wrong jumbo MTU (Ludus bridges are 1500)
+  ansible.builtin.set_fact:
+    ludus_so_net1_has_bad_mtu: >-
+      {{
+        ludus_so_existing_net1 | length > 0
+        and (
+          'mtu=9000' in ludus_so_existing_net1
+          or 'mtu=9216' in ludus_so_existing_net1
+        )
+      }}
+
+- name: Detect sniff net1 spec drift (optional MTU override)
+  ansible.builtin.set_fact:
+    ludus_so_net1_needs_spec_update: >-
+      {{
+        ludus_so_existing_net1 | length > 0
+        and ('bridge=' ~ ludus_so_vmbr) in ludus_so_existing_net1
+        and ('tag=' ~ (ludus_so_sniff_tag | string)) in ludus_so_existing_net1
+        and ludus_so_existing_net1 != ludus_so_net1_spec
+        and not (ludus_so_net1_has_bad_mtu | default(false) | bool)
+      }}
+
+- name: Add sniff net1 on Proxmox
+  ansible.builtin.uri:
+    url: "{{ ludus_so_proxmox_url }}/api2/json/nodes/{{ ludus_so_pve_node }}/qemu/{{ ludus_so_pve_vmid }}/config"
+    method: PUT
+    headers:
+      Authorization: "{{ ludus_so_pve_auth }}"
+    body_format: form-urlencoded
+    body:
+      net1: "{{ ludus_so_net1_spec }}"
+    status_code: [200]
+    validate_certs: false
+  delegate_to: localhost
+  become: false
+  register: ludus_so_net1_add
+  when: ludus_so_existing_net1 | length == 0
+
+- name: Fix sniff net1 jumbo MTU on Proxmox
+  ansible.builtin.uri:
+    url: "{{ ludus_so_proxmox_url }}/api2/json/nodes/{{ ludus_so_pve_node }}/qemu/{{ ludus_so_pve_vmid }}/config"
+    method: PUT
+    headers:
+      Authorization: "{{ ludus_so_pve_auth }}"
+    body_format: form-urlencoded
+    body:
+      net1: "{{ ludus_so_net1_spec }}"
+    status_code: [200]
+    validate_certs: false
+  delegate_to: localhost
+  become: false
+  register: ludus_so_net1_mtu_fix
+  when: ludus_so_net1_has_bad_mtu | default(false) | bool
+
+- name: Update sniff net1 spec on Proxmox
+  ansible.builtin.uri:
+    url: "{{ ludus_so_proxmox_url }}/api2/json/nodes/{{ ludus_so_pve_node }}/qemu/{{ ludus_so_pve_vmid }}/config"
+    method: PUT
+    headers:
+      Authorization: "{{ ludus_so_pve_auth }}"
+    body_format: form-urlencoded
+    body:
+      net1: "{{ ludus_so_net1_spec }}"
+    status_code: [200]
+    validate_certs: false
+  delegate_to: localhost
+  become: false
+  register: ludus_so_net1_spec_update
+  when: ludus_so_net1_needs_spec_update | default(false) | bool
+
+- name: Record whether net1 was newly hot-plugged
+  ansible.builtin.set_fact:
+    ludus_so_net1_was_added: "{{ ludus_so_existing_net1 | length == 0 }}"
+    ludus_so_net1_was_updated: >-
+      {{
+        (ludus_so_net1_has_bad_mtu | default(false) | bool)
+        or (ludus_so_net1_needs_spec_update | default(false) | bool)
+      }}
+
+- name: Report sniff net1 status
+  ansible.builtin.debug:
+    msg: >-
+      {{
+        'added net1=' ~ ludus_so_net1_spec ~ ' on VMID ' ~ (ludus_so_pve_vmid | string)
+        if ludus_so_net1_was_added | bool
+        else (
+          'removed jumbo MTU from net1 on VMID ' ~ (ludus_so_pve_vmid | string)
+          if ludus_so_net1_has_bad_mtu | default(false) | bool
+          else (
+            'updated net1 on VMID ' ~ (ludus_so_pve_vmid | string)
+            if ludus_so_net1_was_updated | bool
+            else 'net1 already sniff-ready on VMID ' ~ (ludus_so_pve_vmid | string)
+          )
+        )
+      }}
+
+- name: Enable Ludus bridge hub-mode for packet capture (best effort)
+  ansible.builtin.shell: |
+    set -euo pipefail
+    if command -v brctl >/dev/null 2>&1 && ip link show "{{ ludus_so_vmbr }}" >/dev/null 2>&1; then
+      brctl setageing "{{ ludus_so_vmbr }}" 0 || true
+      ip link set dev "{{ ludus_so_vmbr }}" type bridge ageing_time 0 2>/dev/null || true
+      echo "bridge-ageing 0 on {{ ludus_so_vmbr }}"
+      exit 0
+    fi
+    exit 1
+  args:
+    executable: /bin/bash
+  delegate_to: localhost
+  become: true
+  register: ludus_so_bridge_ageing
+  changed_when: false
+  failed_when: false
+
+- name: Note when bridge-ageing could not be set locally
+  ansible.builtin.debug:
+    msg: >-
+      Could not set bridge-ageing 0 on {{ ludus_so_vmbr }} from Ludus host (non-fatal).
+      On Proxmox: brctl setageing {{ ludus_so_vmbr }} 0
+  when: ludus_so_bridge_ageing.rc != 0
+
+- name: Rescan PCI bus for hot-plugged virtio sniff NIC
+  ansible.builtin.shell: |
+    set -euo pipefail
+    if [[ -w /sys/bus/pci/rescan ]]; then
+      timeout 30 bash -c 'echo 1 > /sys/bus/pci/rescan' || {
+        echo "pci rescan timed out or failed (continuing)"
+        exit 0
+      }
+    fi
+    udevadm settle --timeout=30 2>/dev/null || true
+    udevadm trigger --subsystem-match=net 2>/dev/null || true
+    udevadm settle --timeout=30 2>/dev/null || true
+    ls -1 /sys/class/net | grep -vE '^(lo|docker|veth|br-|tun|wg|bond)' | paste -sd, -
+  args:
+    executable: /bin/bash
+  become: true
+  changed_when: false
+  failed_when: false
+  when: ludus_so_net1_was_added | default(false) | bool
+
+- name: Note when skipping PCI rescan (net1 already present in guest)
+  ansible.builtin.debug:
+    msg: >-
+      Skipping PCI rescan — net1 was already on VMID {{ ludus_so_pve_vmid }}
+      (only spec/M TU changed). If the sniff NIC is missing in the guest, reboot
+      {{ inventory_hostname }} or set ludus_so_force_pci_rescan=true.
+  when:
+    - not (ludus_so_net1_was_added | default(false) | bool)
+    - not (ludus_so_force_pci_rescan | default(false) | bool)
+
+- name: Force PCI rescan when requested
+  ansible.builtin.shell: |
+    set -euo pipefail
+    if [[ -w /sys/bus/pci/rescan ]]; then
+      timeout 30 bash -c 'echo 1 > /sys/bus/pci/rescan' || true
+    fi
+    udevadm trigger --subsystem-match=net 2>/dev/null || true
+    udevadm settle --timeout=30 2>/dev/null || true
+    ls -1 /sys/class/net | grep -vE '^(lo|docker|veth|br-|tun|wg|bond)' | paste -sd, -
+  args:
+    executable: /bin/bash
+  become: true
+  changed_when: false
+  failed_when: false
+  when:
+    - not (ludus_so_net1_was_added | default(false) | bool)
+    - ludus_so_force_pci_rescan | default(false) | bool

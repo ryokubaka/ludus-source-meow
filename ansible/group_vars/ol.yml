@@ -1,0 +1,8 @@
+# Oracle Linux (proxmox_os_id=ol) — Security Onion templates use onion:onion, not localuser.
+ansible_connection: ssh
+ansible_user: onion
+ansible_ssh_pass: onion
+ansible_become: true
+ansible_become_method: sudo
+ansible_sudo_pass: onion
+ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"

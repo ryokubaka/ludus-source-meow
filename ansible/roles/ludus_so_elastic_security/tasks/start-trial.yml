@@ -1,0 +1,44 @@
+---
+# Mirrors GOAD-mod extensions/elk es_xpack_trial → POST _license/start_trial
+- name: Query current Elastic license
+  ansible.builtin.command: so-elasticsearch-query _license
+  register: ludus_so_elastic_security_license
+  changed_when: false
+  become: true
+
+- name: Parse license type
+  ansible.builtin.set_fact:
+    ludus_so_elastic_security_license_type: >-
+      {{
+        (ludus_so_elastic_security_license.stdout | from_json).license.type
+        | default('unknown')
+      }}
+
+- name: Start Elastic trial license when not already trial/platinum/enterprise
+  ansible.builtin.command: >
+    so-elasticsearch-query _license/start_trial?acknowledge=true -XPOST
+  register: ludus_so_elastic_security_trial
+  become: true
+  changed_when: >
+    'trial_was_started' in (ludus_so_elastic_security_trial.stdout | default(''))
+    or '"type":"trial"' in (ludus_so_elastic_security_trial.stdout | default(''))
+  failed_when: >
+    ludus_so_elastic_security_trial.rc != 0
+    and 'already' not in (ludus_so_elastic_security_trial.stdout | default('') | lower)
+    and 'Trial was already activated' not in (ludus_so_elastic_security_trial.stdout | default(''))
+  when: >
+    ludus_so_elastic_security_license_type | lower
+    not in ['trial', 'platinum', 'enterprise', 'gold']
+
+- name: Show license after trial attempt
+  ansible.builtin.command: so-elasticsearch-query _license
+  register: ludus_so_elastic_security_license_after
+  changed_when: false
+  become: true
+
+- name: Report license type
+  ansible.builtin.debug:
+    msg: >-
+      Elastic license:
+      {{ (ludus_so_elastic_security_license_after.stdout | from_json).license.type | default('unknown') }}
+      (status={{ (ludus_so_elastic_security_license_after.stdout | from_json).license.status | default('?') }})

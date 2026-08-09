@@ -1,0 +1,116 @@
+---
+# Run once on SO manager: open hostgroup + fetch enrollment token for endpoints-initial.
+# Play host may be Windows — force Linux shell/become on every delegate_to SO task.
+- name: Wait for SO setup marker on manager
+  ansible.builtin.stat:
+    path: /etc/ludus-so-setup-complete
+  register: ludus_so_agent_so_marker
+  delegate_to: "{{ ludus_so_agent_manager }}"
+  become: true
+  become_method: sudo
+  become_user: root
+  vars:
+    ansible_shell_type: sh
+    ansible_connection: ssh
+
+- name: Fail when SO setup incomplete
+  ansible.builtin.fail:
+    msg: >
+      {{ ludus_so_agent_manager }} missing /etc/ludus-so-setup-complete.
+      Deploy ryokubaka.ludus_securityonion first (depends_on).
+  when: not ludus_so_agent_so_marker.stat.exists
+
+- name: Allow range CIDR in SO elastic_agent_endpoint hostgroup
+  ansible.builtin.command:
+    argv:
+      - so-firewall
+      - --apply
+      - includehost
+      - elastic_agent_endpoint
+      - "{{ ludus_so_agent_allow_cidr }}"
+  register: ludus_so_agent_fw
+  changed_when: >
+    'already' not in (ludus_so_agent_fw.stdout | default('') | lower)
+    and 'already' not in (ludus_so_agent_fw.stderr | default('') | lower)
+  failed_when: >
+    ludus_so_agent_fw.rc != 0
+    and ('already' not in (
+      (ludus_so_agent_fw.stdout | default('') ~ ' ' ~ ludus_so_agent_fw.stderr | default(''))
+      | lower
+    ))
+  delegate_to: "{{ ludus_so_agent_manager }}"
+  become: true
+  become_method: sudo
+  become_user: root
+  vars:
+    ansible_shell_type: sh
+    ansible_connection: ssh
+  when: ludus_so_agent_allow_cidr | length > 0
+
+# Direct curl — do not source so-elastic-fleet-common under Windows-delegated shell.
+- name: Fetch enrollment API key for policy from Fleet
+  ansible.builtin.shell: |
+    set -euo pipefail
+    curl -sS -K /opt/so/conf/elasticsearch/curl.config -L \
+      --retry 3 --retry-delay 5 --fail \
+      "http://localhost:5601/api/fleet/enrollment_api_keys?kuery=policy_id:{{ ludus_so_agent_policy_id }}" \
+      | jq -r '.list[0].api_key // .items[0].api_key // empty'
+  args:
+    executable: /bin/bash
+  register: ludus_so_agent_token_cmd
+  changed_when: false
+  failed_when: false
+  no_log: true
+  delegate_to: "{{ ludus_so_agent_manager }}"
+  become: true
+  become_method: sudo
+  become_user: root
+  vars:
+    ansible_shell_type: sh
+    ansible_connection: ssh
+  when: ludus_so_agent_enrollment_token | length == 0
+
+- name: Surface Fleet token fetch failure (no secret)
+  ansible.builtin.fail:
+    msg: >
+      Fleet enrollment token fetch failed on {{ ludus_so_agent_manager }}
+      (rc={{ ludus_so_agent_token_cmd.rc | default('n/a') }}).
+      Check Kibana/Fleet is up and policy '{{ ludus_so_agent_policy_id }}' exists.
+      stderr: {{ ludus_so_agent_token_cmd.stderr | default('') | truncate(400) }}
+  when:
+    - ludus_so_agent_enrollment_token | length == 0
+    - (ludus_so_agent_token_cmd.rc | default(1)) != 0
+
+- name: Publish enrollment token on localhost (shared by all endpoints)
+  ansible.builtin.set_fact:
+    ludus_so_agent_token_shared: >-
+      {{
+        ludus_so_agent_enrollment_token
+        if (ludus_so_agent_enrollment_token | length > 0)
+        else (ludus_so_agent_token_cmd.stdout | default('') | trim)
+      }}
+  delegate_to: localhost
+  delegate_facts: true
+  no_log: true
+  vars:
+    ansible_connection: local
+    ansible_shell_type: sh
+    ansible_become: false
+
+- name: Fail when enrollment token missing
+  ansible.builtin.fail:
+    msg: >
+      No Fleet enrollment token for policy '{{ ludus_so_agent_policy_id }}'.
+      Set ludus_so_agent_enrollment_token or verify Fleet on {{ ludus_so_agent_manager }}.
+  when: hostvars['localhost'].ludus_so_agent_token_shared | default('') | length == 0
+
+- name: Ensure installer cache dir on controller
+  ansible.builtin.file:
+    path: "{{ ludus_so_agent_cache_dir }}"
+    state: directory
+    mode: "0755"
+  delegate_to: localhost
+  become: false
+  vars:
+    ansible_connection: local
+    ansible_shell_type: sh

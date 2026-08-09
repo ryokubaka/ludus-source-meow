@@ -1,0 +1,60 @@
+---
+# Broken registry-mirrors like "https://:5000" (seen on SO ISO/default) cause
+# corrupt layer pulls → empty /etc/passwd in so-elasticsearch → catrust/ES fail.
+# Strip invalid mirrors; allow insecure local SO registry.
+- name: Read docker daemon.json if present
+  ansible.builtin.slurp:
+    src: /etc/docker/daemon.json
+  register: ludus_so_docker_daemon_raw
+  failed_when: false
+  become: true
+
+- name: Sanitize docker daemon.json registry-mirrors
+  when: ludus_so_docker_daemon_raw.content is defined
+  ansible.builtin.shell: |
+    set -euo pipefail
+    python3 - <<'PY'
+    import json, pathlib, sys
+    p = pathlib.Path("/etc/docker/daemon.json")
+    try:
+        d = json.loads(p.read_text())
+    except Exception as e:
+        print(f"skip-parse-error:{e}")
+        sys.exit(0)
+    before = json.dumps(d.get("registry-mirrors"), sort_keys=True)
+    mirrors = []
+    for m in d.get("registry-mirrors") or []:
+        m = (m or "").strip()
+        if not m:
+            continue
+        # Drop empty-host / clearly broken mirrors from SO defaults
+        if m in ("https://:5000", "http://:5000", ":5000", "https://", "http://"):
+            continue
+        if "://" in m:
+            host = m.split("://", 1)[1].split("/", 1)[0]
+            if not host or host.startswith(":"):
+                continue
+        mirrors.append(m)
+    d["registry-mirrors"] = mirrors
+    ir = set(d.get("insecure-registries") or [])
+    ir.update(["manager:5000", "127.0.0.1:5000"])
+    d["insecure-registries"] = sorted(ir)
+    after = json.dumps(d.get("registry-mirrors"), sort_keys=True)
+    p.write_text(json.dumps(d, indent=2) + "\n")
+    if before != after:
+        print("daemon-json-sanitized")
+    else:
+        print("daemon-json-ok")
+    PY
+  args:
+    executable: /bin/bash
+  become: true
+  register: ludus_so_docker_daemon_fix
+  changed_when: "'daemon-json-sanitized' in ludus_so_docker_daemon_fix.stdout"
+
+- name: Restart docker after daemon.json sanitize
+  ansible.builtin.service:
+    name: docker
+    state: restarted
+  become: true
+  when: ludus_so_docker_daemon_fix is changed

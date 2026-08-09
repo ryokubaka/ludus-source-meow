@@ -35,15 +35,32 @@ See [Ludus Sources docs](https://docs.ludus.cloud/docs/using-ludus/sources) for 
 | Blueprint ID | Name | VMs | Description |
 |---|---|---|---|
 | [`starter-lab`](./blueprints/starter-lab/) | Starter Lab | 2 | Minimal Kali + Debian target — skeleton for new blueprints |
+| [`securityonion-lab`](./blueprints/securityonion-lab/) | Security Onion 2.4 Lab | 3 | Standalone SO 2.4 + target + Kali |
+| [`securityonion3-lab`](./blueprints/securityonion3-lab/) | Security Onion 3 Lab | 3 | Standalone SO 3.2 + target + Kali |
 
 ## Templates
 
-Packer templates live under [`templates/`](./templates/). Each subdirectory is one Ludus template.
-Once installed they appear in `ludus templates list`. None ship yet — see [`templates/README.md`](./templates/README.md).
+| Template | Description |
+|---|---|
+| `securityonion-2.4-x64-template` | SO 2.4.211 Packer base — see [`templates/README.md`](./templates/README.md) |
+| `securityonion-3-x64-template` | SO 3.2.0 Packer base |
+
+```bash
+ludus templates build -n securityonion-2.4-x64-template
+ludus templates build -n securityonion-3-x64-template
+```
+
+Security Onion labs use the `ludus_securityonion` role to attach a sniff NIC (`net1`) via Proxmox API during deploy and run `so-setup`. [LUX](https://github.com/ryokubaka/ludus-ux) may also attach the same NIC (idempotent). Set bridge `ageing_time 0` on the range `vmbr` for packet capture — see [Ludus docs](https://docs.ludus.cloud/docs/networking#packet-capture).
 
 ## Ansible content
 
-Roles and collections live under [`ansible/`](./ansible/). Prefer **git submodules** pinned to tags (BSL pattern) so Ludus pulls them with `--recurse-submodules` on `source add` / `source sync`. See [`ansible/README.md`](./ansible/README.md).
+| Role | Purpose |
+|---|---|
+| [`ludus_securityonion`](./ansible/roles/ludus_securityonion/) | Attach sniff NIC; run `so-setup iso standalone-net` |
+| [`ludus_so_elastic_agent`](./ansible/roles/ludus_so_elastic_agent/) | Enroll Linux/Windows endpoints into SO Elastic Fleet |
+| [`ludus_so_elastic_security`](./ansible/roles/ludus_so_elastic_security/) | Trial license, Elastic Defend detect mode, enable Kibana detection rules |
+
+Roles and collections live under [`ansible/`](./ansible/). See [`ansible/README.md`](./ansible/README.md).
 
 ## Layout
 
@@ -60,6 +77,8 @@ ludus-source-meow/
 ## Contributing
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for blueprint authoring rules and range-config conventions.
+
+See [CHANGELOG.md](./CHANGELOG.md) for release history.
 
 ## License
 

@@ -17,3 +17,9 @@ build/
 
 # Ansible
 *.retry
+
+# Local deploy / debug artifacts
+*.log
+.so3*
+debug-*.log
+

@@ -1,0 +1,32 @@
+---
+- name: Select Windows amd64 MSI
+  ansible.builtin.set_fact:
+    ludus_so_agent_installer_name: so-elastic-agent_windows_amd64_msi
+
+- name: Fetch Windows installer (cached on controller)
+  ansible.builtin.include_tasks: fetch-installer.yml
+
+- name: Copy Windows MSI to endpoint
+  ansible.windows.win_copy:
+    src: "{{ ludus_so_agent_cache_dir }}/{{ ludus_so_agent_installer_name }}"
+    dest: "{{ ludus_so_agent_windows_staging }}"
+
+- name: Enroll Elastic Agent (Windows MSI)
+  ansible.windows.win_package:
+    path: "{{ ludus_so_agent_windows_staging }}"
+    arguments: >-
+      TOKEN={{ ludus_so_agent_token }}
+      FLEET={{ ludus_so_agent_fleet_url_resolved }}
+      TIMEOUT={{ ludus_so_agent_install_timeout }}
+      /qn /norestart
+    state: present
+  no_log: true
+
+- name: Write Windows install marker
+  ansible.windows.win_copy:
+    dest: "{{ ludus_so_agent_marker_windows }}"
+    content: |
+      manager={{ ludus_so_agent_manager }}
+      fleet={{ ludus_so_agent_fleet_url_resolved }}
+      policy={{ ludus_so_agent_policy_id }}
+      completed={{ ansible_date_time.iso8601 | default(lookup('pipe', 'date -Iseconds')) }}

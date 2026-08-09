@@ -1,0 +1,32 @@
+---
+- name: Fail when SO manager hostname missing from inventory
+  ansible.builtin.fail:
+    msg: >
+      SO manager '{{ ludus_so_agent_manager }}' not in inventory hostvars.
+      Set ludus_so_agent_manager / ensure the SO VM is deployed in this range.
+  when: ludus_so_agent_manager not in hostvars
+
+- name: Resolve manager IP
+  ansible.builtin.set_fact:
+    ludus_so_agent_manager_ip_resolved: >-
+      {{
+        ludus_so_agent_manager_ip
+        | default(hostvars[ludus_so_agent_manager].ansible_host, true)
+        | default(hostvars[ludus_so_agent_manager].ansible_default_ipv4.address, true)
+        | default('', true)
+      }}
+
+- name: Fail when manager IP unknown
+  ansible.builtin.fail:
+    msg: >
+      Cannot resolve IP for {{ ludus_so_agent_manager }}.
+      Set ludus_so_agent_manager_ip or ensure ansible_host is set.
+  when: ludus_so_agent_manager_ip_resolved | length == 0
+
+- name: Resolve Fleet URL
+  ansible.builtin.set_fact:
+    ludus_so_agent_fleet_url_resolved: >-
+      {{
+        ludus_so_agent_fleet_url
+        | default('https://' ~ ludus_so_agent_manager_ip_resolved ~ ':8220', true)
+      }}

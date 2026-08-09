@@ -1,0 +1,57 @@
+---
+- name: Check completion marker
+  ansible.builtin.stat:
+    path: "{{ ludus_so_elastic_security_marker }}"
+  register: ludus_so_elastic_security_marker_stat
+
+- name: Skip when already complete
+  ansible.builtin.debug:
+    msg: "Marker {{ ludus_so_elastic_security_marker }} present; skipping (ludus_so_elastic_security_force=true to rerun)."
+  when:
+    - ludus_so_elastic_security_marker_stat.stat.exists
+    - not (ludus_so_elastic_security_force | bool)
+
+- name: Configure Elastic trial + detection rules
+  when: >
+    (ludus_so_elastic_security_force | bool)
+    or not (ludus_so_elastic_security_marker_stat.stat.exists | default(false))
+  block:
+    - name: Require SO setup marker
+      ansible.builtin.stat:
+        path: "{{ ludus_so_setup_marker }}"
+      register: ludus_so_elastic_security_so_marker
+      when: ludus_so_elastic_security_require_so_setup | bool
+
+    - name: Fail when SO setup incomplete
+      ansible.builtin.fail:
+        msg: >
+          {{ ludus_so_setup_marker }} missing. Deploy ryokubaka.ludus_securityonion first
+          (depends_on), then this role.
+      when:
+        - ludus_so_elastic_security_require_so_setup | bool
+        - not ludus_so_elastic_security_so_marker.stat.exists
+
+    - name: Start Elastic trial license
+      ansible.builtin.include_tasks: start-trial.yml
+      when: ludus_so_elastic_security_start_trial | bool
+
+    - name: Configure Elastic Defend protections in detect mode
+      ansible.builtin.include_tasks: configure-elastic-defend.yml
+      when: ludus_so_elastic_security_configure_defend | bool
+
+    - name: Install and enable prepackaged detection rules
+      ansible.builtin.include_tasks: enable-rules.yml
+      when: ludus_so_elastic_security_enable_rules | bool
+
+    - name: Write completion marker
+      ansible.builtin.copy:
+        dest: "{{ ludus_so_elastic_security_marker }}"
+        content: |
+          trial={{ ludus_so_elastic_security_start_trial }}
+          defend={{ ludus_so_elastic_security_configure_defend }}
+          defend_mode={{ ludus_so_elastic_security_defend_mode }}
+          defend_user_notify={{ ludus_so_elastic_security_defend_user_notify }}
+          rules={{ ludus_so_elastic_security_enable_rules }}
+          completed={{ ansible_date_time.iso8601 | default(lookup('pipe', 'date -Iseconds')) }}
+        mode: "0644"
+      become: true
