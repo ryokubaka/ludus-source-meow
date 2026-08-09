@@ -1,0 +1,44 @@
+---
+- name: Select Linux amd64 installer
+  ansible.builtin.set_fact:
+    ludus_so_agent_installer_name: so-elastic-agent_linux_amd64
+
+- name: Fetch Linux installer (cached on controller)
+  ansible.builtin.include_tasks: fetch-installer.yml
+
+- name: Ensure staging directory
+  ansible.builtin.file:
+    path: "{{ ludus_so_agent_linux_staging | dirname }}"
+    state: directory
+    mode: "0755"
+  become: true
+
+- name: Copy Linux installer to endpoint
+  ansible.builtin.copy:
+    src: "{{ ludus_so_agent_cache_dir }}/{{ ludus_so_agent_installer_name }}"
+    dest: "{{ ludus_so_agent_linux_staging }}"
+    mode: "0755"
+  become: true
+
+- name: Enroll Elastic Agent (Linux)
+  ansible.builtin.command: >-
+    {{ ludus_so_agent_linux_staging }}
+    -token={{ ludus_so_agent_token }}
+    -fleet={{ ludus_so_agent_fleet_url_resolved }}
+    -timeout={{ ludus_so_agent_install_timeout }}
+    {{ '-force' if ludus_so_agent_force | bool else '' }}
+  register: ludus_so_agent_linux_install
+  become: true
+  no_log: true
+  changed_when: true
+
+- name: Write Linux install marker
+  ansible.builtin.copy:
+    dest: "{{ ludus_so_agent_marker_linux }}"
+    content: |
+      manager={{ ludus_so_agent_manager }}
+      fleet={{ ludus_so_agent_fleet_url_resolved }}
+      policy={{ ludus_so_agent_policy_id }}
+      completed={{ ansible_date_time.iso8601 | default(lookup('pipe', 'date -Iseconds')) }}
+    mode: "0644"
+  become: true

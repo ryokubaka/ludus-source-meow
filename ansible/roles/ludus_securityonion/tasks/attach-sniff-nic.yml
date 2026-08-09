@@ -220,18 +220,27 @@
   register: ludus_so_net1_spec_update
   when: ludus_so_net1_needs_spec_update | default(false) | bool
 
+- name: Record whether net1 was newly hot-plugged
+  ansible.builtin.set_fact:
+    ludus_so_net1_was_added: "{{ ludus_so_existing_net1 | length == 0 }}"
+    ludus_so_net1_was_updated: >-
+      {{
+        (ludus_so_net1_has_bad_mtu | default(false) | bool)
+        or (ludus_so_net1_needs_spec_update | default(false) | bool)
+      }}
+
 - name: Report sniff net1 status
   ansible.builtin.debug:
     msg: >-
       {{
         'added net1=' ~ ludus_so_net1_spec ~ ' on VMID ' ~ (ludus_so_pve_vmid | string)
-        if ludus_so_existing_net1 | length == 0
+        if ludus_so_net1_was_added | bool
         else (
           'removed jumbo MTU from net1 on VMID ' ~ (ludus_so_pve_vmid | string)
           if ludus_so_net1_has_bad_mtu | default(false) | bool
           else (
             'updated net1 on VMID ' ~ (ludus_so_pve_vmid | string)
-            if ludus_so_net1_needs_spec_update | default(false) | bool
+            if ludus_so_net1_was_updated | bool
             else 'net1 already sniff-ready on VMID ' ~ (ludus_so_pve_vmid | string)
           )
         )
@@ -266,10 +275,46 @@
   ansible.builtin.shell: |
     set -euo pipefail
     if [[ -w /sys/bus/pci/rescan ]]; then
-      echo 1 > /sys/bus/pci/rescan
+      timeout 30 bash -c 'echo 1 > /sys/bus/pci/rescan' || {
+        echo "pci rescan timed out or failed (continuing)"
+        exit 0
+      }
     fi
+    udevadm settle --timeout=30 2>/dev/null || true
+    udevadm trigger --subsystem-match=net 2>/dev/null || true
+    udevadm settle --timeout=30 2>/dev/null || true
+    ls -1 /sys/class/net | grep -vE '^(lo|docker|veth|br-|tun|wg|bond)' | paste -sd, -
   args:
     executable: /bin/bash
   become: true
   changed_when: false
   failed_when: false
+  when: ludus_so_net1_was_added | default(false) | bool
+
+- name: Note when skipping PCI rescan (net1 already present in guest)
+  ansible.builtin.debug:
+    msg: >-
+      Skipping PCI rescan — net1 was already on VMID {{ ludus_so_pve_vmid }}
+      (only spec/M TU changed). If the sniff NIC is missing in the guest, reboot
+      {{ inventory_hostname }} or set ludus_so_force_pci_rescan=true.
+  when:
+    - not (ludus_so_net1_was_added | default(false) | bool)
+    - not (ludus_so_force_pci_rescan | default(false) | bool)
+
+- name: Force PCI rescan when requested
+  ansible.builtin.shell: |
+    set -euo pipefail
+    if [[ -w /sys/bus/pci/rescan ]]; then
+      timeout 30 bash -c 'echo 1 > /sys/bus/pci/rescan' || true
+    fi
+    udevadm trigger --subsystem-match=net 2>/dev/null || true
+    udevadm settle --timeout=30 2>/dev/null || true
+    ls -1 /sys/class/net | grep -vE '^(lo|docker|veth|br-|tun|wg|bond)' | paste -sd, -
+  args:
+    executable: /bin/bash
+  become: true
+  changed_when: false
+  failed_when: false
+  when:
+    - not (ludus_so_net1_was_added | default(false) | bool)
+    - ludus_so_force_pci_rescan | default(false) | bool

@@ -6,7 +6,7 @@
 #   ./scripts/run-automated-tests.sh sync              # push to Ludus packer dir
 #   ./scripts/run-automated-tests.sh integration       # guest-agent on live VM
 #   ./scripts/run-automated-tests.sh full              # sync + ludus templates build
-#
+#   ./scripts/run-automated-tests.sh role-deploy       # only-roles SO deploy on catshadowstep
 # Env:
 #   SO_TEMPLATE=securityonion-2.4   (or securityonion-3)
 #   LUDUS_HOST=10.0.20.40
@@ -16,6 +16,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="${REPO_ROOT}/templates"
 SO_TEMPLATE="${SO_TEMPLATE:-securityonion-2.4}"
 LUDUS_HOST="${LUDUS_HOST:-10.0.20.40}"
@@ -116,8 +117,9 @@ run_full_build() {
   ludus_as_user templates build -n "${TEMPLATE_LIST_NAME}"
   BUILD_RC=$?
   set -e
-  resume_goad_vms
-  echo "Build triggered. Monitoring latest packer tmp log..." >&2
+  # Do NOT resume GOAD here — packer is async; CIFS lock timeouts if GOAD
+  # comes back while packer is still allocating disks on ludus storage.
+  echo "Build triggered. Monitoring latest packer tmp log (GOAD stays paused)..." >&2
   local log=""
   for _ in $(seq 1 30); do
     log="$(ssh_ludus "ls -t /opt/ludus/users/${LUDUS_USER}/packer/tmp/packer-log* 2>/dev/null | head -1")"
@@ -138,6 +140,7 @@ run_full_build() {
     sleep 60
   done
   ludus_as_user templates list 2>/dev/null | grep -F "${TEMPLATE_LIST_NAME}" || true
+  resume_goad_vms
   return "${BUILD_RC:-0}"
 }
 
@@ -146,6 +149,7 @@ case "$MODE" in
   sync) run_sync ;;
   integration) run_integration ;;
   full) run_full_build ;;
+  role-deploy) bash "${SCRIPT_DIR}/test-role-deploy.sh" full ;;
   all)
     run_unit
     run_sync
@@ -157,7 +161,7 @@ case "$MODE" in
     fi
     ;;
   *)
-    echo "Usage: $0 {unit|sync|integration|full|all}" >&2
+    echo "Usage: $0 {unit|sync|integration|full|role-deploy|all}" >&2
     exit 1
     ;;
 esac

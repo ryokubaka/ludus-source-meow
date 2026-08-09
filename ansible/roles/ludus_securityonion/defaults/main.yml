@@ -25,6 +25,9 @@ ludus_so_range_number_override: ""
 ludus_so_sniff_wait_timeout: 1800
 ludus_so_sniff_wait_delay: 15
 
+# Run PCI rescan even when Proxmox net1 already existed (guest missing sniff NIC)
+ludus_so_force_pci_rescan: false
+
 # Minimum non-loopback interfaces required before so-setup (mgmt + sniff)
 ludus_so_min_nics: 2
 
@@ -45,6 +48,10 @@ ludus_so_setup_paths:
 # Marker file written after successful setup
 ludus_so_setup_marker: /etc/ludus-so-setup-complete
 
+# Detached so-setup wait (seconds / poll interval)
+ludus_so_setup_timeout: 7200
+ludus_so_setup_poll: 30
+
 # Hostname used when probing Ludus router DNS forwarder (ensure-ludus-dns.yml)
 ludus_so_dns_router_test_host: repo.securityonion.net
 
@@ -53,3 +60,10 @@ ludus_so_require_dns: true
 ludus_so_dns_check_hosts:
   - repo.securityonion.net
   - repo-alt.securityonion.net
+
+# Strip broken docker registry-mirrors (e.g. https://:5000) before so-setup pulls images
+ludus_so_sanitize_docker_daemon: true
+
+# After setup (and on redeploy), enslave sniff NIC to bond0 + persist via systemd oneshot.
+# Without this, zeek/suricata listen on bond0 with NO-CARRIER and see zero traffic.
+ludus_so_heal_sniff_bond: true

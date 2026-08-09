@@ -1,0 +1,17 @@
+---
+# Expects ludus_so_agent_installer_name (basename under so_agent-installers/).
+- name: Stat cached installer on controller
+  ansible.builtin.stat:
+    path: "{{ ludus_so_agent_cache_dir }}/{{ ludus_so_agent_installer_name }}"
+  register: ludus_so_agent_cache_stat
+  delegate_to: localhost
+  become: false
+
+- name: Fetch installer from SO manager to controller
+  ansible.builtin.fetch:
+    src: "{{ ludus_so_agent_installer_dir }}/{{ ludus_so_agent_installer_name }}"
+    dest: "{{ ludus_so_agent_cache_dir }}/{{ ludus_so_agent_installer_name }}"
+    flat: true
+  delegate_to: "{{ ludus_so_agent_manager }}"
+  become: true
+  when: not ludus_so_agent_cache_stat.stat.exists

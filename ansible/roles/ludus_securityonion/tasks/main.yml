@@ -34,11 +34,20 @@
       when: ludus_so_attach_sniff_nic | bool
 
     - name: Wait for sniff NIC in guest (mgmt + sniff)
+      ansible.builtin.debug:
+        msg: >-
+          Waiting up to {{ ludus_so_sniff_wait_timeout }}s for {{ ludus_so_min_nics }} guest NICs
+          (mgmt + sniff). Proxmox net1 on {{ ludus_so_vmbr | default('vmbr10XX') }} tag
+          {{ ludus_so_sniff_tag }}. Retries every {{ ludus_so_sniff_wait_delay }}s — no log
+          lines until NICs appear or timeout.
+
+    - name: Wait for sniff NIC in guest (mgmt + sniff)
       ansible.builtin.shell: |
         set -euo pipefail
-        count=$(ls -1 /sys/class/net | grep -cvE '^(lo|docker|veth|br-|tun|wg)' || true)
-        echo "nics=${count}"
-        test "${count}" -ge "{{ ludus_so_min_nics | int }}"
+        nics=$(ls -1 /sys/class/net | grep -cvE '^(lo|docker|veth|br-|tun|wg|bond|bonding_masters)' || true)
+        names=$(ls -1 /sys/class/net | grep -vE '^(lo|docker|veth|br-|tun|wg|bond|bonding_masters)' | paste -sd, -)
+        echo "nics=${nics} names=${names} need>={{ ludus_so_min_nics }}"
+        test "${nics}" -ge "{{ ludus_so_min_nics | int }}"
       args:
         executable: /bin/bash
       register: ludus_so_nic_wait
@@ -46,7 +55,6 @@
       retries: "{{ ((ludus_so_sniff_wait_timeout | int) / (ludus_so_sniff_wait_delay | int)) | int }}"
       delay: "{{ ludus_so_sniff_wait_delay | int }}"
       changed_when: false
-      failed_when: false
 
     - name: Fail when sniff NIC never appeared
       ansible.builtin.fail:
@@ -72,6 +80,13 @@
     - name: Prepare guest networking for so-setup
       ansible.builtin.include_tasks: prepare-so-setup.yml
 
+    - name: Sanitize docker daemon.json (broken registry-mirrors)
+      ansible.builtin.include_tasks: sanitize-docker-daemon.yml
+      when: ludus_so_sanitize_docker_daemon | default(true) | bool
+
+    - name: Patch so-setup TESTING profile (MNIC != bonding_masters)
+      ansible.builtin.include_tasks: patch-so-setup-testing.yml
+
     - name: Export ALLOW_CIDR for so-setup when provided
       ansible.builtin.set_fact:
         ludus_so_setup_env:
@@ -79,21 +94,17 @@
           TERM: "linux"
           MTU: "{{ ludus_so_bond_mtu | string }}"
           MAINIP: "{{ ludus_so_main_ip }}"
+          MNIC: "{{ ludus_so_mnic }}"
           MNIC_IP: "{{ ludus_so_main_ip }}"
+          BNICS: "{{ ludus_so_bnic }}"
+          MDNS: "{{ ludus_so_dns_server | default(ludus_dns_server | default(''), true) }}"
           ALLOW_CIDR: "{{ ludus_so_allow_cidr | default('0.0.0.0/0', true) }}"
           WEBUSER: "{{ ludus_so_web_user }}"
           WEBPASSWD1: "{{ ludus_so_web_password }}"
           WEBPASSWD2: "{{ ludus_so_web_password }}"
 
     - name: Run so-setup iso with test profile (best-effort automation)
-      ansible.builtin.command:
-        cmd: "{{ ludus_so_setup_bin }} iso {{ ludus_so_test_profile }}"
-      environment: "{{ ludus_so_setup_env }}"
-      become: true
-      register: ludus_so_setup_result
-      async: 7200
-      poll: 30
-      changed_when: true
+      ansible.builtin.include_tasks: run-so-setup.yml
 
     - name: Write setup-complete marker
       ansible.builtin.copy:
@@ -103,3 +114,9 @@
           completed={{ ansible_date_time.iso8601 | default(lookup('pipe', 'date -Iseconds')) }}
         mode: "0644"
       become: true
+
+# Sensors listen on bond0 — BNICS must stay enslaved or zeek/suricata see nothing.
+# Runs after fresh setup and on redeploy when marker already exists (heal).
+- name: Ensure sniff NIC enslaved to bond0
+  ansible.builtin.include_tasks: ensure-sniff-bond.yml
+  when: ludus_so_heal_sniff_bond | default(true) | bool

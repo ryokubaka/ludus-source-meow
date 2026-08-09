@@ -1,5 +1,6 @@
-# Role vendored in this source: ansible/roles/ludus_securityonion (installed as ryokubaka.ludus_securityonion)
+# Roles vendored in this source under ansible/roles/
 roles:
   - name: ryokubaka.ludus_securityonion
+  - name: ryokubaka.ludus_so_elastic_agent
 
 collections: []

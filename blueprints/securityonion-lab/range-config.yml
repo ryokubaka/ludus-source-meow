@@ -7,7 +7,7 @@
 # VLAN 99 — attacker
 #
 # LUX may also attach SO net1 during deploy (idempotent). Role attaches net1 via Proxmox API if missing.
-# RAM: ~38 GB (SO 32 + target 2 + kali 4)
+# RAM: SO balloon 8–24 GB (ram_min_gb/ram_gb) + target 2 + kali 4
 # =============================================================================
 
 network:
@@ -37,6 +37,24 @@ network:
       protocol: tcp
       ports: 22
       action: ACCEPT
+    - name: Allow targets to SO Fleet
+      vlan_src: 10
+      vlan_dst: 20
+      protocol: tcp
+      ports:
+        - 8220
+        - 5055
+        - 8443
+      action: ACCEPT
+    - name: Allow Kali to SO Fleet
+      vlan_src: 99
+      vlan_dst: 20
+      protocol: tcp
+      ports:
+        - 8220
+        - 5055
+        - 8443
+      action: ACCEPT
 
 ludus:
   - vm_name: "{{ range_id }}-so"
@@ -44,7 +62,9 @@ ludus:
     template: securityonion-2.4-x64-template
     vlan: 20
     ip_last_octet: 20
-    ram_gb: 32
+    # balloon: Proxmox min=8 / max=24 — host can reclaim down to 8 GB under pressure
+    ram_min_gb: 8
+    ram_gb: 24
     cpus: 8
     linux: true
     testing:
@@ -69,6 +89,11 @@ ludus:
     testing:
       snapshot: true
       block_internet: true
+    roles:
+      - name: ryokubaka.ludus_so_elastic_agent
+    depends_on:
+      - vm_name: "{{ range_id }}-so"
+        role: ryokubaka.ludus_securityonion
 
   - vm_name: "{{ range_id }}-kali"
     hostname: "{{ range_id }}-kali"
@@ -81,3 +106,8 @@ ludus:
     testing:
       snapshot: false
       block_internet: false
+    roles:
+      - name: ryokubaka.ludus_so_elastic_agent
+    depends_on:
+      - vm_name: "{{ range_id }}-so"
+        role: ryokubaka.ludus_securityonion

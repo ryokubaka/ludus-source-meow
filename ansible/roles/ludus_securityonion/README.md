@@ -6,6 +6,28 @@ Security Onion `so-setup iso <type>-net` (default **standalone-net**).
 
 Works with plain Ludus CLI/API deploy. No LUX required.
 
+## Automated testing (catshadowstep)
+
+End-to-end role test without watching logs manually:
+
+```bash
+# From ludus-source-meow repo (needs SSH to Ludus host; key from ludus-ux container or LUDUS_SSH_KEY)
+./scripts/test-role-deploy.sh full
+
+# Or via the template test runner
+./scripts/run-automated-tests.sh role-deploy
+```
+
+Defaults: range `catshadowstep`, VM `catshadowstep-so`, role `ryokubaka.ludus_securityonion`,
+deploy `--limit` + `--tags user-defined-roles` + `--only-roles`. Cleans stale `bond0`/marker,
+monitors `/opt/ludus/ranges/catshadowstep/ansible.log` (timeout 2h), verifies
+`/etc/ludus-so-setup-complete` and `so-status`.
+
+Useful env overrides: `SO_VM_IP=10.1.10.20`, `CLEANUP_BEFORE=0`, `SKIP_SOURCE_SYNC=1`,
+`DEPLOY_TIMEOUT_SEC=7200`.
+
+Modes: `full` | `deploy` | `monitor` | `verify`.
+
 ## Requirements
 
 - VM built from `securityonion-2.4-x64-template` or `securityonion-3-x64-template`
@@ -38,6 +60,7 @@ Works with plain Ludus CLI/API deploy. No LUX required.
 | `ludus_so_allow_cidr` | `""` | Firewall allow CIDR (empty → open in TESTING) |
 | `ludus_so_require_dns` | `true` | Fail before `so-setup` if SO repo hostnames do not resolve |
 | `ludus_so_range_number_override` | `""` | Rare fallback if range number extra var missing |
+| `ludus_so_heal_sniff_bond` | `true` | Enslave sniff NIC to `bond0` + systemd oneshot (sensors listen on bond0) |
 
 ## DNS and internet (common setup failure)
 
@@ -84,3 +107,8 @@ for virtio labs. A failed/partial install can leave **`bond0`** behind; the role
 it before `so-setup` so the TESTING profile selects **`ens18`** (mgmt) not **`bond0`**.
 Bridge `ageing_time 0` is attempted on the Ludus host when it can reach the range bridge
 (non-fatal if not).
+
+After `so-setup`, zeek/suricata listen on **`bond0`**. If the sniff NIC (`ens19`) is not
+enslaved, `bond0` stays NO-CARRIER and NSM sees no range traffic. This role runs
+`ensure-sniff-bond.yml` after setup and on redeploy (marker present) to enslave the
+sniff NIC and install `ludus-so-enslave-sniff.service` for boot persistence.

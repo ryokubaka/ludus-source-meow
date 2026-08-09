@@ -1,0 +1,155 @@
+---
+# Detached so-setup: bond creation drops SSH; ansible async poll can kill workers.
+- name: Define so-setup runtime paths
+  ansible.builtin.set_fact:
+    ludus_so_setup_log: /var/log/ludus-so-setup.log
+    ludus_so_setup_pidfile: /var/run/ludus-so-setup.pid
+
+- name: Start DNS keeper before so-setup (survives NM/bond resolv.conf wipes)
+  ansible.builtin.shell: |
+    set -euo pipefail
+    PIDFILE=/var/run/ludus-dns-keeper.pid
+    if [[ -f "$PIDFILE" ]]; then
+      old=$(cat "$PIDFILE" || true)
+      if [[ -n "${old:-}" ]] && kill -0 "$old" 2>/dev/null; then
+        echo "keeper-already-running pid=${old}"
+        exit 0
+      fi
+    fi
+    nohup /usr/local/sbin/ludus-dns-keeper >/var/log/ludus-dns-keeper.log 2>&1 &
+    echo "keeper-started pid=$!"
+  args:
+    executable: /bin/bash
+  become: true
+  when: ludus_so_require_dns | default(true) | bool
+  register: ludus_so_dns_keeper_start
+  changed_when: "'keeper-started' in (ludus_so_dns_keeper_start.stdout | default(''))"
+  failed_when: false
+
+- name: Start so-setup iso detached (nohup)
+  ansible.builtin.shell: |
+    set -euo pipefail
+    LOG="{{ ludus_so_setup_log }}"
+    PIDFILE="{{ ludus_so_setup_pidfile }}"
+    if [[ -f "$PIDFILE" ]]; then
+      pid=$(cat "$PIDFILE")
+      if kill -0 "$pid" 2>/dev/null; then
+        echo "already-running pid=${pid}"
+        exit 0
+      fi
+    fi
+    : > "$LOG"
+    nohup {{ ludus_so_setup_bin }} iso {{ ludus_so_test_profile }} >> "$LOG" 2>&1 &
+    echo $! > "$PIDFILE"
+    echo "started pid=$(cat "$PIDFILE")"
+  args:
+    executable: /bin/bash
+  environment: "{{ ludus_so_setup_env }}"
+  become: true
+  register: ludus_so_setup_start
+  changed_when: "'started pid=' in ludus_so_setup_start.stdout"
+
+- name: Report so-setup start status
+  ansible.builtin.debug:
+    msg: "{{ ludus_so_setup_start.stdout | trim }} (log {{ ludus_so_setup_log }})"
+
+- name: Wait for so-setup to finish (retry through SSH loss during bond setup)
+  # NOTE: no bash functions here — Ansible Jinja treats `{` as template syntax.
+  ansible.builtin.shell: |
+    set -euo pipefail
+    LOG="{{ ludus_so_setup_log }}"
+    PIDFILE="{{ ludus_so_setup_pidfile }}"
+    # so-setup writes nmcli errors into /root/sosetup.log (often not ansible stdout).
+    SOLOG=/root/sosetup.log
+    # Terminal failures only. Do NOT match bare "giving up." — so-elasticsearch-wait
+    # writes that during retries and leaves it in sosetup.log even after heal/highstate.
+    FAIL_RE='unrecoverable failure|unknown connection|Command continues to fail|Setup encountered an unrecoverable'
+    failed=0
+    if grep -qiE "$FAIL_RE" "$LOG" 2>/dev/null || grep -qiE "$FAIL_RE" "$SOLOG" 2>/dev/null; then
+      failed=1
+    fi
+    if [[ ! -f "$PIDFILE" ]]; then
+      echo "missing-pidfile"
+      exit 1
+    fi
+    pid=$(cat "$PIDFILE")
+    if kill -0 "$pid" 2>/dev/null; then
+      if [[ "$failed" -eq 1 ]]; then
+        echo "failed-log-running"
+        echo "--- $LOG ---"
+        tail -40 "$LOG" 2>/dev/null || true
+        echo "--- $SOLOG ---"
+        tail -40 "$SOLOG" 2>/dev/null || true
+        kill "$pid" 2>/dev/null || true
+        exit 1
+      fi
+      echo "running pid=${pid}"
+      if [[ -f "$SOLOG" ]]; then
+        tail -3 "$SOLOG" 2>/dev/null || true
+      else
+        tail -5 "$LOG" 2>/dev/null || true
+      fi
+      exit 2
+    fi
+    # Prefer live health over stale log FAIL_RE after so-setup exits.
+    if command -v so-status >/dev/null 2>&1 && so-status >/dev/null 2>&1; then
+      echo "complete-so-status"
+      exit 0
+    fi
+    if grep -qiE 'setup complete|installation complete|Setup completed|SO setup complete' "$LOG" "$SOLOG" 2>/dev/null; then
+      echo "complete-log"
+      exit 0
+    fi
+    if [[ "$failed" -eq 1 ]]; then
+      echo "failed-log"
+      echo "--- $LOG ---"
+      tail -40 "$LOG" 2>/dev/null || true
+      echo "--- $SOLOG ---"
+      tail -40 "$SOLOG" 2>/dev/null || true
+      exit 1
+    fi
+    echo "exited-unknown"
+    echo "--- $LOG ---"
+    tail -40 "$LOG" 2>/dev/null || true
+    echo "--- $SOLOG ---"
+    tail -40 "$SOLOG" 2>/dev/null || true
+    exit 1
+  args:
+    executable: /bin/bash
+  become: true
+  register: ludus_so_setup_wait
+  until: ludus_so_setup_wait.rc | int == 0
+  retries: "{{ ((ludus_so_setup_timeout | int) / (ludus_so_setup_poll | int)) | int }}"
+  delay: "{{ ludus_so_setup_poll | int }}"
+  failed_when: ludus_so_setup_wait.rc | int == 1
+  changed_when: false
+  ignore_unreachable: true
+
+- name: Stop DNS keeper after so-setup wait
+  ansible.builtin.shell: |
+    set -euo pipefail
+    PIDFILE=/var/run/ludus-dns-keeper.pid
+    if [[ -f "$PIDFILE" ]]; then
+      pid=$(cat "$PIDFILE" || true)
+      if [[ -n "${pid:-}" ]]; then
+        kill "$pid" 2>/dev/null || true
+      fi
+      rm -f "$PIDFILE"
+    fi
+    pkill -f '/usr/local/sbin/ludus-dns-keeper' 2>/dev/null || true
+    chattr -i /etc/resolv.conf 2>/dev/null || true
+    echo "keeper-stopped"
+  args:
+    executable: /bin/bash
+  become: true
+  when: ludus_so_require_dns | default(true) | bool
+  failed_when: false
+  changed_when: false
+
+- name: Fail when so-setup did not complete
+  ansible.builtin.fail:
+    msg: >
+      so-setup did not complete successfully.
+      Log: {{ ludus_so_setup_log }} on {{ inventory_hostname }}.
+      Last wait: {{ ludus_so_setup_wait.stdout | default('unreachable') }}.
+  when: ludus_so_setup_wait.rc | default(1) != 0

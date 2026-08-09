@@ -1,0 +1,415 @@
+monitor start 2026-08-09T00:51:16-04:00
+===== 2026-08-09T00:51:17-04:00 =====
+PLOG:/opt/ludus/users/catshadowstep/packer/tmp/packer-log2848724388
+2026/08/09 00:49:48 [INFO] Starting internal plugin packer-provisioner-shell-local
+2026/08/09 00:49:48 Starting plugin: /usr/local/bin/packer []string{"/usr/local/bin/packer", "plugin", "packer-provisioner-shell-local"}
+2026/08/09 00:49:48 Waiting for RPC address for: /usr/local/bin/packer
+2026/08/09 00:49:48 packer-provisioner-shell-local plugin: Waiting for connection...
+2026/08/09 00:49:48 ui: proxmox-iso.securityonion3: output will be in this color.
+2026/08/09 00:49:48 ui: 
+2026/08/09 00:49:48 Waiting on builds to complete...
+2026/08/09 00:49:48 Starting build run: proxmox-iso.securityonion3
+2026/08/09 00:50:21 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:50:21 [INFO] - finished downloading ludus:iso/securityonion-3.2.0-20260729.iso
+2026/08/09 00:50:21 ui: ==> proxmox-iso.securityonion3: Creating VM
+2026/08/09 00:50:21 ui: ==> proxmox-iso.securityonion3: No VM ID given, getting next free from Proxmox
+2026/08/09 00:50:55 ui: ==> proxmox-iso.securityonion3: Starting VM
+2026/08/09 00:50:57 ui: ==> proxmox-iso.securityonion3: Waiting 15s for boot
+2026/08/09 00:51:12 ui: ==> proxmox-iso.securityonion3: Typing the boot command
+2026/08/09 00:51:12 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:51:12 [INFO] Waiting 1m15s
+---
+       113 securityonion-3-x64-template running    8192             200.00 73364     
+status: running
+72830 packer build -on-error=cleanup -var proxmox_url=https://127.0.0.1:8006/api2/json -var proxmox_host=minipve -var proxmox_skip_tls_verify=true -var proxmox_pool=SHARED -var proxmox_storage_pool=ludus -var proxmox_storage_format=qcow2 -var iso_storage_pool=ludus -var ansible_home=/opt/ludus/users/catshadowstep/.ansible -var ludus_nat_interface=vmbr1000 /opt/ludus/packer/securityonion-3/securityonion-3.pkr.hcl
+72883 /usr/local/bin/packer build -on-error=cleanup -var proxmox_url=https://127.0.0.1:8006/api2/json -var proxmox_host=minipve -var proxmox_skip_tls_verify=true -var proxmox_pool=SHARED -var proxmox_storage_pool=ludus -var proxmox_storage_format=qcow2 -var iso_storage_pool=ludus -var ansible_home=/opt/ludus/users/catshadowstep/.ansible -var ludus_nat_interface=vmbr1000 /opt/ludus/packer/securityonion-3/securityonion-3.pkr.hcl
+| securityonion-3-x64-template                    | linux   | 🚧 BUILDING  |
+===== 2026-08-09T00:52:18-04:00 =====
+PLOG:/opt/ludus/users/catshadowstep/packer/tmp/packer-log2848724388
+2026/08/09 00:49:48 [INFO] Starting internal plugin packer-provisioner-shell-local
+2026/08/09 00:49:48 Starting plugin: /usr/local/bin/packer []string{"/usr/local/bin/packer", "plugin", "packer-provisioner-shell-local"}
+2026/08/09 00:49:48 Waiting for RPC address for: /usr/local/bin/packer
+2026/08/09 00:49:48 packer-provisioner-shell-local plugin: Waiting for connection...
+2026/08/09 00:49:48 ui: proxmox-iso.securityonion3: output will be in this color.
+2026/08/09 00:49:48 ui: 
+2026/08/09 00:49:48 Waiting on builds to complete...
+2026/08/09 00:49:48 Starting build run: proxmox-iso.securityonion3
+2026/08/09 00:50:21 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:50:21 [INFO] - finished downloading ludus:iso/securityonion-3.2.0-20260729.iso
+2026/08/09 00:50:21 ui: ==> proxmox-iso.securityonion3: Creating VM
+2026/08/09 00:50:21 ui: ==> proxmox-iso.securityonion3: No VM ID given, getting next free from Proxmox
+2026/08/09 00:50:55 ui: ==> proxmox-iso.securityonion3: Starting VM
+2026/08/09 00:50:57 ui: ==> proxmox-iso.securityonion3: Waiting 15s for boot
+2026/08/09 00:51:12 ui: ==> proxmox-iso.securityonion3: Typing the boot command
+2026/08/09 00:51:12 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:51:12 [INFO] Waiting 1m15s
+---
+       113 securityonion-3-x64-template running    8192             200.00 73364     
+status: running
+72830 packer build -on-error=cleanup -var proxmox_url=https://127.0.0.1:8006/api2/json -var proxmox_host=minipve -var proxmox_skip_tls_verify=true -var proxmox_pool=SHARED -var proxmox_storage_pool=ludus -var proxmox_storage_format=qcow2 -var iso_storage_pool=ludus -var ansible_home=/opt/ludus/users/catshadowstep/.ansible -var ludus_nat_interface=vmbr1000 /opt/ludus/packer/securityonion-3/securityonion-3.pkr.hcl
+72883 /usr/local/bin/packer build -on-error=cleanup -var proxmox_url=https://127.0.0.1:8006/api2/json -var proxmox_host=minipve -var proxmox_skip_tls_verify=true -var proxmox_pool=SHARED -var proxmox_storage_pool=ludus -var proxmox_storage_format=qcow2 -var iso_storage_pool=ludus -var ansible_home=/opt/ludus/users/catshadowstep/.ansible -var ludus_nat_interface=vmbr1000 /opt/ludus/packer/securityonion-3/securityonion-3.pkr.hcl
+| securityonion-3-x64-template                    | linux   | 🚧 BUILDING  |
+===== 2026-08-09T00:53:20-04:00 =====
+PLOG:/opt/ludus/users/catshadowstep/packer/tmp/packer-log2848724388
+2026/08/09 00:49:48 ui: proxmox-iso.securityonion3: output will be in this color.
+2026/08/09 00:49:48 ui: 
+2026/08/09 00:49:48 Waiting on builds to complete...
+2026/08/09 00:49:48 Starting build run: proxmox-iso.securityonion3
+2026/08/09 00:50:21 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:50:21 [INFO] - finished downloading ludus:iso/securityonion-3.2.0-20260729.iso
+2026/08/09 00:50:21 ui: ==> proxmox-iso.securityonion3: Creating VM
+2026/08/09 00:50:21 ui: ==> proxmox-iso.securityonion3: No VM ID given, getting next free from Proxmox
+2026/08/09 00:50:55 ui: ==> proxmox-iso.securityonion3: Starting VM
+2026/08/09 00:50:57 ui: ==> proxmox-iso.securityonion3: Waiting 15s for boot
+2026/08/09 00:51:12 ui: ==> proxmox-iso.securityonion3: Typing the boot command
+2026/08/09 00:51:12 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:51:12 [INFO] Waiting 1m15s
+2026/08/09 00:52:27 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:27 [INFO] Waiting 3s
+2026/08/09 00:52:31 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:31 [INFO] Waiting 2s
+2026/08/09 00:52:34 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:34 [INFO] Waiting 2s
+2026/08/09 00:52:36 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:36 [INFO] Waiting 10m0s
+---
+       113 securityonion-3-x64-template running    8192             200.00 73364     
+status: running
+72830 packer build -on-error=cleanup -var proxmox_url=https://127.0.0.1:8006/api2/json -var proxmox_host=minipve -var proxmox_skip_tls_verify=true -var proxmox_pool=SHARED -var proxmox_storage_pool=ludus -var proxmox_storage_format=qcow2 -var iso_storage_pool=ludus -var ansible_home=/opt/ludus/users/catshadowstep/.ansible -var ludus_nat_interface=vmbr1000 /opt/ludus/packer/securityonion-3/securityonion-3.pkr.hcl
+72883 /usr/local/bin/packer build -on-error=cleanup -var proxmox_url=https://127.0.0.1:8006/api2/json -var proxmox_host=minipve -var proxmox_skip_tls_verify=true -var proxmox_pool=SHARED -var proxmox_storage_pool=ludus -var proxmox_storage_format=qcow2 -var iso_storage_pool=ludus -var ansible_home=/opt/ludus/users/catshadowstep/.ansible -var ludus_nat_interface=vmbr1000 /opt/ludus/packer/securityonion-3/securityonion-3.pkr.hcl
+| securityonion-3-x64-template                    | linux   | 🚧 BUILDING  |
+===== 2026-08-09T00:54:21-04:00 =====
+PLOG:/opt/ludus/users/catshadowstep/packer/tmp/packer-log2848724388
+2026/08/09 00:49:48 ui: proxmox-iso.securityonion3: output will be in this color.
+2026/08/09 00:49:48 ui: 
+2026/08/09 00:49:48 Waiting on builds to complete...
+2026/08/09 00:49:48 Starting build run: proxmox-iso.securityonion3
+2026/08/09 00:50:21 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:50:21 [INFO] - finished downloading ludus:iso/securityonion-3.2.0-20260729.iso
+2026/08/09 00:50:21 ui: ==> proxmox-iso.securityonion3: Creating VM
+2026/08/09 00:50:21 ui: ==> proxmox-iso.securityonion3: No VM ID given, getting next free from Proxmox
+2026/08/09 00:50:55 ui: ==> proxmox-iso.securityonion3: Starting VM
+2026/08/09 00:50:57 ui: ==> proxmox-iso.securityonion3: Waiting 15s for boot
+2026/08/09 00:51:12 ui: ==> proxmox-iso.securityonion3: Typing the boot command
+2026/08/09 00:51:12 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:51:12 [INFO] Waiting 1m15s
+2026/08/09 00:52:27 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:27 [INFO] Waiting 3s
+2026/08/09 00:52:31 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:31 [INFO] Waiting 2s
+2026/08/09 00:52:34 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:34 [INFO] Waiting 2s
+2026/08/09 00:52:36 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:36 [INFO] Waiting 10m0s
+---
+       113 securityonion-3-x64-template running    8192             200.00 73364     
+status: running
+72830 packer build -on-error=cleanup -var proxmox_url=https://127.0.0.1:8006/api2/json -var proxmox_host=minipve -var proxmox_skip_tls_verify=true -var proxmox_pool=SHARED -var proxmox_storage_pool=ludus -var proxmox_storage_format=qcow2 -var iso_storage_pool=ludus -var ansible_home=/opt/ludus/users/catshadowstep/.ansible -var ludus_nat_interface=vmbr1000 /opt/ludus/packer/securityonion-3/securityonion-3.pkr.hcl
+72883 /usr/local/bin/packer build -on-error=cleanup -var proxmox_url=https://127.0.0.1:8006/api2/json -var proxmox_host=minipve -var proxmox_skip_tls_verify=true -var proxmox_pool=SHARED -var proxmox_storage_pool=ludus -var proxmox_storage_format=qcow2 -var iso_storage_pool=ludus -var ansible_home=/opt/ludus/users/catshadowstep/.ansible -var ludus_nat_interface=vmbr1000 /opt/ludus/packer/securityonion-3/securityonion-3.pkr.hcl
+| securityonion-3-x64-template                    | linux   | 🚧 BUILDING  |
+===== 2026-08-09T00:55:22-04:00 =====
+PLOG:/opt/ludus/users/catshadowstep/packer/tmp/packer-log2848724388
+2026/08/09 00:49:48 ui: proxmox-iso.securityonion3: output will be in this color.
+2026/08/09 00:49:48 ui: 
+2026/08/09 00:49:48 Waiting on builds to complete...
+2026/08/09 00:49:48 Starting build run: proxmox-iso.securityonion3
+2026/08/09 00:50:21 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:50:21 [INFO] - finished downloading ludus:iso/securityonion-3.2.0-20260729.iso
+2026/08/09 00:50:21 ui: ==> proxmox-iso.securityonion3: Creating VM
+2026/08/09 00:50:21 ui: ==> proxmox-iso.securityonion3: No VM ID given, getting next free from Proxmox
+2026/08/09 00:50:55 ui: ==> proxmox-iso.securityonion3: Starting VM
+2026/08/09 00:50:57 ui: ==> proxmox-iso.securityonion3: Waiting 15s for boot
+2026/08/09 00:51:12 ui: ==> proxmox-iso.securityonion3: Typing the boot command
+2026/08/09 00:51:12 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:51:12 [INFO] Waiting 1m15s
+2026/08/09 00:52:27 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:27 [INFO] Waiting 3s
+2026/08/09 00:52:31 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:31 [INFO] Waiting 2s
+2026/08/09 00:52:34 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:34 [INFO] Waiting 2s
+2026/08/09 00:52:36 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:36 [INFO] Waiting 10m0s
+---
+       113 securityonion-3-x64-template running    8192             200.00 73364     
+status: running
+72830 packer build -on-error=cleanup -var proxmox_url=https://127.0.0.1:8006/api2/json -var proxmox_host=minipve -var proxmox_skip_tls_verify=true -var proxmox_pool=SHARED -var proxmox_storage_pool=ludus -var proxmox_storage_format=qcow2 -var iso_storage_pool=ludus -var ansible_home=/opt/ludus/users/catshadowstep/.ansible -var ludus_nat_interface=vmbr1000 /opt/ludus/packer/securityonion-3/securityonion-3.pkr.hcl
+72883 /usr/local/bin/packer build -on-error=cleanup -var proxmox_url=https://127.0.0.1:8006/api2/json -var proxmox_host=minipve -var proxmox_skip_tls_verify=true -var proxmox_pool=SHARED -var proxmox_storage_pool=ludus -var proxmox_storage_format=qcow2 -var iso_storage_pool=ludus -var ansible_home=/opt/ludus/users/catshadowstep/.ansible -var ludus_nat_interface=vmbr1000 /opt/ludus/packer/securityonion-3/securityonion-3.pkr.hcl
+| securityonion-3-x64-template                    | linux   | 🚧 BUILDING  |
+===== 2026-08-09T00:56:23-04:00 =====
+PLOG:/opt/ludus/users/catshadowstep/packer/tmp/packer-log2848724388
+2026/08/09 00:49:48 ui: proxmox-iso.securityonion3: output will be in this color.
+2026/08/09 00:49:48 ui: 
+2026/08/09 00:49:48 Waiting on builds to complete...
+2026/08/09 00:49:48 Starting build run: proxmox-iso.securityonion3
+2026/08/09 00:50:21 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:50:21 [INFO] - finished downloading ludus:iso/securityonion-3.2.0-20260729.iso
+2026/08/09 00:50:21 ui: ==> proxmox-iso.securityonion3: Creating VM
+2026/08/09 00:50:21 ui: ==> proxmox-iso.securityonion3: No VM ID given, getting next free from Proxmox
+2026/08/09 00:50:55 ui: ==> proxmox-iso.securityonion3: Starting VM
+2026/08/09 00:50:57 ui: ==> proxmox-iso.securityonion3: Waiting 15s for boot
+2026/08/09 00:51:12 ui: ==> proxmox-iso.securityonion3: Typing the boot command
+2026/08/09 00:51:12 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:51:12 [INFO] Waiting 1m15s
+2026/08/09 00:52:27 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:27 [INFO] Waiting 3s
+2026/08/09 00:52:31 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:31 [INFO] Waiting 2s
+2026/08/09 00:52:34 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:34 [INFO] Waiting 2s
+2026/08/09 00:52:36 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:36 [INFO] Waiting 10m0s
+---
+       113 securityonion-3-x64-template running    8192             200.00 73364     
+status: running
+72830 packer build -on-error=cleanup -var proxmox_url=https://127.0.0.1:8006/api2/json -var proxmox_host=minipve -var proxmox_skip_tls_verify=true -var proxmox_pool=SHARED -var proxmox_storage_pool=ludus -var proxmox_storage_format=qcow2 -var iso_storage_pool=ludus -var ansible_home=/opt/ludus/users/catshadowstep/.ansible -var ludus_nat_interface=vmbr1000 /opt/ludus/packer/securityonion-3/securityonion-3.pkr.hcl
+72883 /usr/local/bin/packer build -on-error=cleanup -var proxmox_url=https://127.0.0.1:8006/api2/json -var proxmox_host=minipve -var proxmox_skip_tls_verify=true -var proxmox_pool=SHARED -var proxmox_storage_pool=ludus -var proxmox_storage_format=qcow2 -var iso_storage_pool=ludus -var ansible_home=/opt/ludus/users/catshadowstep/.ansible -var ludus_nat_interface=vmbr1000 /opt/ludus/packer/securityonion-3/securityonion-3.pkr.hcl
+| securityonion-3-x64-template                    | linux   | 🚧 BUILDING  |
+===== 2026-08-09T00:57:24-04:00 =====
+PLOG:/opt/ludus/users/catshadowstep/packer/tmp/packer-log2848724388
+2026/08/09 00:49:48 ui: proxmox-iso.securityonion3: output will be in this color.
+2026/08/09 00:49:48 ui: 
+2026/08/09 00:49:48 Waiting on builds to complete...
+2026/08/09 00:49:48 Starting build run: proxmox-iso.securityonion3
+2026/08/09 00:50:21 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:50:21 [INFO] - finished downloading ludus:iso/securityonion-3.2.0-20260729.iso
+2026/08/09 00:50:21 ui: ==> proxmox-iso.securityonion3: Creating VM
+2026/08/09 00:50:21 ui: ==> proxmox-iso.securityonion3: No VM ID given, getting next free from Proxmox
+2026/08/09 00:50:55 ui: ==> proxmox-iso.securityonion3: Starting VM
+2026/08/09 00:50:57 ui: ==> proxmox-iso.securityonion3: Waiting 15s for boot
+2026/08/09 00:51:12 ui: ==> proxmox-iso.securityonion3: Typing the boot command
+2026/08/09 00:51:12 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:51:12 [INFO] Waiting 1m15s
+2026/08/09 00:52:27 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:27 [INFO] Waiting 3s
+2026/08/09 00:52:31 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:31 [INFO] Waiting 2s
+2026/08/09 00:52:34 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:34 [INFO] Waiting 2s
+2026/08/09 00:52:36 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:36 [INFO] Waiting 10m0s
+---
+       113 securityonion-3-x64-template running    8192             200.00 73364     
+status: running
+72830 packer build -on-error=cleanup -var proxmox_url=https://127.0.0.1:8006/api2/json -var proxmox_host=minipve -var proxmox_skip_tls_verify=true -var proxmox_pool=SHARED -var proxmox_storage_pool=ludus -var proxmox_storage_format=qcow2 -var iso_storage_pool=ludus -var ansible_home=/opt/ludus/users/catshadowstep/.ansible -var ludus_nat_interface=vmbr1000 /opt/ludus/packer/securityonion-3/securityonion-3.pkr.hcl
+72883 /usr/local/bin/packer build -on-error=cleanup -var proxmox_url=https://127.0.0.1:8006/api2/json -var proxmox_host=minipve -var proxmox_skip_tls_verify=true -var proxmox_pool=SHARED -var proxmox_storage_pool=ludus -var proxmox_storage_format=qcow2 -var iso_storage_pool=ludus -var ansible_home=/opt/ludus/users/catshadowstep/.ansible -var ludus_nat_interface=vmbr1000 /opt/ludus/packer/securityonion-3/securityonion-3.pkr.hcl
+| securityonion-3-x64-template                    | linux   | 🚧 BUILDING  |
+===== 2026-08-09T00:58:25-04:00 =====
+PLOG:/opt/ludus/users/catshadowstep/packer/tmp/packer-log2848724388
+2026/08/09 00:49:48 ui: proxmox-iso.securityonion3: output will be in this color.
+2026/08/09 00:49:48 ui: 
+2026/08/09 00:49:48 Waiting on builds to complete...
+2026/08/09 00:49:48 Starting build run: proxmox-iso.securityonion3
+2026/08/09 00:50:21 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:50:21 [INFO] - finished downloading ludus:iso/securityonion-3.2.0-20260729.iso
+2026/08/09 00:50:21 ui: ==> proxmox-iso.securityonion3: Creating VM
+2026/08/09 00:50:21 ui: ==> proxmox-iso.securityonion3: No VM ID given, getting next free from Proxmox
+2026/08/09 00:50:55 ui: ==> proxmox-iso.securityonion3: Starting VM
+2026/08/09 00:50:57 ui: ==> proxmox-iso.securityonion3: Waiting 15s for boot
+2026/08/09 00:51:12 ui: ==> proxmox-iso.securityonion3: Typing the boot command
+2026/08/09 00:51:12 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:51:12 [INFO] Waiting 1m15s
+2026/08/09 00:52:27 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:27 [INFO] Waiting 3s
+2026/08/09 00:52:31 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:31 [INFO] Waiting 2s
+2026/08/09 00:52:34 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:34 [INFO] Waiting 2s
+2026/08/09 00:52:36 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:36 [INFO] Waiting 10m0s
+---
+       113 securityonion-3-x64-template running    8192             200.00 73364     
+status: running
+72830 packer build -on-error=cleanup -var proxmox_url=https://127.0.0.1:8006/api2/json -var proxmox_host=minipve -var proxmox_skip_tls_verify=true -var proxmox_pool=SHARED -var proxmox_storage_pool=ludus -var proxmox_storage_format=qcow2 -var iso_storage_pool=ludus -var ansible_home=/opt/ludus/users/catshadowstep/.ansible -var ludus_nat_interface=vmbr1000 /opt/ludus/packer/securityonion-3/securityonion-3.pkr.hcl
+72883 /usr/local/bin/packer build -on-error=cleanup -var proxmox_url=https://127.0.0.1:8006/api2/json -var proxmox_host=minipve -var proxmox_skip_tls_verify=true -var proxmox_pool=SHARED -var proxmox_storage_pool=ludus -var proxmox_storage_format=qcow2 -var iso_storage_pool=ludus -var ansible_home=/opt/ludus/users/catshadowstep/.ansible -var ludus_nat_interface=vmbr1000 /opt/ludus/packer/securityonion-3/securityonion-3.pkr.hcl
+| securityonion-3-x64-template                    | linux   | 🚧 BUILDING  |
+===== 2026-08-09T00:59:26-04:00 =====
+PLOG:/opt/ludus/users/catshadowstep/packer/tmp/packer-log2848724388
+2026/08/09 00:49:48 ui: proxmox-iso.securityonion3: output will be in this color.
+2026/08/09 00:49:48 ui: 
+2026/08/09 00:49:48 Waiting on builds to complete...
+2026/08/09 00:49:48 Starting build run: proxmox-iso.securityonion3
+2026/08/09 00:50:21 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:50:21 [INFO] - finished downloading ludus:iso/securityonion-3.2.0-20260729.iso
+2026/08/09 00:50:21 ui: ==> proxmox-iso.securityonion3: Creating VM
+2026/08/09 00:50:21 ui: ==> proxmox-iso.securityonion3: No VM ID given, getting next free from Proxmox
+2026/08/09 00:50:55 ui: ==> proxmox-iso.securityonion3: Starting VM
+2026/08/09 00:50:57 ui: ==> proxmox-iso.securityonion3: Waiting 15s for boot
+2026/08/09 00:51:12 ui: ==> proxmox-iso.securityonion3: Typing the boot command
+2026/08/09 00:51:12 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:51:12 [INFO] Waiting 1m15s
+2026/08/09 00:52:27 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:27 [INFO] Waiting 3s
+2026/08/09 00:52:31 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:31 [INFO] Waiting 2s
+2026/08/09 00:52:34 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:34 [INFO] Waiting 2s
+2026/08/09 00:52:36 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:36 [INFO] Waiting 10m0s
+---
+       113 securityonion-3-x64-template running    8192             200.00 73364     
+status: running
+72830 packer build -on-error=cleanup -var proxmox_url=https://127.0.0.1:8006/api2/json -var proxmox_host=minipve -var proxmox_skip_tls_verify=true -var proxmox_pool=SHARED -var proxmox_storage_pool=ludus -var proxmox_storage_format=qcow2 -var iso_storage_pool=ludus -var ansible_home=/opt/ludus/users/catshadowstep/.ansible -var ludus_nat_interface=vmbr1000 /opt/ludus/packer/securityonion-3/securityonion-3.pkr.hcl
+72883 /usr/local/bin/packer build -on-error=cleanup -var proxmox_url=https://127.0.0.1:8006/api2/json -var proxmox_host=minipve -var proxmox_skip_tls_verify=true -var proxmox_pool=SHARED -var proxmox_storage_pool=ludus -var proxmox_storage_format=qcow2 -var iso_storage_pool=ludus -var ansible_home=/opt/ludus/users/catshadowstep/.ansible -var ludus_nat_interface=vmbr1000 /opt/ludus/packer/securityonion-3/securityonion-3.pkr.hcl
+| securityonion-3-x64-template                    | linux   | 🚧 BUILDING  |
+===== 2026-08-09T01:00:28-04:00 =====
+PLOG:/opt/ludus/users/catshadowstep/packer/tmp/packer-log2848724388
+2026/08/09 00:49:48 ui: proxmox-iso.securityonion3: output will be in this color.
+2026/08/09 00:49:48 ui: 
+2026/08/09 00:49:48 Waiting on builds to complete...
+2026/08/09 00:49:48 Starting build run: proxmox-iso.securityonion3
+2026/08/09 00:50:21 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:50:21 [INFO] - finished downloading ludus:iso/securityonion-3.2.0-20260729.iso
+2026/08/09 00:50:21 ui: ==> proxmox-iso.securityonion3: Creating VM
+2026/08/09 00:50:21 ui: ==> proxmox-iso.securityonion3: No VM ID given, getting next free from Proxmox
+2026/08/09 00:50:55 ui: ==> proxmox-iso.securityonion3: Starting VM
+2026/08/09 00:50:57 ui: ==> proxmox-iso.securityonion3: Waiting 15s for boot
+2026/08/09 00:51:12 ui: ==> proxmox-iso.securityonion3: Typing the boot command
+2026/08/09 00:51:12 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:51:12 [INFO] Waiting 1m15s
+2026/08/09 00:52:27 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:27 [INFO] Waiting 3s
+2026/08/09 00:52:31 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:31 [INFO] Waiting 2s
+2026/08/09 00:52:34 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:34 [INFO] Waiting 2s
+2026/08/09 00:52:36 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:36 [INFO] Waiting 10m0s
+---
+       113 securityonion-3-x64-template running    8192             200.00 73364     
+status: running
+72830 packer build -on-error=cleanup -var proxmox_url=https://127.0.0.1:8006/api2/json -var proxmox_host=minipve -var proxmox_skip_tls_verify=true -var proxmox_pool=SHARED -var proxmox_storage_pool=ludus -var proxmox_storage_format=qcow2 -var iso_storage_pool=ludus -var ansible_home=/opt/ludus/users/catshadowstep/.ansible -var ludus_nat_interface=vmbr1000 /opt/ludus/packer/securityonion-3/securityonion-3.pkr.hcl
+72883 /usr/local/bin/packer build -on-error=cleanup -var proxmox_url=https://127.0.0.1:8006/api2/json -var proxmox_host=minipve -var proxmox_skip_tls_verify=true -var proxmox_pool=SHARED -var proxmox_storage_pool=ludus -var proxmox_storage_format=qcow2 -var iso_storage_pool=ludus -var ansible_home=/opt/ludus/users/catshadowstep/.ansible -var ludus_nat_interface=vmbr1000 /opt/ludus/packer/securityonion-3/securityonion-3.pkr.hcl
+| securityonion-3-x64-template                    | linux   | 🚧 BUILDING  |
+===== 2026-08-09T01:01:29-04:00 =====
+PLOG:/opt/ludus/users/catshadowstep/packer/tmp/packer-log2848724388
+2026/08/09 00:49:48 ui: proxmox-iso.securityonion3: output will be in this color.
+2026/08/09 00:49:48 ui: 
+2026/08/09 00:49:48 Waiting on builds to complete...
+2026/08/09 00:49:48 Starting build run: proxmox-iso.securityonion3
+2026/08/09 00:50:21 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:50:21 [INFO] - finished downloading ludus:iso/securityonion-3.2.0-20260729.iso
+2026/08/09 00:50:21 ui: ==> proxmox-iso.securityonion3: Creating VM
+2026/08/09 00:50:21 ui: ==> proxmox-iso.securityonion3: No VM ID given, getting next free from Proxmox
+2026/08/09 00:50:55 ui: ==> proxmox-iso.securityonion3: Starting VM
+2026/08/09 00:50:57 ui: ==> proxmox-iso.securityonion3: Waiting 15s for boot
+2026/08/09 00:51:12 ui: ==> proxmox-iso.securityonion3: Typing the boot command
+2026/08/09 00:51:12 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:51:12 [INFO] Waiting 1m15s
+2026/08/09 00:52:27 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:27 [INFO] Waiting 3s
+2026/08/09 00:52:31 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:31 [INFO] Waiting 2s
+2026/08/09 00:52:34 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:34 [INFO] Waiting 2s
+2026/08/09 00:52:36 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:36 [INFO] Waiting 10m0s
+---
+       113 securityonion-3-x64-template running    8192             200.00 73364     
+status: running
+72830 packer build -on-error=cleanup -var proxmox_url=https://127.0.0.1:8006/api2/json -var proxmox_host=minipve -var proxmox_skip_tls_verify=true -var proxmox_pool=SHARED -var proxmox_storage_pool=ludus -var proxmox_storage_format=qcow2 -var iso_storage_pool=ludus -var ansible_home=/opt/ludus/users/catshadowstep/.ansible -var ludus_nat_interface=vmbr1000 /opt/ludus/packer/securityonion-3/securityonion-3.pkr.hcl
+72883 /usr/local/bin/packer build -on-error=cleanup -var proxmox_url=https://127.0.0.1:8006/api2/json -var proxmox_host=minipve -var proxmox_skip_tls_verify=true -var proxmox_pool=SHARED -var proxmox_storage_pool=ludus -var proxmox_storage_format=qcow2 -var iso_storage_pool=ludus -var ansible_home=/opt/ludus/users/catshadowstep/.ansible -var ludus_nat_interface=vmbr1000 /opt/ludus/packer/securityonion-3/securityonion-3.pkr.hcl
+| securityonion-3-x64-template                    | linux   | 🚧 BUILDING  |
+===== 2026-08-09T01:02:30-04:00 =====
+PLOG:/opt/ludus/users/catshadowstep/packer/tmp/packer-log2848724388
+2026/08/09 00:49:48 ui: proxmox-iso.securityonion3: output will be in this color.
+2026/08/09 00:49:48 ui: 
+2026/08/09 00:49:48 Waiting on builds to complete...
+2026/08/09 00:49:48 Starting build run: proxmox-iso.securityonion3
+2026/08/09 00:50:21 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:50:21 [INFO] - finished downloading ludus:iso/securityonion-3.2.0-20260729.iso
+2026/08/09 00:50:21 ui: ==> proxmox-iso.securityonion3: Creating VM
+2026/08/09 00:50:21 ui: ==> proxmox-iso.securityonion3: No VM ID given, getting next free from Proxmox
+2026/08/09 00:50:55 ui: ==> proxmox-iso.securityonion3: Starting VM
+2026/08/09 00:50:57 ui: ==> proxmox-iso.securityonion3: Waiting 15s for boot
+2026/08/09 00:51:12 ui: ==> proxmox-iso.securityonion3: Typing the boot command
+2026/08/09 00:51:12 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:51:12 [INFO] Waiting 1m15s
+2026/08/09 00:52:27 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:27 [INFO] Waiting 3s
+2026/08/09 00:52:31 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:31 [INFO] Waiting 2s
+2026/08/09 00:52:34 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:34 [INFO] Waiting 2s
+2026/08/09 00:52:36 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:36 [INFO] Waiting 10m0s
+---
+       113 securityonion-3-x64-template running    8192             200.00 73364     
+status: running
+72830 packer build -on-error=cleanup -var proxmox_url=https://127.0.0.1:8006/api2/json -var proxmox_host=minipve -var proxmox_skip_tls_verify=true -var proxmox_pool=SHARED -var proxmox_storage_pool=ludus -var proxmox_storage_format=qcow2 -var iso_storage_pool=ludus -var ansible_home=/opt/ludus/users/catshadowstep/.ansible -var ludus_nat_interface=vmbr1000 /opt/ludus/packer/securityonion-3/securityonion-3.pkr.hcl
+72883 /usr/local/bin/packer build -on-error=cleanup -var proxmox_url=https://127.0.0.1:8006/api2/json -var proxmox_host=minipve -var proxmox_skip_tls_verify=true -var proxmox_pool=SHARED -var proxmox_storage_pool=ludus -var proxmox_storage_format=qcow2 -var iso_storage_pool=ludus -var ansible_home=/opt/ludus/users/catshadowstep/.ansible -var ludus_nat_interface=vmbr1000 /opt/ludus/packer/securityonion-3/securityonion-3.pkr.hcl
+| securityonion-3-x64-template                    | linux   | 🚧 BUILDING  |
+===== 2026-08-09T01:03:31-04:00 =====
+PLOG:/opt/ludus/users/catshadowstep/packer/tmp/packer-log2848724388
+2026/08/09 00:49:48 ui: 
+2026/08/09 00:49:48 Waiting on builds to complete...
+2026/08/09 00:49:48 Starting build run: proxmox-iso.securityonion3
+2026/08/09 00:50:21 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:50:21 [INFO] - finished downloading ludus:iso/securityonion-3.2.0-20260729.iso
+2026/08/09 00:50:21 ui: ==> proxmox-iso.securityonion3: Creating VM
+2026/08/09 00:50:21 ui: ==> proxmox-iso.securityonion3: No VM ID given, getting next free from Proxmox
+2026/08/09 00:50:55 ui: ==> proxmox-iso.securityonion3: Starting VM
+2026/08/09 00:50:57 ui: ==> proxmox-iso.securityonion3: Waiting 15s for boot
+2026/08/09 00:51:12 ui: ==> proxmox-iso.securityonion3: Typing the boot command
+2026/08/09 00:51:12 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:51:12 [INFO] Waiting 1m15s
+2026/08/09 00:52:27 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:27 [INFO] Waiting 3s
+2026/08/09 00:52:31 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:31 [INFO] Waiting 2s
+2026/08/09 00:52:34 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:34 [INFO] Waiting 2s
+2026/08/09 00:52:36 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:36 [INFO] Waiting 10m0s
+2026/08/09 01:02:36 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 01:02:36 [INFO] Waiting 3m0s
+---
+       113 securityonion-3-x64-template running    8192             200.00 73364     
+status: running
+72830 packer build -on-error=cleanup -var proxmox_url=https://127.0.0.1:8006/api2/json -var proxmox_host=minipve -var proxmox_skip_tls_verify=true -var proxmox_pool=SHARED -var proxmox_storage_pool=ludus -var proxmox_storage_format=qcow2 -var iso_storage_pool=ludus -var ansible_home=/opt/ludus/users/catshadowstep/.ansible -var ludus_nat_interface=vmbr1000 /opt/ludus/packer/securityonion-3/securityonion-3.pkr.hcl
+72883 /usr/local/bin/packer build -on-error=cleanup -var proxmox_url=https://127.0.0.1:8006/api2/json -var proxmox_host=minipve -var proxmox_skip_tls_verify=true -var proxmox_pool=SHARED -var proxmox_storage_pool=ludus -var proxmox_storage_format=qcow2 -var iso_storage_pool=ludus -var ansible_home=/opt/ludus/users/catshadowstep/.ansible -var ludus_nat_interface=vmbr1000 /opt/ludus/packer/securityonion-3/securityonion-3.pkr.hcl
+| securityonion-3-x64-template                    | linux   | 🚧 BUILDING  |
+===== 2026-08-09T01:04:32-04:00 =====
+PLOG:/opt/ludus/users/catshadowstep/packer/tmp/packer-log2848724388
+2026/08/09 00:49:48 ui: 
+2026/08/09 00:49:48 Waiting on builds to complete...
+2026/08/09 00:49:48 Starting build run: proxmox-iso.securityonion3
+2026/08/09 00:50:21 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:50:21 [INFO] - finished downloading ludus:iso/securityonion-3.2.0-20260729.iso
+2026/08/09 00:50:21 ui: ==> proxmox-iso.securityonion3: Creating VM
+2026/08/09 00:50:21 ui: ==> proxmox-iso.securityonion3: No VM ID given, getting next free from Proxmox
+2026/08/09 00:50:55 ui: ==> proxmox-iso.securityonion3: Starting VM
+2026/08/09 00:50:57 ui: ==> proxmox-iso.securityonion3: Waiting 15s for boot
+2026/08/09 00:51:12 ui: ==> proxmox-iso.securityonion3: Typing the boot command
+2026/08/09 00:51:12 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:51:12 [INFO] Waiting 1m15s
+2026/08/09 00:52:27 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:27 [INFO] Waiting 3s
+2026/08/09 00:52:31 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:31 [INFO] Waiting 2s
+2026/08/09 00:52:34 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:34 [INFO] Waiting 2s
+2026/08/09 00:52:36 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:36 [INFO] Waiting 10m0s
+2026/08/09 01:02:36 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 01:02:36 [INFO] Waiting 3m0s
+---
+       113 securityonion-3-x64-template running    8192             200.00 73364     
+status: running
+72830 packer build -on-error=cleanup -var proxmox_url=https://127.0.0.1:8006/api2/json -var proxmox_host=minipve -var proxmox_skip_tls_verify=true -var proxmox_pool=SHARED -var proxmox_storage_pool=ludus -var proxmox_storage_format=qcow2 -var iso_storage_pool=ludus -var ansible_home=/opt/ludus/users/catshadowstep/.ansible -var ludus_nat_interface=vmbr1000 /opt/ludus/packer/securityonion-3/securityonion-3.pkr.hcl
+72883 /usr/local/bin/packer build -on-error=cleanup -var proxmox_url=https://127.0.0.1:8006/api2/json -var proxmox_host=minipve -var proxmox_skip_tls_verify=true -var proxmox_pool=SHARED -var proxmox_storage_pool=ludus -var proxmox_storage_format=qcow2 -var iso_storage_pool=ludus -var ansible_home=/opt/ludus/users/catshadowstep/.ansible -var ludus_nat_interface=vmbr1000 /opt/ludus/packer/securityonion-3/securityonion-3.pkr.hcl
+| securityonion-3-x64-template                    | linux   | 🚧 BUILDING  |
+===== 2026-08-09T01:05:33-04:00 =====
+PLOG:/opt/ludus/users/catshadowstep/packer/tmp/packer-log2848724388
+2026/08/09 00:49:48 ui: 
+2026/08/09 00:49:48 Waiting on builds to complete...
+2026/08/09 00:49:48 Starting build run: proxmox-iso.securityonion3
+2026/08/09 00:50:21 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:50:21 [INFO] - finished downloading ludus:iso/securityonion-3.2.0-20260729.iso
+2026/08/09 00:50:21 ui: ==> proxmox-iso.securityonion3: Creating VM
+2026/08/09 00:50:21 ui: ==> proxmox-iso.securityonion3: No VM ID given, getting next free from Proxmox
+2026/08/09 00:50:55 ui: ==> proxmox-iso.securityonion3: Starting VM
+2026/08/09 00:50:57 ui: ==> proxmox-iso.securityonion3: Waiting 15s for boot
+2026/08/09 00:51:12 ui: ==> proxmox-iso.securityonion3: Typing the boot command
+2026/08/09 00:51:12 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:51:12 [INFO] Waiting 1m15s
+2026/08/09 00:52:27 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:27 [INFO] Waiting 3s
+2026/08/09 00:52:31 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:31 [INFO] Waiting 2s
+2026/08/09 00:52:34 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:34 [INFO] Waiting 2s
+2026/08/09 00:52:36 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:36 [INFO] Waiting 10m0s
+2026/08/09 01:02:36 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 01:02:36 [INFO] Waiting 3m0s
+---
+       113 securityonion-3-x64-template running    8192             200.00 73364     
+status: running
+72830 packer build -on-error=cleanup -var proxmox_url=https://127.0.0.1:8006/api2/json -var proxmox_host=minipve -var proxmox_skip_tls_verify=true -var proxmox_pool=SHARED -var proxmox_storage_pool=ludus -var proxmox_storage_format=qcow2 -var iso_storage_pool=ludus -var ansible_home=/opt/ludus/users/catshadowstep/.ansible -var ludus_nat_interface=vmbr1000 /opt/ludus/packer/securityonion-3/securityonion-3.pkr.hcl
+72883 /usr/local/bin/packer build -on-error=cleanup -var proxmox_url=https://127.0.0.1:8006/api2/json -var proxmox_host=minipve -var proxmox_skip_tls_verify=true -var proxmox_pool=SHARED -var proxmox_storage_pool=ludus -var proxmox_storage_format=qcow2 -var iso_storage_pool=ludus -var ansible_home=/opt/ludus/users/catshadowstep/.ansible -var ludus_nat_interface=vmbr1000 /opt/ludus/packer/securityonion-3/securityonion-3.pkr.hcl
+| securityonion-3-x64-template                    | linux   | 🚧 BUILDING  |
+===== 2026-08-09T01:06:34-04:00 =====
+PLOG:/opt/ludus/users/catshadowstep/packer/tmp/packer-log2848724388
+2026/08/09 00:50:57 ui: ==> proxmox-iso.securityonion3: Waiting 15s for boot
+2026/08/09 00:51:12 ui: ==> proxmox-iso.securityonion3: Typing the boot command
+2026/08/09 00:51:12 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:51:12 [INFO] Waiting 1m15s
+2026/08/09 00:52:27 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:27 [INFO] Waiting 3s
+2026/08/09 00:52:31 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:31 [INFO] Waiting 2s
+2026/08/09 00:52:34 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:34 [INFO] Waiting 2s
+2026/08/09 00:52:36 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:36 [INFO] Waiting 10m0s
+2026/08/09 01:02:36 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 01:02:36 [INFO] Waiting 3m0s
+2026/08/09 01:05:37 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 01:05:37 [INFO] Waiting 2s
+2026/08/09 01:05:40 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 01:05:40 [INFO] Waiting 20s
+2026/08/09 01:06:00 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 01:06:00 [INFO] Waiting 2s
+2026/08/09 01:06:02 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 01:06:02 [INFO] Waiting 2s
+2026/08/09 01:06:04 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 01:06:04 [INFO] Waiting 3s
+2026/08/09 01:06:13 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 01:06:13 [INFO] Waiting 2s
+2026/08/09 01:06:29 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 01:06:29 [INFO] Waiting 2s
+---
+       113 securityonion-3-x64-template running    8192             200.00 73364     
+status: running
+72830 packer build -on-error=cleanup -var proxmox_url=https://127.0.0.1:8006/api2/json -var proxmox_host=minipve -var proxmox_skip_tls_verify=true -var proxmox_pool=SHARED -var proxmox_storage_pool=ludus -var proxmox_storage_format=qcow2 -var iso_storage_pool=ludus -var ansible_home=/opt/ludus/users/catshadowstep/.ansible -var ludus_nat_interface=vmbr1000 /opt/ludus/packer/securityonion-3/securityonion-3.pkr.hcl
+72883 /usr/local/bin/packer build -on-error=cleanup -var proxmox_url=https://127.0.0.1:8006/api2/json -var proxmox_host=minipve -var proxmox_skip_tls_verify=true -var proxmox_pool=SHARED -var proxmox_storage_pool=ludus -var proxmox_storage_format=qcow2 -var iso_storage_pool=ludus -var ansible_home=/opt/ludus/users/catshadowstep/.ansible -var ludus_nat_interface=vmbr1000 /opt/ludus/packer/securityonion-3/securityonion-3.pkr.hcl
+| securityonion-3-x64-template                    | linux   | 🚧 BUILDING  |
+===== 2026-08-09T01:07:35-04:00 =====
+PLOG:/opt/ludus/users/catshadowstep/packer/tmp/packer-log2848724388
+2026/08/09 00:51:12 ui: ==> proxmox-iso.securityonion3: Typing the boot command
+2026/08/09 00:51:12 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:51:12 [INFO] Waiting 1m15s
+2026/08/09 00:52:27 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:27 [INFO] Waiting 3s
+2026/08/09 00:52:31 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:31 [INFO] Waiting 2s
+2026/08/09 00:52:34 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:34 [INFO] Waiting 2s
+2026/08/09 00:52:36 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 00:52:36 [INFO] Waiting 10m0s
+2026/08/09 01:02:36 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 01:02:36 [INFO] Waiting 3m0s
+2026/08/09 01:05:37 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 01:05:37 [INFO] Waiting 2s
+2026/08/09 01:05:40 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 01:05:40 [INFO] Waiting 20s
+2026/08/09 01:06:00 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 01:06:00 [INFO] Waiting 2s
+2026/08/09 01:06:02 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 01:06:02 [INFO] Waiting 2s
+2026/08/09 01:06:04 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 01:06:04 [INFO] Waiting 3s
+2026/08/09 01:06:13 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 01:06:13 [INFO] Waiting 2s
+2026/08/09 01:06:29 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 01:06:29 [INFO] Waiting 2s
+2026/08/09 01:07:03 packer-plugin-proxmox_v1.2.4_x5.0_linux_amd64 plugin: 2026/08/09 01:07:03 [INFO] Waiting 45s
+---
+       113 securityonion-3-x64-template running    8192             200.00 73364     
+status: running
+72830 packer build -on-error=cleanup -var proxmox_url=https://127.0.0.1:8006/api2/json -var proxmox_host=minipve -var proxmox_skip_tls_verify=true -var proxmox_pool=SHARED -var proxmox_storage_pool=ludus -var proxmox_storage_format=qcow2 -var iso_storage_pool=ludus -var ansible_home=/opt/ludus/users/catshadowstep/.ansible -var ludus_nat_interface=vmbr1000 /opt/ludus/packer/securityonion-3/securityonion-3.pkr.hcl
+72883 /usr/local/bin/packer build -on-error=cleanup -var proxmox_url=https://127.0.0.1:8006/api2/json -var proxmox_host=minipve -var proxmox_skip_tls_verify=true -var proxmox_pool=SHARED -var proxmox_storage_pool=ludus -var proxmox_storage_format=qcow2 -var iso_storage_pool=ludus -var ansible_home=/opt/ludus/users/catshadowstep/.ansible -var ludus_nat_interface=vmbr1000 /opt/ludus/packer/securityonion-3/securityonion-3.pkr.hcl
+| securityonion-3-x64-template                    | linux   | 🚧 BUILDING  |
+===== 2026-08-09T01:08:36-04:00 =====
+PLOG:/opt/ludus/users/catshadowstep/packer/tmp/packer-log1387697224
+2026/08/05 19:19:20 ui:     proxmox-iso.securityonion24: {"sessionId":"d940ab","runId":"post-fix","hypothesisId":"H31","location":"packer-provision-via-dhcp.sh","message":"scan_miss","data":{"elapsed":90,"ip":"none","diag":{"prefixes":"192.0.2,10.0.20,10.0.30,198.51.100","dhcp_ranges":"dhcp-range=192.0.2.50,192.0.2.100,255.255.255.0,5m;","lease_lines":0,"http_ip":"10.0.20.40"}},"timestamp":1785971960252}
+2026/08/05 19:19:35 ui:     proxmox-iso.securityonion24: {"sessionId":"d940ab","runId":"post-fix","hypothesisId":"H31","location":"packer-provision-via-dhcp.sh","message":"scan_start","data":{"elapsed":105,"diag":{"prefixes":"192.0.2,10.0.20,10.0.30,198.51.100","dhcp_ranges":"dhcp-range=192.0.2.50,192.0.2.100,255.255.255.0,5m;","lease_lines":0,"http_ip":"10.0.20.40"}},"timestamp":1785971975268}
+2026/08/05 19:19:38 ui:     proxmox-iso.securityonion24: {"sessionId":"d940ab","runId":"post-fix","hypothesisId":"H31","location":"packer-provision-via-dhcp.sh","message":"scan_miss","data":{"elapsed":105,"ip":"none","diag":{"prefixes":"192.0.2,10.0.20,10.0.30,198.51.100","dhcp_ranges":"dhcp-range=192.0.2.50,192.0.2.100,255.255.255.0,5m;","lease_lines":0,"http_ip":"10.0.20.40"}},"timestamp":1785971978046}
+2026/08/05 19:19:53 ui:     proxmox-iso.securityonion24: {"sessionId":"d940ab","runId":"post-fix","hypothesisId":"H31","location":"packer-provision-via-dhcp.sh","message":"scan_start","data":{"elapsed":120,"diag":{"prefixes":"192.0.2,10.0.20,10.0.30,198.51.100","dhcp_ranges":"dhcp-range=192.0.2.50,192.0.2.100,255.255.255.0,5m;","lease_lines":0,"http_ip":"10.0.20.40"}},"timestamp":1785971993062}
+2026/08/05 19:19:55 ui:     proxmox-iso.securityonion24: {"sessionId":"d940ab","runId":"post-fix","hypothesisId":"H31","location":"packer-provision-via-dhcp.sh","message":"scan_miss","data":{"elapsed":120,"ip":"none","diag":{"prefixes":"192.0.2,10.0.20,10.0.30,198.51.100","dhcp_ranges":"dhcp-range=192.0.2.50,192.0.2.100,255.255.255.0,5m;","lease_lines":0,"http_ip":"10.0.20.40"}},"timestamp":1785971995154}
+2026/08/05 19:20:10 ui:     proxmox-iso.securityonion24: {"sessionId":"d940ab","runId":"post-fix","hypothesisId":"H31","location":"packer-provision-via-dhcp.sh","message":"scan_start","data":{"elapsed":135,"diag":{"prefixes":"192.0.2,10.0.20,10.0.30,198.51.100","dhcp_ranges":"dhcp-range=192.0.2.50,192.0.2.100,255.255.255.0,5m;","lease_lines":0,"http_ip":"10.0.20.40"}},"timestamp":1785972010166}
+2026/08/05 19:20:12 ui:     proxmox-iso.securityonion24: {"sessionId":"d940ab","runId":"post-fix","hypothesisId":"H31","location":"packer-provision-via-dhcp.sh","message":"scan_miss","data":{"elapsed":135,"ip":"none","diag":{"prefixes":"192.0.2,10.0.20,10.0.30,198.51.100","dhcp_ranges":"dhcp-range=192.0.2.50,192.0.2.100,255.255.255.0,5m;","lease_lines":0,"http_ip":"10.0.20.40"}},"timestamp":1785972012945}
+2026/08/05 19:20:27 ui:     proxmox-iso.securityonion24: {"sessionId":"d940ab","runId":"post-fix","hypothesisId":"H31","location":"packer-provision-via-dhcp.sh","message":"scan_start","data":{"elapsed":150,"diag":{"prefixes":"192.0.2,10.0.20,10.0.30,198.51.100","dhcp_ranges":"dhcp-range=192.0.2.50,192.0.2.100,255.255.255.0,5m;","lease_lines":0,"http_ip":"10.0.20.40"}},"timestamp":1785972027961}
+2026/08/05 19:20:30 ui:     proxmox-iso.securityonion24: {"sessionId":"d940ab","runId":"post-fix","hypothesisId":"H31","location":"packer-provision-via-dhcp.sh","message":"scan_miss","data":{"elapsed":150,"ip":"none","diag":{"prefixes":"192.0.2,10.0.20,10.0.30,198.51.100","dhcp_ranges":"dhcp-range=192.0.2.50,192.0.2.100,255.255.255.0,5m;","lease_lines":0,"http_ip":"10.0.20.40"}},"timestamp":1785972030743}
+2026/08/05 19:20:45 ui:     proxmox-iso.securityonion24: {"sessionId":"d940ab","runId":"post-fix","hypothesisId":"H31","location":"packer-provision-via-dhcp.sh","message":"scan_start","data":{"elapsed":165,"diag":{"prefixes":"192.0.2,10.0.20,10.0.30,198.51.100","dhcp_ranges":"dhcp-range=192.0.2.50,192.0.2.100,255.255.255.0,5m;","lease_lines":0,"http_ip":"10.0.20.40"}},"timestamp":1785972045759}
+2026/08/05 19:20:48 ui:     proxmox-iso.securityonion24: {"sessionId":"d940ab","runId":"post-fix","hypothesisId":"H31","location":"packer-provision-via-dhcp.sh","message":"scan_miss","data":{"elapsed":165,"ip":"none","diag":{"prefixes":"192.0.2,10.0.20,10.0.30,198.51.100","dhcp_ranges":"dhcp-range=192.0.2.50,192.0.2.100,255.255.255.0,5m;","lease_lines":0,"http_ip":"10.0.20.40"}},"timestamp":1785972048531}
+2026/08/05 19:21:03 ui:     proxmox-iso.securityonion24: {"sessionId":"d940ab","runId":"post-fix","hypothesisId":"H31","location":"packer-provision-via-dhcp.sh","message":"scan_start","data":{"elapsed":180,"diag":{"prefixes":"192.0.2,10.0.20,10.0.30,198.51.100","dhcp_ranges":"dhcp-range=192.0.2.50,192.0.2.100,255.255.255.0,5m;","lease_lines":0,"http_ip":"10.0.20.40"}},"timestamp":1785972063546}
+2026/08/05 19:21:06 ui:     proxmox-iso.securityonion24: {"sessionId":"d940ab","runId":"post-fix","hypothesisId":"H31","location":"packer-provision-via-dhcp.sh","message":"scan_miss","data":{"elapsed":180,"ip":"none","diag":{"prefixes":"192.0.2,10.0.20,10.0.30,198.51.100","dhcp_ranges":"dhcp-range=192.0.2.50,192.0.2.100,255.255.255.0,5m;","lease_lines":0,"http_ip":"10.0.20.40"}},"timestamp":1785972066322}
+2026/08/05 19:21:21 ui:     proxmox-iso.securityonion24: {"sessionId":"d940ab","runId":"post-fix","hypothesisId":"H31","location":"packer-provision-via-dhcp.sh","message":"scan_start","data":{"elapsed":195,"diag":{"prefixes":"192.0.2,10.0.20,10.0.30,198.51.100","dhcp_ranges":"dhcp-range=192.0.2.50,192.0.2.100,255.255.255.0,5m;","lease_lines":0,"http_ip":"10.0.20.40"}},"timestamp":1785972081339}
+2026/08/05 19:21:24 ui:     proxmox-iso.securityonion24: {"sessionId":"d940ab","runId":"post-fix","hypothesisId":"H31","location":"packer-provision-via-dhcp.sh","message":"scan_miss","data":{"elapsed":195,"ip":"none","diag":{"prefixes":"192.0.2,10.0.20,10.0.30,198.51.100","dhcp_ranges":"dhcp-range=192.0.2.50,192.0.2.100,255.255.255.0,5m;","lease_lines":0,"http_ip":"10.0.20.40"}},"timestamp":1785972084119}
+---
+       113 securityonion-3-x64-template stopped    8192             200.00 0         
+status: stopped
+NO_PACKER
+| securityonion-3-x64-template                    | linux   | ✅ BUILT     |
+DONE_OK

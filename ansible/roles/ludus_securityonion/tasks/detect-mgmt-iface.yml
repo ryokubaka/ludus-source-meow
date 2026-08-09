@@ -1,0 +1,60 @@
+---
+# Prefer the interface that holds ansible_host (Ludus control IP).
+# Sniff NIC often gets DHCP and steals ansible_default_ipv4 / default route.
+- name: Prefer ansible_host as management IP
+  ansible.builtin.set_fact:
+    ludus_so_target_ip: "{{ ansible_host | default('', true) | string }}"
+
+- name: Locate interface holding ansible_host IP
+  ansible.builtin.shell: |
+    set -euo pipefail
+    TARGET="{{ ludus_so_target_ip }}"
+    if [[ -z "$TARGET" || "$TARGET" == "localhost" ]]; then
+      exit 2
+    fi
+    while read -r iface addr; do
+      [[ "$addr" == "$TARGET" ]] || continue
+      echo "$iface $addr"
+      exit 0
+    done < <(ip -4 -o addr show scope global | awk '{gsub(/\/.*/, "", $4); print $2, $4}')
+    exit 1
+  args:
+    executable: /bin/bash
+  register: ludus_so_mgmt_by_host
+  changed_when: false
+  failed_when: false
+
+- name: Set management iface from ansible_host match
+  ansible.builtin.set_fact:
+    ludus_so_mgmt_iface: "{{ ludus_so_mgmt_by_host.stdout.split()[0] }}"
+    ludus_so_mgmt_ip: "{{ ludus_so_mgmt_by_host.stdout.split()[1] }}"
+  when: ludus_so_mgmt_by_host.rc == 0 and (ludus_so_mgmt_by_host.stdout | trim | length) > 0
+
+- name: Fall back to ansible_default_ipv4 for management iface
+  ansible.builtin.set_fact:
+    ludus_so_mgmt_iface: "{{ ansible_default_ipv4.interface }}"
+    ludus_so_mgmt_ip: "{{ ansible_default_ipv4.address }}"
+  when: ludus_so_mgmt_iface is not defined
+
+- name: Require Ludus 10.x management address
+  ansible.builtin.assert:
+    that:
+      - ludus_so_mgmt_ip is defined
+      - ludus_so_mgmt_ip | length > 0
+      - ludus_so_mgmt_ip is match('^10\\.')
+      - ludus_so_mgmt_iface is defined
+      - ludus_so_mgmt_iface | length > 0
+    fail_msg: >
+      Expected Ludus 10.x management address on {{ inventory_hostname }}
+      (got ip={{ ludus_so_mgmt_ip | default('none') }}
+      iface={{ ludus_so_mgmt_iface | default('none') }},
+      ansible_host={{ ludus_so_target_ip | default('none') }},
+      default_ipv4={{ ansible_default_ipv4.address | default('none') }}
+      on {{ ansible_default_ipv4.interface | default('none') }}).
+
+- name: Derive Ludus router DNS from management address
+  ansible.builtin.set_fact:
+    ludus_so_dns_server: >-
+      10.{{ ludus_so_mgmt_ip.split('.')[1] }}.{{ ludus_so_mgmt_ip.split('.')[2] }}.254
+    ludus_so_mnic: "{{ ludus_so_mgmt_iface }}"
+    ludus_so_main_ip: "{{ ludus_so_mgmt_ip }}"

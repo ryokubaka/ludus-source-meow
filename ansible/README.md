@@ -8,7 +8,8 @@ Place each role under [`roles/`](./roles/) — either a normal directory or a **
 
 | Role | Purpose |
 |---|---|
-| [`ludus_securityonion`](./roles/ludus_securityonion/) | Attach sniff NIC via Proxmox API; run Security Onion `so-setup` (standalone-net default) |
+| [`ludus_securityonion`](./roles/ludus_securityonion/) | Attach sniff NIC via Proxmox API; run Security Onion `so-setup` (standalone-net default); heal `bond0` sniff enslavement |
+| [`ludus_so_elastic_agent`](./roles/ludus_so_elastic_agent/) | Deploy SO Elastic Agent to range endpoints (Linux/Windows) via Fleet `endpoints-initial` |
 
 Example submodule (run from repo root):
 

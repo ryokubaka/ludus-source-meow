@@ -1,0 +1,67 @@
+---
+- name: Skip Security Onion manager (agent is for endpoints)
+  ansible.builtin.debug:
+    msg: "Skipping {{ inventory_hostname }} — SO manager host."
+  when:
+    - ludus_so_agent_skip_manager | bool
+    - inventory_hostname == ludus_so_agent_manager
+
+- name: Resolve manager + enrollment + firewall
+  when: not (ludus_so_agent_skip_manager | bool and inventory_hostname == ludus_so_agent_manager)
+  block:
+    - name: Resolve SO manager connection facts
+      ansible.builtin.include_tasks: resolve-manager.yml
+
+    - name: Prepare Fleet access on SO manager (once per play)
+      ansible.builtin.include_tasks: prepare-manager.yml
+      run_once: true
+
+    - name: Load shared enrollment token
+      ansible.builtin.set_fact:
+        ludus_so_agent_token: "{{ hostvars['localhost'].ludus_so_agent_token_shared }}"
+      no_log: true
+
+    - name: Detect OS family for agent package
+      ansible.builtin.set_fact:
+        ludus_so_agent_os: >-
+          {{
+            'windows' if (ansible_os_family | default('') | lower) == 'windows'
+            else 'linux'
+          }}
+
+    - name: Check Linux install marker
+      ansible.builtin.stat:
+        path: "{{ ludus_so_agent_marker_linux }}"
+      register: ludus_so_agent_marker_stat
+      when: ludus_so_agent_os == 'linux'
+
+    - name: Check Windows install marker
+      ansible.windows.win_stat:
+        path: "{{ ludus_so_agent_marker_windows }}"
+      register: ludus_so_agent_marker_stat_win
+      when: ludus_so_agent_os == 'windows'
+
+    - name: Skip when already installed
+      ansible.builtin.debug:
+        msg: "Elastic Agent marker present on {{ inventory_hostname }}; skipping (set ludus_so_agent_force=true to reinstall)."
+      when:
+        - not (ludus_so_agent_force | bool)
+        - >
+          (ludus_so_agent_os == 'linux' and ludus_so_agent_marker_stat.stat.exists | default(false))
+          or (ludus_so_agent_os == 'windows' and ludus_so_agent_marker_stat_win.stat.exists | default(false))
+
+    - name: Install Elastic Agent on Linux
+      ansible.builtin.include_tasks: install-linux.yml
+      when:
+        - ludus_so_agent_os == 'linux'
+        - >
+          (ludus_so_agent_force | bool)
+          or not (ludus_so_agent_marker_stat.stat.exists | default(false))
+
+    - name: Install Elastic Agent on Windows
+      ansible.builtin.include_tasks: install-windows.yml
+      when:
+        - ludus_so_agent_os == 'windows'
+        - >
+          (ludus_so_agent_force | bool)
+          or not (ludus_so_agent_marker_stat_win.stat.exists | default(false))

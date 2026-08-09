@@ -1,0 +1,74 @@
+---
+# Run once on SO manager: open hostgroup + fetch enrollment token for endpoints-initial.
+- name: Wait for SO setup marker on manager
+  ansible.builtin.stat:
+    path: /etc/ludus-so-setup-complete
+  register: ludus_so_agent_so_marker
+  delegate_to: "{{ ludus_so_agent_manager }}"
+  become: true
+
+- name: Fail when SO setup incomplete
+  ansible.builtin.fail:
+    msg: >
+      {{ ludus_so_agent_manager }} missing /etc/ludus-so-setup-complete.
+      Deploy ryokubaka.ludus_securityonion first (depends_on).
+  when: not ludus_so_agent_so_marker.stat.exists
+
+- name: Allow range CIDR in SO elastic_agent_endpoint hostgroup
+  ansible.builtin.command: >
+    so-firewall --apply includehost elastic_agent_endpoint {{ ludus_so_agent_allow_cidr }}
+  register: ludus_so_agent_fw
+  changed_when: >
+    'already' not in (ludus_so_agent_fw.stdout | default('') | lower)
+    and 'already' not in (ludus_so_agent_fw.stderr | default('') | lower)
+  failed_when: >
+    ludus_so_agent_fw.rc != 0
+    and ('already' not in (
+      (ludus_so_agent_fw.stdout | default('') ~ ' ' ~ ludus_so_agent_fw.stderr | default(''))
+      | lower
+    ))
+  delegate_to: "{{ ludus_so_agent_manager }}"
+  become: true
+  when: ludus_so_agent_allow_cidr | length > 0
+
+- name: Fetch enrollment API key for policy from Fleet
+  ansible.builtin.shell: |
+    set -euo pipefail
+    source /usr/sbin/so-elastic-fleet-common
+    fleet_api "enrollment_api_keys?kuery=policy_id:{{ ludus_so_agent_policy_id }}" \
+      | jq -r '.list[0].api_key // .items[0].api_key // empty'
+  args:
+    executable: /bin/bash
+  register: ludus_so_agent_token_cmd
+  changed_when: false
+  no_log: true
+  delegate_to: "{{ ludus_so_agent_manager }}"
+  become: true
+  when: ludus_so_agent_enrollment_token | length == 0
+
+- name: Publish enrollment token on localhost (shared by all endpoints)
+  ansible.builtin.set_fact:
+    ludus_so_agent_token_shared: >-
+      {{
+        ludus_so_agent_enrollment_token
+        if (ludus_so_agent_enrollment_token | length > 0)
+        else (ludus_so_agent_token_cmd.stdout | default('') | trim)
+      }}
+  delegate_to: localhost
+  delegate_facts: true
+  no_log: true
+
+- name: Fail when enrollment token missing
+  ansible.builtin.fail:
+    msg: >
+      No Fleet enrollment token for policy '{{ ludus_so_agent_policy_id }}'.
+      Set ludus_so_agent_enrollment_token or verify Fleet on {{ ludus_so_agent_manager }}.
+  when: hostvars['localhost'].ludus_so_agent_token_shared | default('') | length == 0
+
+- name: Ensure installer cache dir on controller
+  ansible.builtin.file:
+    path: "{{ ludus_so_agent_cache_dir }}"
+    state: directory
+    mode: "0755"
+  delegate_to: localhost
+  become: false

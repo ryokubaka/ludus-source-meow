@@ -50,6 +50,16 @@ ludus templates build -n securityonion-2.4-x64-template
 ludus templates build -n securityonion-3-x64-template
 ```
 
+### Automated role deploy test
+
+After the SO VM exists on a range (e.g. GOAD + merged `catshadowstep-so`):
+
+```bash
+./scripts/test-role-deploy.sh full
+```
+
+See [`ansible/roles/ludus_securityonion/README.md`](./ansible/roles/ludus_securityonion/README.md#automated-testing-catshadowstep).
+
 Security Onion labs use the `ludus_securityonion` role to attach a sniff NIC (`net1`) via Proxmox API during deploy and run `so-setup`. [LUX](https://github.com/ryokubaka/ludus-ux) may also attach the same NIC (idempotent). Set bridge `ageing_time 0` on the range `vmbr` for packet capture — see [Ludus docs](https://docs.ludus.cloud/docs/networking#packet-capture).
 
 ## Ansible content
