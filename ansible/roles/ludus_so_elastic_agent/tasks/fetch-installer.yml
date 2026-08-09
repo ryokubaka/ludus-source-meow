@@ -6,6 +6,9 @@
   register: ludus_so_agent_cache_stat
   delegate_to: localhost
   become: false
+  vars:
+    ansible_connection: local
+    ansible_shell_type: sh
 
 - name: Fetch installer from SO manager to controller
   ansible.builtin.fetch:
@@ -14,4 +17,9 @@
     flat: true
   delegate_to: "{{ ludus_so_agent_manager }}"
   become: true
+  become_method: sudo
+  become_user: root
+  vars:
+    ansible_shell_type: sh
+    ansible_connection: ssh
   when: not ludus_so_agent_cache_stat.stat.exists

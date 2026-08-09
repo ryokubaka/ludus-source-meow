@@ -75,3 +75,4 @@ roles:
 - Ludus inter-VLAN default is DROP — add Fleet TCP ports (8220 / 5055 / 8443) toward the SO management VLAN.
 - Installers are ~200–300MB; first fetch caches under `/tmp/ludus-so-elastic-agent-cache` on the Ludus host.
 - Marker files: `/etc/ludus-so-elastic-agent-installed` (Linux), `C:\ProgramData\ludus-so-elastic-agent-installed` (Windows).
+- SO Fleet outputs use hostname **`manager`**. Role writes `manager → <SO IP>` into the guest hosts file (`ludus_so_agent_fix_manager_hosts`).

@@ -1,0 +1,34 @@
+---
+# Start Elastic trial (platinum-class features for 30 days) — mirrors GOAD-mod es_xpack_trial
+ludus_so_elastic_security_start_trial: true
+
+# Elastic Defend on endpoints-initial: leave DataCollection and turn protections on
+ludus_so_elastic_security_configure_defend: true
+# Fleet preset: DataCollection | NGAV | EDRComplete
+ludus_so_elastic_security_defend_preset: EDRComplete
+# Protection mode for malware / ransomware / memory / behavior: detect | prevent | off
+ludus_so_elastic_security_defend_mode: detect
+# Show endpoint-user popups for all protection types (SIEM alerts always fire in detect/prevent)
+ludus_so_elastic_security_defend_user_notify: true
+
+# Install Elastic prepackaged detection rules + enable all disabled rules
+ludus_so_elastic_security_enable_rules: true
+
+# Pause after prepackaged install (seconds) before enabling — Kibana needs settle time
+ludus_so_elastic_security_prepackaged_pause: 120
+
+# Bulk enable page size (Elastic API max 100)
+ludus_so_elastic_security_bulk_page_size: 100
+
+# Max enable loops (safety; 100 rules/loop × 50 = 5000 rules)
+ludus_so_elastic_security_enable_max_loops: 50
+
+# Marker after successful run
+ludus_so_elastic_security_marker: /etc/ludus-so-elastic-security-complete
+
+# Re-run even when marker present
+ludus_so_elastic_security_force: false
+
+# Require SO setup marker first
+ludus_so_elastic_security_require_so_setup: true
+ludus_so_setup_marker: /etc/ludus-so-setup-complete

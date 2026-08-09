@@ -66,7 +66,6 @@ fi
 
 bash -n "${ROOT}/scripts/install-qemu-guest-agent.sh"
 bash -n "${ROOT}/scripts/packer-provision-via-dhcp.sh"
-bash -n "${ROOT}/scripts/test-provision-against-vm.sh" 2>/dev/null || true
 pass=$((pass + 1))
 echo "PASS: bash -n syntax checks"
 

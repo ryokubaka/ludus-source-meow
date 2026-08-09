@@ -1,0 +1,85 @@
+---
+# Mirrors GOAD-mod elasticsearch-fleet.yml Detection Rule enablement block:
+# PUT prepackaged → wait → bulk-enable all disabled rules (chunks of 100).
+- name: Install all prepackaged detection rules
+  ansible.builtin.shell: |
+    set -euo pipefail
+    curl -sS -K /opt/so/conf/elasticsearch/curl.config \
+      -H 'kbn-xsrf: true' -H 'Content-Type: application/json' \
+      -X PUT 'http://localhost:5601/api/detection_engine/rules/prepackaged'
+  args:
+    executable: /bin/bash
+  register: ludus_so_elastic_security_prepackaged
+  become: true
+  changed_when: true
+  failed_when: >
+    ludus_so_elastic_security_prepackaged.rc != 0
+    and (ludus_so_elastic_security_prepackaged.stdout | default('') | length) == 0
+  # Kibana sometimes returns 500 while still succeeding (GOAD ignores errors)
+
+- name: Report prepackaged install response
+  ansible.builtin.debug:
+    msg: "{{ ludus_so_elastic_security_prepackaged.stdout | default('') | truncate(500) }}"
+
+- name: Pause for Kibana rule index settle
+  ansible.builtin.pause:
+    seconds: "{{ ludus_so_elastic_security_prepackaged_pause | int }}"
+
+- name: Enable all disabled detection rules in batches
+  ansible.builtin.shell: |
+    set -euo pipefail
+    PAGE_SIZE={{ ludus_so_elastic_security_bulk_page_size | int }}
+    MAX_LOOPS={{ ludus_so_elastic_security_enable_max_loops | int }}
+    CURL=(curl -sS -K /opt/so/conf/elasticsearch/curl.config -H 'kbn-xsrf: true' -H 'Content-Type: application/json')
+    enabled=0
+    loops=0
+    while (( loops < MAX_LOOPS )); do
+      loops=$((loops + 1))
+      resp=$("${CURL[@]}" \
+        "http://localhost:5601/api/detection_engine/rules/_find?per_page=${PAGE_SIZE}&page=1&filter=alert.attributes.enabled:false")
+      total=$(jq -r '.total // 0' <<<"$resp")
+      count=$(jq -r '.data | length' <<<"$resp")
+      if [[ "$total" -eq 0 || "$count" -eq 0 ]]; then
+        echo "done enabled=${enabled} remaining=0 loops=${loops}"
+        exit 0
+      fi
+      ids=$(jq -c '[.data[].id]' <<<"$resp")
+      bulk=$("${CURL[@]}" -X POST \
+        'http://localhost:5601/api/detection_engine/rules/_bulk_action' \
+        -d "{\"ids\": ${ids}, \"action\": \"enable\"}")
+      # tolerate partial failures; keep going while disabled remain
+      batch=$(jq -r '.data | length' <<<"$resp")
+      enabled=$((enabled + batch))
+      echo "loop=${loops} enabled_batch=${batch} total_disabled_before=${total}"
+      sleep 2
+    done
+    echo "max_loops_reached enabled=${enabled}" >&2
+    exit 1
+  args:
+    executable: /bin/bash
+  register: ludus_so_elastic_security_enable
+  become: true
+  changed_when: "'enabled_batch=' in (ludus_so_elastic_security_enable.stdout | default(''))"
+
+- name: Report rule enable summary
+  ansible.builtin.debug:
+    msg: "{{ ludus_so_elastic_security_enable.stdout_lines | default([]) | last }}"
+
+- name: Count remaining disabled rules
+  ansible.builtin.shell: |
+    set -euo pipefail
+    curl -sS -K /opt/so/conf/elasticsearch/curl.config -H 'kbn-xsrf: true' \
+      'http://localhost:5601/api/detection_engine/rules/_find?per_page=1&page=1&filter=alert.attributes.enabled:false' \
+      | jq -r '.total // 0'
+  args:
+    executable: /bin/bash
+  register: ludus_so_elastic_security_disabled_left
+  changed_when: false
+  become: true
+
+- name: Fail when disabled rules remain
+  ansible.builtin.fail:
+    msg: >
+      {{ ludus_so_elastic_security_disabled_left.stdout }} detection rules still disabled
+      after enable loops. Re-run with ludus_so_elastic_security_force=true.
+  when: (ludus_so_elastic_security_disabled_left.stdout | trim | int) > 0

@@ -50,16 +50,6 @@ ludus templates build -n securityonion-2.4-x64-template
 ludus templates build -n securityonion-3-x64-template
 ```
 
-### Automated role deploy test
-
-After the SO VM exists on a range (e.g. GOAD + merged `catshadowstep-so`):
-
-```bash
-./scripts/test-role-deploy.sh full
-```
-
-See [`ansible/roles/ludus_securityonion/README.md`](./ansible/roles/ludus_securityonion/README.md#automated-testing-catshadowstep).
-
 Security Onion labs use the `ludus_securityonion` role to attach a sniff NIC (`net1`) via Proxmox API during deploy and run `so-setup`. [LUX](https://github.com/ryokubaka/ludus-ux) may also attach the same NIC (idempotent). Set bridge `ageing_time 0` on the range `vmbr` for packet capture — see [Ludus docs](https://docs.ludus.cloud/docs/networking#packet-capture).
 
 ## Ansible content
@@ -67,6 +57,8 @@ Security Onion labs use the `ludus_securityonion` role to attach a sniff NIC (`n
 | Role | Purpose |
 |---|---|
 | [`ludus_securityonion`](./ansible/roles/ludus_securityonion/) | Attach sniff NIC; run `so-setup iso standalone-net` |
+| [`ludus_so_elastic_agent`](./ansible/roles/ludus_so_elastic_agent/) | Enroll Linux/Windows endpoints into SO Elastic Fleet |
+| [`ludus_so_elastic_security`](./ansible/roles/ludus_so_elastic_security/) | Trial license, Elastic Defend detect mode, enable Kibana detection rules |
 
 Roles and collections live under [`ansible/`](./ansible/). See [`ansible/README.md`](./ansible/README.md).
 

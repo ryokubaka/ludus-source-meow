@@ -6,28 +6,6 @@ Security Onion `so-setup iso <type>-net` (default **standalone-net**).
 
 Works with plain Ludus CLI/API deploy. No LUX required.
 
-## Automated testing (catshadowstep)
-
-End-to-end role test without watching logs manually:
-
-```bash
-# From ludus-source-meow repo (needs SSH to Ludus host; key from ludus-ux container or LUDUS_SSH_KEY)
-./scripts/test-role-deploy.sh full
-
-# Or via the template test runner
-./scripts/run-automated-tests.sh role-deploy
-```
-
-Defaults: range `catshadowstep`, VM `catshadowstep-so`, role `ryokubaka.ludus_securityonion`,
-deploy `--limit` + `--tags user-defined-roles` + `--only-roles`. Cleans stale `bond0`/marker,
-monitors `/opt/ludus/ranges/catshadowstep/ansible.log` (timeout 2h), verifies
-`/etc/ludus-so-setup-complete` and `so-status`.
-
-Useful env overrides: `SO_VM_IP=10.1.10.20`, `CLEANUP_BEFORE=0`, `SKIP_SOURCE_SYNC=1`,
-`DEPLOY_TIMEOUT_SEC=7200`.
-
-Modes: `full` | `deploy` | `monitor` | `verify`.
-
 ## Requirements
 
 - VM built from `securityonion-2.4-x64-template` or `securityonion-3-x64-template`
@@ -56,7 +34,7 @@ Modes: `full` | `deploy` | `monitor` | `verify`.
 | `ludus_so_setup_profile_suffix` | `net` | Profile suffix for so-setup |
 | `ludus_so_sniff_wait_timeout` | `1800` | Seconds to wait for sniff NIC in guest |
 | `ludus_so_web_user` | `onionadmin@ludus.local` | SOC user (TESTING profile) |
-| `ludus_so_web_password` | `0n10nAdm1n!` | SOC password |
+| `ludus_so_web_password` | `MeowMeow123` | SOC password |
 | `ludus_so_allow_cidr` | `""` | Firewall allow CIDR (empty → open in TESTING) |
 | `ludus_so_require_dns` | `true` | Fail before `so-setup` if SO repo hostnames do not resolve |
 | `ludus_so_range_number_override` | `""` | Rare fallback if range number extra var missing |

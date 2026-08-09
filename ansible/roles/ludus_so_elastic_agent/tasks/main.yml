@@ -29,6 +29,11 @@
             else 'linux'
           }}
 
+    # Fleet policy outputs use hostname "manager" — map it to SO IP before enroll.
+    - name: Map SO manager hostname for Fleet outputs
+      ansible.builtin.include_tasks: ensure-manager-hosts.yml
+      when: ludus_so_agent_fix_manager_hosts | default(true) | bool
+
     - name: Check Linux install marker
       ansible.builtin.stat:
         path: "{{ ludus_so_agent_marker_linux }}"

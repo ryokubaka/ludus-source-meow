@@ -1,3 +1,0 @@
-[2026-08-09T01:28:44-0400] Ludus host=10.0.20.40 user=catshadowstep range=catshadowstep vm=catshadowstep-so role=ryokubaka.ludus_securityonion
-[2026-08-09T01:28:44-0400] Monitoring /opt/ludus/ranges/catshadowstep/ansible.log + guest /root/sosetup.log (timeout 7200s, poll 45s)
-[2026-08-09T01:28:46-0400] … still running (0s elapsed, state=DEPLOYING)

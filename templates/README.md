@@ -14,7 +14,12 @@ Follows [Ludus template guidance](https://docs.ludus.cloud/docs/using-ludus/temp
 - Linux template requirements: qemu-guest-agent, SSH, python3, sudo, DHCP
 - Ansible playbooks (BSL order): `ludus-linux-prereqs.yml` → `securityonion-prep.yml` → `reset-machine-id.yml` → `reset-ssh-host-keys.yml`
 - Credentials: `onion:onion` (SO default; exception to `localuser:password` convention)
-- **Oracle Linux inventory:** Ludus maps SO to ansible group `ol`. Install `ansible/group_vars/ol.yml` on the Ludus host once: `./scripts/install-ol-group-vars.sh`
+- **Oracle Linux inventory:** Ludus maps SO to ansible group `ol`. Install `ansible/group_vars/ol.yml` on the Ludus host once:
+
+```bash
+LUDUS_HOST=your.ludus.host ./scripts/install-ol-group-vars.sh
+# optional: LUDUS_SSH_KEY=/path/to/key
+```
 
 **SO-specific:** stock ISO has no guest-agent during install ([proxmox#91](https://github.com/hashicorp/packer-plugin-proxmox/issues/91)), so packer uses `communicator=none` + shell-local DHCP SSH scan instead of BSL's `communicator=ssh` + packer ansible provisioner. Same playbooks and ansible env vars as BSL.
 
@@ -26,59 +31,23 @@ Follows [Ludus template guidance](https://docs.ludus.cloud/docs/using-ludus/temp
 4. shell-local SSH-scans Ludus DHCP **`192.0.2.50–100`**.
 5. Ansible hardens per Ludus Linux template requirements. `so-setup` runs at range deploy only.
 
-Sync to `/opt/ludus/packer/securityonion-2.4/` (or `securityonion-3/`). Log must show `H37-liburing-local-repo-20260808`.
+After installing from this source, Packer content lives under `/opt/ludus/packer/securityonion-2.4/` (or `securityonion-3/`). Provision logs print `SCRIPT_VERSION=1.0.0` from `packer-provision-via-dhcp.sh`.
 
-**CIFS note:** `ludus` storage is CIFS. Active GOAD/range VMs (105/106/109) can cause `storage-ludus`-locked timeouts during packer VM create. `run-automated-tests.sh full` pauses them automatically; manual builds may need `qm stop` on those VMs first.
+**Shared storage note:** If Ludus `ludus` storage is CIFS/NFS, heavy concurrent VM disk I/O during packer can cause storage lock timeouts. Pause busy range VMs for the build if that happens, then resume after.
 
 ```bash
 ludus templates build -n securityonion-2.4-x64-template
+ludus templates build -n securityonion-3-x64-template
 ```
 
-## Automated testing
+## Unit tests
 
-From repo root (uses ludus-ux SSH key via Docker if needed):
-
-```bash
-./scripts/run-automated-tests.sh unit          # ~1s local
-./scripts/run-automated-tests.sh sync          # rsync to Ludus /opt/ludus/packer/
-./scripts/run-automated-tests.sh integration   # live VM on Ludus (~1–2 min)
-./scripts/run-automated-tests.sh full          # sync + ludus templates build
-```
-
-Env: `SO_TEMPLATE=securityonion-2.4|securityonion-3`, `LUDUS_HOST=10.0.20.40`, `SO_TEST_IP=`.
-
-## Fast testing (skip 15m packer ISO install)
-
-### 1. Unit tests (~1s, any machine)
-
-Validates liburing + guest-agent RPM pairing logic:
+Validates liburing + guest-agent RPM pairing logic (no Ludus host required):
 
 ```bash
 cd templates/securityonion-2.4
 bash tests/test-qemu-ga-logic.sh
+
+cd templates/securityonion-3
+bash tests/test-qemu-ga-logic.sh
 ```
-
-### 2. Guest-agent only on live SO VM (~30s, Ludus host)
-
-While packer VM still up (or any `onion` SSH reachable VM):
-
-```bash
-cd /opt/ludus/packer/securityonion-2.4
-SO_TEST_IP=192.0.2.65 SSH_PASS=onion ./scripts/test-provision-against-vm.sh --guest-agent-only
-```
-
-### 3. Full ansible provision only (~1–2 min, Ludus host)
-
-Same playbooks as packer, no ISO:
-
-```bash
-cd /opt/ludus/packer/securityonion-2.4
-SO_TEST_IP=192.0.2.65 \
-ANSIBLE_HOME=/opt/ludus/users/catshadowstep/.ansible \
-SSH_PASS=onion \
-./scripts/test-provision-against-vm.sh
-```
-
-Omit `SO_TEST_IP` to auto-scan Ludus DHCP `.50–.100` (same as packer).
-
-**Workflow:** start packer build → when VM at login/shell with SSH, run test #2 or #3 in another terminal → fix → re-test in seconds → full packer only when tests pass.

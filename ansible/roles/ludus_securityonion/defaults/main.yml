@@ -33,7 +33,7 @@ ludus_so_min_nics: 2
 
 # SOC / web user for TESTING profiles (overridden by so-setup defaults when TESTING=true)
 ludus_so_web_user: "onionadmin@ludus.local"
-ludus_so_web_password: "0n10nAdm1n!"
+ludus_so_web_password: "MeowMeow123"
 
 # CIDR allowed through SO host firewall to SOC (range /16 recommended)
 # Leave empty to use 0.0.0.0/0 in TESTING profile defaults

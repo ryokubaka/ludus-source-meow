@@ -1,6 +1,6 @@
 #!/bin/bash
 # Install qemu-guest-agent on stock Security Onion (ISO-local /nsm/repo or Oracle OL9 repos).
-# Used by ludus-linux-prereqs.yml and test-provision-against-vm.sh.
+# Used by ludus-linux-prereqs.yml during Packer provision.
 #
 # Env:
 #   SO_REPO_PATHS  colon-separated dirs to search before defaults (for unit tests)
