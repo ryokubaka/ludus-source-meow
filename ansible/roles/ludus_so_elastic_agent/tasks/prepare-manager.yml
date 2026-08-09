@@ -34,10 +34,49 @@
       Then redeploy so ludus_securityonion finishes before this role.
   when: not (ludus_so_agent_so_marker.stat.exists | default(false))
 
+# Marker alone is not enough — a false-complete can leave /opt/so empty (no so-firewall).
+- name: Verify SO manager install artifacts (so-firewall)
+  ansible.builtin.shell: |
+    set -euo pipefail
+    if command -v so-firewall >/dev/null 2>&1; then
+      command -v so-firewall
+      exit 0
+    fi
+    if [[ -x /usr/sbin/so-firewall ]]; then
+      echo /usr/sbin/so-firewall
+      exit 0
+    fi
+    echo "missing-so-firewall"
+    ls -la /opt/so 2>&1 | head -5 || true
+    exit 1
+  args:
+    executable: /bin/bash
+  register: ludus_so_agent_fw_bin
+  changed_when: false
+  retries: "{{ ((ludus_so_agent_setup_wait_timeout | int) / (ludus_so_agent_setup_wait_sleep | int)) | int }}"
+  delay: "{{ ludus_so_agent_setup_wait_sleep | int }}"
+  until: ludus_so_agent_fw_bin.rc | int == 0
+  ignore_errors: true
+  delegate_to: "{{ ludus_so_agent_manager }}"
+  become: true
+  become_method: sudo
+  become_user: root
+  vars:
+    ansible_shell_type: sh
+    ansible_connection: ssh
+
+- name: Fail when so-firewall missing on manager
+  ansible.builtin.fail:
+    msg: >
+      {{ ludus_so_agent_manager }} has {{ ludus_so_agent_setup_marker }} but so-firewall is missing
+      (SO install incomplete / false-complete marker). Remove the marker and redeploy
+      ryokubaka.ludus_securityonion. Last check: {{ ludus_so_agent_fw_bin.stdout | default('') }}.
+  when: ludus_so_agent_fw_bin.rc | default(1) != 0
+
 - name: Allow range CIDR in SO elastic_agent_endpoint hostgroup
   ansible.builtin.command:
     argv:
-      - so-firewall
+      - "{{ ludus_so_agent_fw_bin.stdout | trim }}"
       - --apply
       - includehost
       - elastic_agent_endpoint

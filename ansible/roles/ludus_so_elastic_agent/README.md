@@ -3,7 +3,7 @@
 Deploys the Security Onion Elastic Agent to Ludus range endpoints.
 
 - Resolves the range SO manager (`{{ range_id }}-so` by default)
-- Waits for `/etc/ludus-so-setup-complete` on the manager
+- Waits for `/etc/ludus-so-setup-complete` on the manager, then verifies `so-firewall` exists (rejects false-complete markers)
 - Opens SO hostgroup `elastic_agent_endpoint` for the range CIDR (`so-firewall`)
 - Fetches the Fleet enrollment token for `endpoints-initial`
 - Pulls the SO-bundled installer from `/nsm/elastic-fleet/so_agent-installers/`

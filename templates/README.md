@@ -27,7 +27,7 @@ LUDUS_HOST=your.ludus.host ./scripts/install-ol-group-vars.sh
 
 1. Stock ISO: `yes` / `onion`×3 / Enter (~10m) / reboot.
 2. Login → **Cancel so-setup** (autostarts; blocks shell/DHCP).
-3. Strip so-setup from profiles; `nmcli`/`dhclient` + sshd.
+3. Strip so-setup from profiles; wipe cancelled `sosetup.log`/`installtmp`; `nmcli`/`dhclient` + sshd.
 4. shell-local SSH-scans Ludus DHCP **`192.0.2.50–100`**.
 5. Ansible hardens per Ludus Linux template requirements. `so-setup` runs at range deploy only.
 
