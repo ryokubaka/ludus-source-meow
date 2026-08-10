@@ -2,9 +2,11 @@
 # Install type passed to so-setup test_profile: standalone (default) or eval
 ludus_so_install_type: standalone
 
-# so-setup standalone refuses to run below this (GiB).
+# so-setup standalone refuses to run below this MemTotal (GiB). Matches upstream iso check.
 ludus_so_mem_min_gb: 16
-
+# Proxmox memory/balloon to apply when MemTotal is low. 16 GiB config often yields
+# ~15 GiB MemTotal after kernel reserve — use 20 so the guest clears the 16 GiB floor.
+ludus_so_mem_target_gb: 20
 # so-setup profile suffix: net (DHCP/lab) or iso
 ludus_so_setup_profile_suffix: net
 
@@ -18,7 +20,6 @@ ludus_so_proxmox_api_token: ""
 ludus_so_proxmox_api_secret: ""
 # Optional Proxmox VM name when inventory_hostname is short (GOAD: "so")
 ludus_so_proxmox_vm_name: ""
-
 
 # VLAN tag on the range bridge for sniff traffic (targets VLAN in SO lab blueprints)
 ludus_so_sniff_tag: 10

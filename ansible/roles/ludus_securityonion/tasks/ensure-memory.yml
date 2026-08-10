@@ -2,23 +2,22 @@
 # so-setup standalone: "This install type will fail with less than 16 GB of memory."
 # Ludus ram_min_gb/balloon can leave the guest under that floor. Raising Proxmox
 # balloon alone often does NOT lift MemTotal until the guest reboots.
+# slurp + Jinja regex_replace often yields 0 for MemTotal; awk is reliable.
 - name: Read guest MemTotal (KiB)
-  ansible.builtin.slurp:
-    src: /proc/meminfo
-  register: ludus_so_meminfo_raw
+  ansible.builtin.shell: |
+    set -euo pipefail
+    awk '/^MemTotal:/{print $2; exit}' /proc/meminfo
+  args:
+    executable: /bin/bash
+  register: ludus_so_meminfo_awk
+  changed_when: false
 
 - name: Parse MemTotal
   ansible.builtin.set_fact:
-    ludus_so_mem_total_kib: >-
-      {{
-        (ludus_so_meminfo_raw.content | b64decode).splitlines()
-        | select('match', '^MemTotal:')
-        | first
-        | regex_replace('^MemTotal:\\s*(\\d+)\\s*kB.*$', '\\1')
-        | int
-      }}
+    ludus_so_mem_total_kib: "{{ ludus_so_meminfo_awk.stdout | trim | int }}"
     ludus_so_mem_min_kib: "{{ (ludus_so_mem_min_gb | default(16) | int) * 1024 * 1024 }}"
-    ludus_so_mem_target_mib: "{{ [ludus_so_mem_min_gb | default(16) | int * 1024, 16384] | max }}"
+    # Prefer 20 GiB Proxmox RAM: a 16 GiB VM commonly reports ~15 GiB MemTotal.
+    ludus_so_mem_target_mib: "{{ [ludus_so_mem_target_gb | default(20) | int, 20] | max * 1024 }}"
 
 - name: Report guest memory
   ansible.builtin.debug:
@@ -194,7 +193,8 @@
     msg: >
       Guest MemTotal is {{ (ludus_so_mem_total_kib | int / 1024 / 1024) | round(1) }} GiB;
       so-setup {{ ludus_so_install_type }} requires ≥ {{ ludus_so_mem_min_gb | default(16) }} GiB.
-      Set Ludus ram_min_gb ≥ 16 and ram_gb ≥ 16, then on Proxmox:
-      `qm set <vmid> --memory 16384 --balloon 16384` (or 24576) and reboot the guest,
-      then re-run provision_extension. Hot balloon alone usually does not raise MemTotal.
+      Set Ludus ram_min_gb ≥ 16 and ram_gb ≥ 20, then on Proxmox:
+      `qm set <vmid> --memory 20480 --balloon 20480` and reboot the guest,
+      then re-run provision_extension. A 16 GiB VM often shows ~15 GiB MemTotal
+      (kernel reserve) and still fails so-setup; hot balloon alone does not fix it.
   when: (ludus_so_mem_total_kib | int) < (ludus_so_mem_min_kib | int)

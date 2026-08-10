@@ -1,0 +1,22 @@
+---
+# so-setup can exit ( /opt/so + so-firewall ) before Elasticsearch accepts API.
+# so-elasticsearch-query rc 7 = curl could not connect.
+- name: Wait for Elasticsearch cluster health (yellow/green)
+  ansible.builtin.command: so-elasticsearch-query _cluster/health
+  register: ludus_so_elastic_security_es_health
+  until: >
+    ludus_so_elastic_security_es_health.rc == 0
+    and (ludus_so_elastic_security_es_health.stdout | default('') | length) > 0
+    and (ludus_so_elastic_security_es_health.stdout | from_json).status | default('')
+       in ['yellow', 'green']
+  retries: "{{ ludus_so_elastic_security_es_wait_retries | int }}"
+  delay: "{{ ludus_so_elastic_security_es_wait_delay | int }}"
+  changed_when: false
+  become: true
+
+- name: Report Elasticsearch readiness
+  ansible.builtin.debug:
+    msg: >-
+      Elasticsearch
+      status={{ (ludus_so_elastic_security_es_health.stdout | from_json).status | default('?') }}
+      cluster={{ (ludus_so_elastic_security_es_health.stdout | from_json).cluster_name | default('?') }}
