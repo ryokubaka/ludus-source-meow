@@ -22,7 +22,7 @@ network:
       vlan_src: 10
       vlan_dst: 20
       protocol: tcp
-      ports: [8220, 5055, 8443]
+      ports: "8220,5055,8443"
       action: ACCEPT
 
 ludus:
