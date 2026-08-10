@@ -47,22 +47,16 @@ The SO VM must resolve those via **Ludus range router DNS**:
 
 `10.<range_number>.<vlan>.254` (example: vlan 10 → `10.1.10.254`, vlan 20 → `10.1.20.254`)
 
-**Most common failure: Ludus Testing Mode is ON.** Testing blocks outbound DNS on the
-range router unless domains are allowlisted — `ping google.com` fails even when
-`resolv.conf` points at `10.1.10.254`.
-
-In `range-config.yml` for the SO VM:
-
-```yaml
-testing:
-  block_internet: false   # required on the SO VM
-```
+**Most common failure: Ludus Testing Mode is ON.** Testing blocks outbound
+internet/DNS on the range router (by design) — `so-setup` cannot reach
+`repo.securityonion.net` until testing is stopped (or those hosts are allowlisted).
 
 **Fix order:**
 
-1. **Stop Testing Mode** on the range (LUX → Testing, or Ludus `testing/stop`).
+1. **Stop Testing Mode** before deploy / so-setup (LUX → Testing, or Ludus `testing/stop`).
 2. If testing must stay on, allowlist `repo.securityonion.net` and `repo-alt.securityonion.net`.
-3. Ensure `block_internet: false` on the SO VM; redeploy after `ludus source update meow`.
+3. Do **not** set `testing.block_internet: false` on the SO VM just to bypass this —
+   leave default blocking so enabling testing later actually isolates the range.
 
 Quick check from the SO VM:
 
