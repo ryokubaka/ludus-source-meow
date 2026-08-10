@@ -78,7 +78,7 @@ Vendored copies under `ansible/roles/` or `ansible/collections/` win — Ludus i
 ### Should Have
 
 - Theme-consistent hostnames
-- Attacker VMs: `testing.snapshot: false`, `testing.block_internet: false`
+- Attacker VMs: `testing.snapshot: false`
 - DCs: `sysprep: false`; member servers: `sysprep: true`
 
 ### Must NOT Have

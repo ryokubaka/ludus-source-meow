@@ -146,12 +146,10 @@
 
       This is almost always Ludus testing mode or firewall — not a Security Onion bug:
         1. Stop Testing Mode on this range (LUX Testing page or ludus API testing/stop).
-           Testing mode blocks outbound DNS unless domains are allowlisted.
+           Testing mode blocks outbound DNS/internet by design — stop it before so-setup.
         2. If testing must stay ON, allowlist at minimum:
            repo.securityonion.net, repo-alt.securityonion.net
-        3. In range-config.yml for the SO VM set:
-           testing: { block_internet: false }
-        4. From this VM: ping -c1 {{ ludus_so_dns_server }}
+        3. From this VM: ping -c1 {{ ludus_so_dns_server }}
            then dig @{{ ludus_so_dns_server }} google.com
-        5. Confirm range router VM is running and network rules were deployed.
+        4. Confirm range router VM is running and network rules were deployed.
   when: ludus_so_router_dns_test.stdout | default('') | trim | length == 0
