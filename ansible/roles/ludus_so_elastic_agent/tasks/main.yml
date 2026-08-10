@@ -64,10 +64,12 @@
         - ludus_so_agent_os == 'linux'
         - ludus_so_agent_marker_stat.stat.exists | default(false)
 
+    # win_shell+Get-Content — avoid ansible.windows.win_slurp (not in older collections)
     - name: Read Windows marker contents
-      ansible.windows.win_slurp:
-        src: "{{ ludus_so_agent_marker_windows }}"
-      register: ludus_so_agent_marker_slurp_win
+      ansible.windows.win_shell: |
+        Get-Content -Raw -LiteralPath '{{ ludus_so_agent_marker_windows }}'
+      register: ludus_so_agent_marker_win_text
+      changed_when: false
       when:
         - ludus_so_agent_os == 'windows'
         - ludus_so_agent_marker_stat_win.stat.exists | default(false)
@@ -93,7 +95,7 @@
 
     - name: Decode Windows marker text
       ansible.builtin.set_fact:
-        ludus_so_agent_marker_text: "{{ ludus_so_agent_marker_slurp_win.content | b64decode }}"
+        ludus_so_agent_marker_text: "{{ ludus_so_agent_marker_win_text.stdout | default('') }}"
       when:
         - ludus_so_agent_os == 'windows'
         - ludus_so_agent_marker_stat_win.stat.exists | default(false)

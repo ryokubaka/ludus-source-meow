@@ -27,9 +27,9 @@
   changed_when: ludus_so_agent_win_uninstall.rc | default(1) == 0
 
 - name: Remove Windows install marker after uninstall
-  ansible.windows.win_file:
-    path: "{{ ludus_so_agent_marker_windows }}"
-    state: absent
+  ansible.windows.win_shell: |
+    $p = '{{ ludus_so_agent_marker_windows }}'
+    if (Test-Path -LiteralPath $p) { Remove-Item -LiteralPath $p -Force }
   when: >
     (ludus_so_agent_bin_win.stat.exists | default(false))
     or (ludus_so_agent_marker_stat_win.stat.exists | default(false))
