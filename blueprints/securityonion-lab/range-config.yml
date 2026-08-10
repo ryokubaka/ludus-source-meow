@@ -57,6 +57,7 @@ ludus:
     linux: true
     testing:
       snapshot: false
+      block_internet: true
     roles:
       - name: ryokubaka.ludus_securityonion
       - name: ryokubaka.ludus_so_elastic_security
@@ -80,6 +81,7 @@ ludus:
       role: primary-dc
     testing:
       snapshot: true
+      block_internet: true
     roles:
       # depends_on must be under the role (not the VM) — Ludus cross-VM ordering
       - name: ryokubaka.ludus_so_elastic_agent
@@ -101,6 +103,7 @@ ludus:
       role: member
     testing:
       snapshot: true
+      block_internet: true
     roles:
       - name: ryokubaka.ludus_so_elastic_agent
         depends_on:
@@ -117,6 +120,7 @@ ludus:
     linux: true
     testing:
       snapshot: false
+      block_internet: true
     roles:
       - name: badsectorlabs.ludus_adaptix_c2
     role_vars:

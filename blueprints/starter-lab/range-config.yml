@@ -45,3 +45,4 @@ ludus:
     linux: true
     testing:
       snapshot: false
+      block_internet: true

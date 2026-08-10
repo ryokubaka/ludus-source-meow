@@ -55,8 +55,8 @@ internet/DNS on the range router (by design) — `so-setup` cannot reach
 
 1. **Stop Testing Mode** before deploy / so-setup (LUX → Testing, or Ludus `testing/stop`).
 2. If testing must stay on, allowlist `repo.securityonion.net` and `repo-alt.securityonion.net`.
-3. Do **not** set `testing.block_internet: false` on the SO VM just to bypass this —
-   leave default blocking so enabling testing later actually isolates the range.
+3. If the SO VM has a `testing:` block, set `block_internet: true` (Ludus requires
+   the key). Never use `false` to bypass isolation for so-setup.
 
 Quick check from the SO VM:
 

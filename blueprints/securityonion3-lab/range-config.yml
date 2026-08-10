@@ -57,6 +57,7 @@ ludus:
     linux: true
     testing:
       snapshot: false
+      block_internet: true
     roles:
       - name: ryokubaka.ludus_securityonion
       - name: ryokubaka.ludus_so_elastic_security
@@ -119,6 +120,7 @@ ludus:
     linux: true
     testing:
       snapshot: false
+      block_internet: true
     roles:
       - name: badsectorlabs.ludus_adaptix_c2
     role_vars:
