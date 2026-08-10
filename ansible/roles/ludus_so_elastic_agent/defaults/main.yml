@@ -39,6 +39,13 @@ ludus_so_agent_setup_wait_sleep: 15
 # Re-run installer even when marker / service present
 ludus_so_agent_force: false
 
+# Tear down any prior agent before enroll (needed when SO manager IP/Fleet changes)
+ludus_so_agent_uninstall_before_install: true
+ludus_so_agent_install_path_linux: /opt/Elastic/Agent
+ludus_so_agent_install_path_windows: 'C:\Program Files\Elastic\Agent'
+# Optional Elastic Defend tamper-protection uninstall token
+ludus_so_agent_uninstall_token: ""
+
 # Marker written after successful enroll
 ludus_so_agent_marker_linux: /etc/ludus-so-elastic-agent-installed
 ludus_so_agent_marker_windows: 'C:\ProgramData\ludus-so-elastic-agent-installed'

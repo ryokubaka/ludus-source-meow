@@ -19,8 +19,9 @@ network:
       protocol: all
       ports: all
       action: ACCEPT
-    - name: Allow Kali to SO SOC HTTPS
-      vlan_src: 99
+    # Blue team (VLAN 10 targets) → SOC UI; red team Kali (99) deliberately blocked
+    - name: Allow Target VLAN to SO SOC HTTPS
+      vlan_src: 10
       vlan_dst: 20
       protocol: tcp
       ports: 443

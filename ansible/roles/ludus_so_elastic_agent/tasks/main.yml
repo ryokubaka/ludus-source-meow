@@ -21,11 +21,20 @@
         ludus_so_agent_token: "{{ hostvars['localhost'].ludus_so_agent_token_shared }}"
       no_log: true
 
+    # Prefer connection/shell over os_family — facts often empty on WinRM before
+    # setup finishes, which mis-classified DCs as linux and ran sudo→powershell.
     - name: Detect OS family for agent package
       ansible.builtin.set_fact:
         ludus_so_agent_os: >-
           {{
-            'windows' if (ansible_os_family | default('') | lower) == 'windows'
+            'windows'
+            if (
+              (ansible_connection | default('') | lower) in ['winrm', 'psrp']
+              or (ansible_shell_type | default('') | lower) == 'powershell'
+              or (ansible_os_family | default('') | lower) == 'windows'
+              or (ansible_facts.os_family | default('') | lower) == 'windows'
+              or (ansible_facts.ansible_os_family | default('') | lower) == 'windows'
+            )
             else 'linux'
           }}
 
@@ -46,27 +55,115 @@
       register: ludus_so_agent_marker_stat_win
       when: ludus_so_agent_os == 'windows'
 
-    - name: Skip when already installed
-      ansible.builtin.debug:
-        msg: "Elastic Agent marker present on {{ inventory_hostname }}; skipping (set ludus_so_agent_force=true to reinstall)."
+    - name: Read Linux marker contents
+      ansible.builtin.slurp:
+        src: "{{ ludus_so_agent_marker_linux }}"
+      register: ludus_so_agent_marker_slurp
       when:
-        - not (ludus_so_agent_force | bool)
+        - ludus_so_agent_os == 'linux'
+        - ludus_so_agent_marker_stat.stat.exists | default(false)
+
+    - name: Read Windows marker contents
+      ansible.windows.win_slurp:
+        src: "{{ ludus_so_agent_marker_windows }}"
+      register: ludus_so_agent_marker_slurp_win
+      when:
+        - ludus_so_agent_os == 'windows'
+        - ludus_so_agent_marker_stat_win.stat.exists | default(false)
+
+    - name: Check for installed Elastic Agent binary (Linux)
+      ansible.builtin.stat:
+        path: "{{ ludus_so_agent_install_path_linux }}/elastic-agent"
+      register: ludus_so_agent_bin_linux
+      when: ludus_so_agent_os == 'linux'
+
+    - name: Check for installed Elastic Agent binary (Windows)
+      ansible.windows.win_stat:
+        path: "{{ ludus_so_agent_install_path_windows }}\\elastic-agent.exe"
+      register: ludus_so_agent_bin_win
+      when: ludus_so_agent_os == 'windows'
+
+    - name: Decode Linux marker text
+      ansible.builtin.set_fact:
+        ludus_so_agent_marker_text: "{{ ludus_so_agent_marker_slurp.content | b64decode }}"
+      when:
+        - ludus_so_agent_os == 'linux'
+        - ludus_so_agent_marker_stat.stat.exists | default(false)
+
+    - name: Decode Windows marker text
+      ansible.builtin.set_fact:
+        ludus_so_agent_marker_text: "{{ ludus_so_agent_marker_slurp_win.content | b64decode }}"
+      when:
+        - ludus_so_agent_os == 'windows'
+        - ludus_so_agent_marker_stat_win.stat.exists | default(false)
+
+    - name: Default empty marker text when absent
+      ansible.builtin.set_fact:
+        ludus_so_agent_marker_text: ""
+      when: ludus_so_agent_marker_text is not defined
+
+    - name: Detect installed agent binary
+      ansible.builtin.set_fact:
+        ludus_so_agent_bin_present: >-
+          {{
+            (ludus_so_agent_os == 'linux' and ludus_so_agent_bin_linux.stat.exists | default(false))
+            or (ludus_so_agent_os == 'windows' and ludus_so_agent_bin_win.stat.exists | default(false))
+          }}
+
+    - name: Set enroll skip / install flags
+      ansible.builtin.set_fact:
+        # Already enrolled to this Fleet URL and agent still on disk — idempotent skip
+        ludus_so_agent_already_current: >-
+          {{
+            (not (ludus_so_agent_force | bool))
+            and (ludus_so_agent_bin_present | bool)
+            and (ludus_so_agent_fleet_url_resolved | string in (ludus_so_agent_marker_text | default('')))
+          }}
+        ludus_so_agent_needs_install: >-
+          {{
+            (ludus_so_agent_force | bool)
+            or not (
+              (ludus_so_agent_bin_present | bool)
+              and (ludus_so_agent_fleet_url_resolved | string in (ludus_so_agent_marker_text | default('')))
+            )
+          }}
+
+    - name: Skip when already enrolled to current SO Fleet
+      ansible.builtin.debug:
+        msg: >-
+          Elastic Agent on {{ inventory_hostname }} already points at
+          {{ ludus_so_agent_fleet_url_resolved }}; skipping
+          (set ludus_so_agent_force=true to reinstall).
+      when: ludus_so_agent_already_current | bool
+
+    - name: Uninstall existing Elastic Agent on Linux
+      ansible.builtin.include_tasks: uninstall-linux.yml
+      when:
+        - ludus_so_agent_os == 'linux'
+        - ludus_so_agent_needs_install | bool
+        - ludus_so_agent_uninstall_before_install | bool
         - >
-          (ludus_so_agent_os == 'linux' and ludus_so_agent_marker_stat.stat.exists | default(false))
-          or (ludus_so_agent_os == 'windows' and ludus_so_agent_marker_stat_win.stat.exists | default(false))
+          (ludus_so_agent_bin_present | bool)
+          or (ludus_so_agent_marker_stat.stat.exists | default(false))
+
+    - name: Uninstall existing Elastic Agent on Windows
+      ansible.builtin.include_tasks: uninstall-windows.yml
+      when:
+        - ludus_so_agent_os == 'windows'
+        - ludus_so_agent_needs_install | bool
+        - ludus_so_agent_uninstall_before_install | bool
+        - >
+          (ludus_so_agent_bin_present | bool)
+          or (ludus_so_agent_marker_stat_win.stat.exists | default(false))
 
     - name: Install Elastic Agent on Linux
       ansible.builtin.include_tasks: install-linux.yml
       when:
         - ludus_so_agent_os == 'linux'
-        - >
-          (ludus_so_agent_force | bool)
-          or not (ludus_so_agent_marker_stat.stat.exists | default(false))
+        - ludus_so_agent_needs_install | bool
 
     - name: Install Elastic Agent on Windows
       ansible.builtin.include_tasks: install-windows.yml
       when:
         - ludus_so_agent_os == 'windows'
-        - >
-          (ludus_so_agent_force | bool)
-          or not (ludus_so_agent_marker_stat_win.stat.exists | default(false))
+        - ludus_so_agent_needs_install | bool

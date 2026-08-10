@@ -7,7 +7,11 @@
     line: "{{ ludus_so_agent_manager_ip_resolved }} manager"
     state: present
   become: true
-  when: ludus_so_agent_os == 'linux'
+  when:
+    - ludus_so_agent_os == 'linux'
+    # Belt-and-suspenders: never sudo on WinRM/PowerShell hosts
+    - (ansible_connection | default('ssh') | lower) not in ['winrm', 'psrp']
+    - (ansible_shell_type | default('') | lower) != 'powershell'
 
 # ansible.windows.win_lineinfile not always present on Ludus controllers — use PowerShell.
 - name: Ensure manager hostname in Windows hosts file
@@ -19,15 +23,21 @@
     ($content + $line) | Set-Content -Path $hosts -Encoding ASCII
     Select-String -Path $hosts -Pattern '\smanager(\s|$)' | ForEach-Object { $_.Line }
   register: ludus_so_agent_hosts_win
+  become: false
   changed_when: >
     ludus_so_agent_manager_ip_resolved not in (ludus_so_agent_hosts_win.stdout | default(''))
     or 'manager' not in (ludus_so_agent_hosts_win.stdout | default(''))
-  when: ludus_so_agent_os == 'windows'
+  when:
+    - ludus_so_agent_os == 'windows'
+    - (ansible_connection | default('') | lower) in ['winrm', 'psrp']
+      or (ansible_shell_type | default('') | lower) == 'powershell'
+      or (ansible_os_family | default('') | lower) == 'windows'
 
 - name: Restart Elastic Agent on Windows after hosts heal
   ansible.windows.win_service:
     name: Elastic Agent
     state: restarted
+  become: false
   when:
     - ludus_so_agent_os == 'windows'
     - ludus_so_agent_hosts_win is changed

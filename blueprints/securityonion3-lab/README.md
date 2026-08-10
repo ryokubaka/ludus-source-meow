@@ -28,6 +28,8 @@ graph TB
     end
     KALI -.-> DC
     KALI -.-> WIN11
+    DC -->|SOC HTTPS| SO
+    WIN11 -->|SOC HTTPS| SO
     DC --- SNIFF
     WIN11 --- SNIFF
     SO --- SNIFF
@@ -59,7 +61,7 @@ graph TB
 | Kali | kali | kali | attacker |
 | Adaptix | any username | `pass` | teamserver `localhost:4321` /endpoint |
 
-SOC: `https://10.X.20.20` — `ludus_securityonion` attaches sniff `net1` during deploy.  
+SOC: `https://10.X.20.20` (VLAN 10 blue team + WireGuard; Kali/red team blocked) — sniff `net1` attached during deploy.  
 Adaptix: on Kali run `adaptixclient` → `https://127.0.0.1:4321/endpoint` (password `pass`). WireGuard can reach Kali `:4321`.
 
 ## Adding SO / agents to an existing range

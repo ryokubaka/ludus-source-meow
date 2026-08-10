@@ -65,7 +65,9 @@ roles:
 | `ludus_so_agent_fleet_url` | `https://<mgr>:8220` | Fleet Server URL |
 | `ludus_so_agent_allow_cidr` | `10.<range>.0.0/16` | SO firewall hostgroup CIDR |
 | `ludus_so_agent_setup_wait_timeout` | `600` | Seconds to wait for SO setup marker |
-| `ludus_so_agent_force` | `false` | Reinstall even if marker present |
+| `ludus_so_agent_force` | `false` | Reinstall even if already enrolled to current Fleet |
+| `ludus_so_agent_uninstall_before_install` | `true` | Uninstall prior agent before enroll (old SO → new SO) |
+| `ludus_so_agent_uninstall_token` | `""` | Elastic Defend tamper-protection uninstall token |
 | `ludus_so_agent_skip_manager` | `true` | Never enroll the SO VM |
 
 ## Notes
@@ -73,5 +75,6 @@ roles:
 - Ludus inter-VLAN default is DROP — add Fleet TCP ports (8220 / 5055 / 8443) toward the SO management VLAN.
 - Installers are ~200–300MB; first fetch caches under `/tmp/ludus-so-elastic-agent-cache` on the Ludus host.
 - Marker files: `/etc/ludus-so-elastic-agent-installed` (Linux), `C:\ProgramData\ludus-so-elastic-agent-installed` (Windows).
+- Skip only when marker Fleet URL matches the current SO **and** the agent binary is still present. Otherwise uninstall (`elastic-agent uninstall --force`) then reinstall.
 - SO Fleet outputs use hostname **`manager`**. Role writes `manager → <SO IP>` into the guest hosts file (`ludus_so_agent_fix_manager_hosts`).
 - Adding SO to an existing range: put the agent role on endpoints with role-level `depends_on` SO as above, then `ludus range deploy` (or `--only-roles` after SO is up).

@@ -29,6 +29,8 @@ graph TB
     end
     KALI -.-> DC
     KALI -.-> WIN11
+    DC -->|SOC HTTPS| SO
+    WIN11 -->|SOC HTTPS| SO
     DC --- SNIFF
     WIN11 --- SNIFF
     SO --- SNIFF
@@ -61,7 +63,7 @@ graph TB
 | Kali | kali | kali | attacker |
 | Adaptix | any username | `pass` | teamserver `localhost:4321` /endpoint |
 
-SOC UI: `https://10.X.20.20`  
+SOC UI: `https://10.X.20.20` (VLAN 10 blue team + WireGuard; Kali/red team blocked)  
 Adaptix: on Kali run `adaptixclient`, connect to `https://127.0.0.1:4321/endpoint` (password `pass`). WireGuard can reach Kali `:4321`.
 
 ## Sniff NIC lifecycle

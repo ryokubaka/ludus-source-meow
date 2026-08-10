@@ -1,0 +1,35 @@
+---
+# Remove an existing Elastic Agent so the next enroll can target the current SO Fleet.
+# WinRM: no become/sudo. Run uninstall from outside the install dir.
+
+- name: Check for installed Elastic Agent binary (Windows)
+  ansible.windows.win_stat:
+    path: "{{ ludus_so_agent_install_path_windows }}\\elastic-agent.exe"
+  register: ludus_so_agent_bin_win
+
+- name: Uninstall Elastic Agent (Windows)
+  ansible.windows.win_shell: |
+    $agent = Join-Path '{{ ludus_so_agent_install_path_windows }}' 'elastic-agent.exe'
+    $args = @('uninstall', '--force')
+    {% if ludus_so_agent_uninstall_token | default('') | length > 0 %}
+    $args += @('--uninstall-token', '{{ ludus_so_agent_uninstall_token }}')
+    {% endif %}
+    & $agent @args
+    exit $LASTEXITCODE
+  args:
+    chdir: C:\Windows\Temp
+  when: ludus_so_agent_bin_win.stat.exists | default(false)
+  register: ludus_so_agent_win_uninstall
+  failed_when: >
+    ludus_so_agent_win_uninstall.rc | default(0) != 0
+    and ('not installed' not in (ludus_so_agent_win_uninstall.stderr | default('') | lower))
+    and ('cannot find' not in (ludus_so_agent_win_uninstall.stderr | default('') | lower))
+  changed_when: ludus_so_agent_win_uninstall.rc | default(1) == 0
+
+- name: Remove Windows install marker after uninstall
+  ansible.windows.win_file:
+    path: "{{ ludus_so_agent_marker_windows }}"
+    state: absent
+  when: >
+    (ludus_so_agent_bin_win.stat.exists | default(false))
+    or (ludus_so_agent_marker_stat_win.stat.exists | default(false))
