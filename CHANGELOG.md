@@ -10,6 +10,27 @@ Each bullet uses a single tag:
 
 ---
 
+## [1.1.1] - 2026-08-09
+
+**Ansible**
+- [Fix] **`ludus_securityonion` so-setup wait** — Truncate stale `/root/sosetup.log` before start (template TTY cancel leaves `"Setup completed"` + `"User cancelled"`). Require `so-status`/`so-firewall`+`/opt/so` for success; treat User cancelled as failure. Role `1.0.2`.
+- [Fix] **`ludus_so_elastic_agent`** — After marker, verify `so-firewall` exists on manager (blocks false-complete markers). Role `1.0.2`.
+- [Fix] **Sniff NIC DHCP before DNS** — Sanitize sniff iface immediately after hot-plug (before DNS/copy tasks) so ansible SSH does not die on dual default routes.
+
+**Templates**
+- [Fix] **SO Packer prep** — Wipe cancelled `sosetup.log` / `installtmp` leftovers so clones do not carry false "Setup completed" breadcrumbs (2.4 + 3).
+
+## [1.1.0] - 2026-08-09
+
+**Blueprints**
+- [Add] **`securityonion-lab` / `securityonion3-lab` AD targets** — Replace Debian target with Win2019 DC (`meow.local` primary-dc) + domain-joined Win11; Fleet agent on both Windows hosts. Version `1.1.0`.
+- [Add] **Adaptix C2 on Kali** — `badsectorlabs.ludus_adaptix_c2` (server + client) on the attacker box; WireGuard → `:4321`. No elastic agent on Kali.
+- [Fix] **Agent `depends_on` placement** — Nest `depends_on` under the role object (Ludus ignores VM-level `depends_on`); SO role runs before Fleet agents when adding SO to an existing range.
+- [Docs] SO lab READMEs — updated topology, templates, Adaptix credentials.
+
+**Ansible**
+- [Improve] **`ludus_so_elastic_agent`** — Wait up to 10m for `/etc/ludus-so-setup-complete`; fail with role-level `depends_on` example if missing.
+
 ## [1.0.0] - 2026-08-09
 
 **Templates**

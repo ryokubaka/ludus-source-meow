@@ -13,6 +13,25 @@
       args:
         executable: /bin/bash
 
+    # ISO first boot auto-starts so-setup on TTY; Packer cancels it. That leaves
+    # /root/sosetup.log with both "User cancelled" and "Setup completed" — which
+    # used to false-complete the Ludus deploy role. Wipe install leftovers here so
+    # every clone is clean even before role-side truncate.
+    - name: Remove cancelled so-setup leftovers from template
+      ansible.builtin.shell: |
+        set -euo pipefail
+        rm -rf /root/installtmp /home/onion/installtmp 2>/dev/null || true
+        rm -f /root/sosetup.log /home/onion/sosetup.log \
+          /var/log/ludus-so-setup.log /var/run/ludus-so-setup.pid \
+          /etc/ludus-so-setup-complete 2>/dev/null || true
+        # Keep no stale "Setup completed" breadcrumbs for range deploy.
+        find /root /home/onion /var/log -maxdepth 2 -type f \( \
+          -name 'sosetup.log*' -o -name 'so-setup.log*' \
+        \) -delete 2>/dev/null || true
+        echo cleaned-so-setup-leftovers
+      args:
+        executable: /bin/bash
+
     - name: Mark Ludus Packer template
       ansible.builtin.copy:
         dest: /etc/ludus-so-template

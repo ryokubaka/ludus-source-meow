@@ -1,0 +1,35 @@
+---
+# Remove an existing Elastic Agent so the next enroll can target the current SO Fleet.
+# Run uninstall from outside the install dir (Elastic requirement).
+
+- name: Check for installed Elastic Agent binary (Linux)
+  ansible.builtin.stat:
+    path: "{{ ludus_so_agent_install_path_linux }}/elastic-agent"
+  register: ludus_so_agent_bin_linux
+
+- name: Uninstall Elastic Agent (Linux)
+  ansible.builtin.command:
+    cmd: >-
+      {{ ludus_so_agent_install_path_linux }}/elastic-agent uninstall --force{{
+        (' --uninstall-token=' ~ ludus_so_agent_uninstall_token)
+        if (ludus_so_agent_uninstall_token | default('') | length > 0)
+        else ''
+      }}
+    chdir: /tmp
+  become: true
+  when: ludus_so_agent_bin_linux.stat.exists | default(false)
+  register: ludus_so_agent_linux_uninstall
+  failed_when: >
+    ludus_so_agent_linux_uninstall.rc | default(0) != 0
+    and ('not installed' not in (ludus_so_agent_linux_uninstall.stderr | default('') | lower))
+    and ('no such file' not in (ludus_so_agent_linux_uninstall.stderr | default('') | lower))
+  changed_when: ludus_so_agent_linux_uninstall.rc | default(1) == 0
+
+- name: Remove Linux install marker after uninstall
+  ansible.builtin.file:
+    path: "{{ ludus_so_agent_marker_linux }}"
+    state: absent
+  become: true
+  when: >
+    (ludus_so_agent_bin_linux.stat.exists | default(false))
+    or (ludus_so_agent_marker_stat.stat.exists | default(false))

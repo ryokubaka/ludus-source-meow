@@ -31,6 +31,9 @@
         - ludus_so_elastic_security_require_so_setup | bool
         - not ludus_so_elastic_security_so_marker.stat.exists
 
+    - name: Wait for Elasticsearch before license / Fleet API calls
+      ansible.builtin.include_tasks: wait-elasticsearch.yml
+
     - name: Start Elastic trial license
       ansible.builtin.include_tasks: start-trial.yml
       when: ludus_so_elastic_security_start_trial | bool

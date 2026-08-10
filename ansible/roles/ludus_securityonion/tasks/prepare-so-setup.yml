@@ -2,71 +2,27 @@
 # Partial/failed so-setup leaves bond0 behind. TESTING profiles often exclude bond0
 # from MNIC auto-detect but not the bonding_masters sysfs entry, so MNIC becomes
 # bonding_masters and nmcli fails. Role passes MNIC/BNICS explicitly; still clean bonds.
-# Also: sniff NIC may grab DHCP and steal ansible_default_ipv4 — detect by ansible_host.
-- name: Detect management interface when not already set
-  ansible.builtin.include_tasks: detect-mgmt-iface.yml
-  when: ludus_so_mnic is not defined or ludus_so_main_ip is not defined
-
-- name: Detect sniff interface for so-setup
-  ansible.builtin.shell: |
-    set -euo pipefail
-    MGMT="{{ ludus_so_mnic }}"
-    for iface in $(ls -1 /sys/class/net | grep -vE '^(lo|docker|veth|br-|vir|bond|bonding_masters|tun|wg)'); do
-      [[ "$iface" == "$MGMT" ]] && continue
-      echo "$iface"
-      exit 0
-    done
-    exit 1
-  args:
-    executable: /bin/bash
-  register: ludus_so_sniff_iface_detect
-  changed_when: false
-
-- name: Record sniff interface for so-setup
-  ansible.builtin.set_fact:
-    ludus_so_bnic: "{{ ludus_so_sniff_iface_detect.stdout | trim }}"
-
-- name: Strip DHCP / addresses from sniff NIC (must not steal default route)
-  ansible.builtin.shell: |
-    set -euo pipefail
-    SNIFF="{{ ludus_so_bnic }}"
-    MGMT="{{ ludus_so_mnic }}"
-    [[ -n "$SNIFF" && "$SNIFF" != "$MGMT" ]] || { echo "skip-sniff-sanitize"; exit 0; }
-    changed=0
-    while IFS= read -r con; do
-      [[ -z "$con" ]] && continue
-      # Clear DNS first — nmcli rejects ipv4.dns when method=disabled.
-      nmcli con mod "$con" ipv4.dns "" ipv4.ignore-auto-dns yes 2>/dev/null || true
-      nmcli con mod "$con" ipv4.method disabled ipv6.method ignore 2>/dev/null || true
-      nmcli con mod "$con" connection.autoconnect yes 2>/dev/null || true
-      nmcli con up "$con" 2>/dev/null || true
-      changed=1
-    done < <(nmcli -t -f NAME,DEVICE con show | awk -F: -v d="$SNIFF" '$2==d {print $1}')
-    if ip -4 addr show dev "$SNIFF" scope global 2>/dev/null | grep -q inet; then
-      ip -4 addr flush dev "$SNIFF" scope global 2>/dev/null || true
-      changed=1
-    fi
-    # Drop any default route via sniff
-    while read -r via dev; do
-      [[ "$dev" == "$SNIFF" ]] || continue
-      ip route del default via "$via" dev "$SNIFF" 2>/dev/null || true
-      changed=1
-    done < <(ip -4 route show default | awk '{for(i=1;i<=NF;i++) if($i=="via") v=$(i+1); else if($i=="dev") d=$(i+1); print v, d}')
-    ip link set "$SNIFF" up 2>/dev/null || true
-    if [[ "$changed" -eq 1 ]]; then
-      echo "sanitized-sniff=$SNIFF"
-    else
-      echo "sniff-ok=$SNIFF"
-    fi
-  args:
-    executable: /bin/bash
-  become: true
-  register: ludus_so_sniff_sanitize
-  changed_when: "'sanitized-sniff=' in ludus_so_sniff_sanitize.stdout"
+# Sniff DHCP sanitize also runs earlier (main.yml); re-run here as safety before so-setup.
+- name: Sanitize sniff NIC (idempotent; also run early before DNS)
+  ansible.builtin.include_tasks: sanitize-sniff-nic.yml
 
 - name: Remove stale Security Onion bond0 before so-setup
   ansible.builtin.shell: |
     set -euo pipefail
+    # Never tear down bond0 while a detached so-setup is still running — that
+    # leaves sensors (suricata/zeek) with af-packet "No such device" forever.
+    PIDFILE=/var/run/ludus-so-setup.pid
+    if [[ -f "$PIDFILE" ]]; then
+      pid=$(cat "$PIDFILE" 2>/dev/null || true)
+      if [[ -n "${pid:-}" ]] && kill -0 "$pid" 2>/dev/null; then
+        echo "skip-bond-cleanup-setup-running pid=${pid}"
+        exit 0
+      fi
+    fi
+    if pgrep -f 'so-setup iso' >/dev/null 2>&1; then
+      echo "skip-bond-cleanup-so-setup-process"
+      exit 0
+    fi
     changed=0
     while IFS= read -r con; do
       [[ -z "$con" ]] && continue

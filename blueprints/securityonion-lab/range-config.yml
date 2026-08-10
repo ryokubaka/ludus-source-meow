@@ -1,14 +1,6 @@
 # yaml-language-server: $schema=https://docs.ludus.cloud/schemas/range-config.json
-# =============================================================================
-# Security Onion 2.4 Standalone Lab
-# =============================================================================
-# VLAN 10 — targets (sniffed)
-# VLAN 20 — Security Onion management / SOC
-# VLAN 99 — attacker
-#
-# LUX may also attach SO net1 during deploy (idempotent). Role attaches net1 via Proxmox API if missing.
-# RAM: SO balloon 8–24 GB (ram_min_gb/ram_gb) + target 2 + kali 4
-# =============================================================================
+# Security Onion 2.4 lab — VLAN 10 targets (sniffed), 20 SO/SOC, 99 attacker.
+# Role attaches SO net1 after IP config. Prefer hub-mode on the range bridge during deploy.
 
 network:
   inter_vlan_default: DROP
@@ -19,8 +11,9 @@ network:
       protocol: all
       ports: all
       action: ACCEPT
-    - name: Allow Kali to SO SOC HTTPS
-      vlan_src: 99
+    # Blue team (VLAN 10 targets) → SOC UI; red team Kali (99) deliberately blocked
+    - name: Allow Target VLAN to SO SOC HTTPS
+      vlan_src: 10
       vlan_dst: 20
       protocol: tcp
       ports: 443
@@ -37,23 +30,18 @@ network:
       protocol: tcp
       ports: 22
       action: ACCEPT
+    - name: Allow WireGuard to Adaptix C2
+      vlan_src: wireguard
+      vlan_dst: 99
+      protocol: tcp
+      ports: "4321"
+      action: ACCEPT
     - name: Allow targets to SO Fleet
       vlan_src: 10
       vlan_dst: 20
       protocol: tcp
-      ports:
-        - 8220
-        - 5055
-        - 8443
-      action: ACCEPT
-    - name: Allow Kali to SO Fleet
-      vlan_src: 99
-      vlan_dst: 20
-      protocol: tcp
-      ports:
-        - 8220
-        - 5055
-        - 8443
+      # Ludus schema: integer, "all", "start:end", or comma list — not a YAML array
+      ports: "8220,5055,8443"
       action: ACCEPT
 
 ludus:
@@ -62,9 +50,9 @@ ludus:
     template: securityonion-2.4-x64-template
     vlan: 20
     ip_last_octet: 20
-    # balloon: Proxmox min=8 / max=24 — host can reclaim down to 8 GB under pressure
-    ram_min_gb: 8
-    ram_gb: 24
+    # so-setup aborts below 16 GiB — keep balloon floor ≥16 so Proxmox cannot reclaim under that
+    ram_min_gb: 16
+    ram_gb: 20
     cpus: 8
     linux: true
     testing:
@@ -77,24 +65,50 @@ ludus:
       ludus_so_install_type: standalone
       ludus_so_allow_cidr: "10.{{ range_second_octet }}.0.0/16"
       ludus_so_web_user: "onionadmin@ludus.local"
-      ludus_so_web_password: "0n10nAdm1n!"
+      ludus_so_web_password: "MeowMeow123"
 
-  - vm_name: "{{ range_id }}-target"
-    hostname: "{{ range_id }}-target"
-    template: debian-12-x64-server-template
+  - vm_name: "{{ range_id }}-dc01"
+    hostname: "{{ range_id }}-DC01"
+    template: win2019-server-x64-template
     vlan: 10
     ip_last_octet: 10
-    ram_gb: 2
+    ram_gb: 4
     cpus: 2
-    linux: true
+    windows:
+      sysprep: true
+    domain:
+      fqdn: meow.local
+      role: primary-dc
+    testing:
+      snapshot: true
+      block_internet: true
+    roles:
+      # depends_on must be under the role (not the VM) — Ludus cross-VM ordering
+      - name: ryokubaka.ludus_so_elastic_agent
+        depends_on:
+          - vm_name: "{{ range_id }}-so"
+            role: ryokubaka.ludus_securityonion
+
+  - vm_name: "{{ range_id }}-win11"
+    hostname: "{{ range_id }}-WIN11"
+    template: win11-22h2-x64-enterprise-template
+    vlan: 10
+    ip_last_octet: 11
+    ram_gb: 4
+    cpus: 2
+    windows:
+      sysprep: true
+    domain:
+      fqdn: meow.local
+      role: member
     testing:
       snapshot: true
       block_internet: true
     roles:
       - name: ryokubaka.ludus_so_elastic_agent
-    depends_on:
-      - vm_name: "{{ range_id }}-so"
-        role: ryokubaka.ludus_securityonion
+        depends_on:
+          - vm_name: "{{ range_id }}-so"
+            role: ryokubaka.ludus_securityonion
 
   - vm_name: "{{ range_id }}-kali"
     hostname: "{{ range_id }}-kali"
@@ -108,7 +122,7 @@ ludus:
       snapshot: false
       block_internet: false
     roles:
-      - name: ryokubaka.ludus_so_elastic_agent
-    depends_on:
-      - vm_name: "{{ range_id }}-so"
-        role: ryokubaka.ludus_securityonion
+      - name: badsectorlabs.ludus_adaptix_c2
+    role_vars:
+      ludus_adaptix_c2_install_server: true
+      ludus_adaptix_c2_install_client: true

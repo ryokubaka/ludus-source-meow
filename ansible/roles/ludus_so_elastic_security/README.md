@@ -2,7 +2,7 @@
 
 Apply to the **Security Onion manager** VM after `ryokubaka.ludus_securityonion`.
 
-Mirrors [GOAD-mod `extensions/elk`](https://github.com/) Elastic setup:
+Mirrors the Elastic Security steps used by the GOAD-mod Security Onion extension:
 
 1. **Trial license** — `POST _license/start_trial?acknowledge=true` (platinum-class features for 30 days)
 2. **Elastic Defend** — switch `endpoints-initial` from SO default `DataCollection` (protections off) to `EDRComplete` with malware / ransomware / memory / behavior in **detect** mode

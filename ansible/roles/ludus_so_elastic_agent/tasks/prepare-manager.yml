@@ -1,10 +1,17 @@
 ---
 # Run once on SO manager: open hostgroup + fetch enrollment token for endpoints-initial.
 # Play host may be Windows — force Linux shell/become on every delegate_to SO task.
+#
+# Prefer Ludus role-level depends_on so this role runs after ludus_securityonion.
+# Also wait here so a mid-setup race (or hand-edited config) does not fail instantly.
 - name: Wait for SO setup marker on manager
   ansible.builtin.stat:
-    path: /etc/ludus-so-setup-complete
+    path: "{{ ludus_so_agent_setup_marker }}"
   register: ludus_so_agent_so_marker
+  until: ludus_so_agent_so_marker.stat.exists | default(false)
+  retries: "{{ ((ludus_so_agent_setup_wait_timeout | int) / (ludus_so_agent_setup_wait_sleep | int)) | int }}"
+  delay: "{{ ludus_so_agent_setup_wait_sleep | int }}"
+  ignore_errors: true
   delegate_to: "{{ ludus_so_agent_manager }}"
   become: true
   become_method: sudo
@@ -16,14 +23,60 @@
 - name: Fail when SO setup incomplete
   ansible.builtin.fail:
     msg: >
-      {{ ludus_so_agent_manager }} missing /etc/ludus-so-setup-complete.
-      Deploy ryokubaka.ludus_securityonion first (depends_on).
-  when: not ludus_so_agent_so_marker.stat.exists
+      {{ ludus_so_agent_manager }} missing {{ ludus_so_agent_setup_marker }}
+      after {{ ludus_so_agent_setup_wait_timeout }}s.
+      Nest depends_on under the agent role (not the VM):
+        roles:
+          - name: ryokubaka.ludus_so_elastic_agent
+            depends_on:
+              - vm_name: "{{ range_id }}-so"
+                role: ryokubaka.ludus_securityonion
+      Then redeploy so ludus_securityonion finishes before this role.
+  when: not (ludus_so_agent_so_marker.stat.exists | default(false))
+
+# Marker alone is not enough — a false-complete can leave /opt/so empty (no so-firewall).
+- name: Verify SO manager install artifacts (so-firewall)
+  ansible.builtin.shell: |
+    set -euo pipefail
+    if command -v so-firewall >/dev/null 2>&1; then
+      command -v so-firewall
+      exit 0
+    fi
+    if [[ -x /usr/sbin/so-firewall ]]; then
+      echo /usr/sbin/so-firewall
+      exit 0
+    fi
+    echo "missing-so-firewall"
+    ls -la /opt/so 2>&1 | head -5 || true
+    exit 1
+  args:
+    executable: /bin/bash
+  register: ludus_so_agent_fw_bin
+  changed_when: false
+  retries: "{{ ((ludus_so_agent_setup_wait_timeout | int) / (ludus_so_agent_setup_wait_sleep | int)) | int }}"
+  delay: "{{ ludus_so_agent_setup_wait_sleep | int }}"
+  until: ludus_so_agent_fw_bin.rc | int == 0
+  ignore_errors: true
+  delegate_to: "{{ ludus_so_agent_manager }}"
+  become: true
+  become_method: sudo
+  become_user: root
+  vars:
+    ansible_shell_type: sh
+    ansible_connection: ssh
+
+- name: Fail when so-firewall missing on manager
+  ansible.builtin.fail:
+    msg: >
+      {{ ludus_so_agent_manager }} has {{ ludus_so_agent_setup_marker }} but so-firewall is missing
+      (SO install incomplete / false-complete marker). Remove the marker and redeploy
+      ryokubaka.ludus_securityonion. Last check: {{ ludus_so_agent_fw_bin.stdout | default('') }}.
+  when: ludus_so_agent_fw_bin.rc | default(1) != 0
 
 - name: Allow range CIDR in SO elastic_agent_endpoint hostgroup
   ansible.builtin.command:
     argv:
-      - so-firewall
+      - "{{ ludus_so_agent_fw_bin.stdout | trim }}"
       - --apply
       - includehost
       - elastic_agent_endpoint
@@ -48,13 +101,16 @@
   when: ludus_so_agent_allow_cidr | length > 0
 
 # Direct curl — do not source so-elastic-fleet-common under Windows-delegated shell.
+# Emit token + key id on separate lines (id is non-secret; distinguishes rebuilt SO at same IP).
 - name: Fetch enrollment API key for policy from Fleet
   ansible.builtin.shell: |
     set -euo pipefail
-    curl -sS -K /opt/so/conf/elasticsearch/curl.config -L \
+    raw=$(curl -sS -K /opt/so/conf/elasticsearch/curl.config -L \
       --retry 3 --retry-delay 5 --fail \
-      "http://localhost:5601/api/fleet/enrollment_api_keys?kuery=policy_id:{{ ludus_so_agent_policy_id }}" \
-      | jq -r '.list[0].api_key // .items[0].api_key // empty'
+      "http://localhost:5601/api/fleet/enrollment_api_keys?kuery=policy_id:{{ ludus_so_agent_policy_id }}")
+    key=$(echo "$raw" | jq -r '.list[0].api_key // .items[0].api_key // empty')
+    kid=$(echo "$raw" | jq -r '.list[0].id // .items[0].id // empty')
+    printf '%s\n%s\n' "$key" "$kid"
   args:
     executable: /bin/bash
   register: ludus_so_agent_token_cmd
@@ -81,17 +137,54 @@
     - ludus_so_agent_enrollment_token | length == 0
     - (ludus_so_agent_token_cmd.rc | default(1)) != 0
 
+# Unique per SO install — IP/hostname alone are NOT stable across rebuilds.
+- name: Collect SO manager instance id (setup marker + Fleet key id)
+  ansible.builtin.shell: |
+    set -euo pipefail
+    setup_hash=$(sha256sum "{{ ludus_so_agent_setup_marker }}" | awk '{print $1}')
+    key_id=$(curl -sS -K /opt/so/conf/elasticsearch/curl.config -L \
+      --retry 3 --retry-delay 5 --fail \
+      "http://localhost:5601/api/fleet/enrollment_api_keys?kuery=policy_id:{{ ludus_so_agent_policy_id }}" \
+      | jq -r '.list[0].id // .items[0].id // empty')
+    if [[ -z "$setup_hash" || -z "$key_id" ]]; then
+      echo "missing setup_hash or fleet enrollment key id" >&2
+      exit 1
+    fi
+    printf '%s:%s\n' "$setup_hash" "$key_id"
+  args:
+    executable: /bin/bash
+  register: ludus_so_agent_manager_id_cmd
+  changed_when: false
+  failed_when: ludus_so_agent_manager_id_cmd.rc != 0 or (ludus_so_agent_manager_id_cmd.stdout | trim | length == 0)
+  delegate_to: "{{ ludus_so_agent_manager }}"
+  become: true
+  become_method: sudo
+  become_user: root
+  vars:
+    ansible_shell_type: sh
+    ansible_connection: ssh
+
 - name: Publish enrollment token on localhost (shared by all endpoints)
   ansible.builtin.set_fact:
     ludus_so_agent_token_shared: >-
       {{
         ludus_so_agent_enrollment_token
         if (ludus_so_agent_enrollment_token | length > 0)
-        else (ludus_so_agent_token_cmd.stdout | default('') | trim)
+        else (ludus_so_agent_token_cmd.stdout_lines | default([]) | first | default('') | trim)
       }}
   delegate_to: localhost
   delegate_facts: true
   no_log: true
+  vars:
+    ansible_connection: local
+    ansible_shell_type: sh
+    ansible_become: false
+
+- name: Publish SO manager instance id on localhost
+  ansible.builtin.set_fact:
+    ludus_so_agent_manager_id_shared: "{{ ludus_so_agent_manager_id_cmd.stdout | trim }}"
+  delegate_to: localhost
+  delegate_facts: true
   vars:
     ansible_connection: local
     ansible_shell_type: sh
@@ -103,6 +196,13 @@
       No Fleet enrollment token for policy '{{ ludus_so_agent_policy_id }}'.
       Set ludus_so_agent_enrollment_token or verify Fleet on {{ ludus_so_agent_manager }}.
   when: hostvars['localhost'].ludus_so_agent_token_shared | default('') | length == 0
+
+- name: Fail when SO manager instance id missing
+  ansible.builtin.fail:
+    msg: >
+      Could not compute SO manager instance id on {{ ludus_so_agent_manager }}.
+      Need {{ ludus_so_agent_setup_marker }} + Fleet enrollment key id.
+  when: hostvars['localhost'].ludus_so_agent_manager_id_shared | default('') | length == 0
 
 - name: Ensure installer cache dir on controller
   ansible.builtin.file:

@@ -42,17 +42,39 @@
 
 - name: Load Proxmox API credentials from Ludus deploy environment
   ansible.builtin.set_fact:
-    ludus_so_proxmox_url: "{{ lookup('env', 'PROXMOX_URL') | default('', true) | regex_replace('/+$', '') }}"
-    ludus_so_proxmox_user: "{{ lookup('env', 'PROXMOX_USERNAME') | default('', true) }}"
-    ludus_so_proxmox_token: "{{ lookup('env', 'PROXMOX_TOKEN') | default('', true) }}"
-    ludus_so_proxmox_secret: "{{ lookup('env', 'PROXMOX_SECRET') | default('', true) }}"
+    ludus_so_proxmox_url: >-
+      {{
+        ludus_so_proxmox_api_url
+        | default(lookup('env', 'PROXMOX_URL'), true)
+        | default('', true)
+        | regex_replace('/+$', '')
+      }}
+    ludus_so_proxmox_user: >-
+      {{
+        ludus_so_proxmox_api_user
+        | default(lookup('env', 'PROXMOX_USERNAME'), true)
+        | default('', true)
+      }}
+    ludus_so_proxmox_token: >-
+      {{
+        ludus_so_proxmox_api_token
+        | default(lookup('env', 'PROXMOX_TOKEN'), true)
+        | default('', true)
+      }}
+    ludus_so_proxmox_secret: >-
+      {{
+        ludus_so_proxmox_api_secret
+        | default(lookup('env', 'PROXMOX_SECRET'), true)
+        | default('', true)
+      }}
   no_log: true
 
 - name: Fail when Proxmox API environment is missing
   ansible.builtin.fail:
     msg: >
       Proxmox API credentials not available (PROXMOX_URL / PROXMOX_USERNAME /
-      PROXMOX_TOKEN / PROXMOX_SECRET). Run this role during Ludus range deploy.
+      PROXMOX_TOKEN / PROXMOX_SECRET). Ludus range-deploy injects these; GOAD
+      provision needs Ludus UX (root SSH) to inject them, or set ludus_so_proxmox_api_*.
   when: >
     ludus_so_proxmox_url | length == 0
     or ludus_so_proxmox_user | length == 0
@@ -83,19 +105,50 @@
   register: ludus_so_pve_resources
   no_log: true
 
-- name: Select Proxmox VM by Ludus inventory name
+# Ludus inventory uses full VM name (e.g. {{ range_id }}-so). GOAD extension
+# inventory uses short name "so" — also match ansible_hostname / override.
+- name: Resolve Proxmox VM name candidates
+  ansible.builtin.set_fact:
+    ludus_so_pve_name_candidates: >-
+      {{
+        [
+          ludus_so_proxmox_vm_name | default('', true),
+          inventory_hostname,
+          ansible_hostname | default('', true),
+          ansible_nodename | default('', true),
+        ]
+        | select('string')
+        | reject('equalto', '')
+        | unique
+        | list
+      }}
+
+- name: Select Proxmox VM by name candidates
   ansible.builtin.set_fact:
     ludus_so_pve_vm_matches: >-
       {{
         ludus_so_pve_resources.json.data
-        | selectattr('name', 'equalto', inventory_hostname)
         | selectattr('type', 'equalto', 'qemu')
+        | selectattr('name', 'in', ludus_so_pve_name_candidates)
         | list
       }}
 
+- name: Fallback — qemu VMs whose name ends with -so (GOAD inventory host is "so")
+  ansible.builtin.set_fact:
+    ludus_so_pve_vm_matches: >-
+      {{
+        ludus_so_pve_resources.json.data
+        | selectattr('type', 'equalto', 'qemu')
+        | selectattr('name', 'search', '-so$')
+        | list
+      }}
+  when: ludus_so_pve_vm_matches | length == 0
+
 - name: Fail when VM not found in Proxmox
   ansible.builtin.fail:
-    msg: "VM {{ inventory_hostname }} not found in Proxmox cluster resources."
+    msg: >-
+      VM not found in Proxmox (tried {{ ludus_so_pve_name_candidates | join(', ') }}
+      and *-so). inventory_hostname={{ inventory_hostname }}.
   when: ludus_so_pve_vm_matches | length == 0
 
 - name: Filter Proxmox VM matches to expected node
@@ -161,14 +214,17 @@
         )
       }}
 
-- name: Detect sniff net1 spec drift (optional MTU override)
+# Proxmox returns virtio=AA:BB:…,bridge=… — never equals our virtio,bridge=… template.
+# Only rewrite when an optional MTU override is set and missing/wrong on net1.
+- name: Detect sniff net1 spec drift (optional MTU override only)
   ansible.builtin.set_fact:
     ludus_so_net1_needs_spec_update: >-
       {{
         ludus_so_existing_net1 | length > 0
+        and (ludus_so_sniff_mtu | default('') | string | length > 0)
         and ('bridge=' ~ ludus_so_vmbr) in ludus_so_existing_net1
         and ('tag=' ~ (ludus_so_sniff_tag | string)) in ludus_so_existing_net1
-        and ludus_so_existing_net1 != ludus_so_net1_spec
+        and ('mtu=' ~ (ludus_so_sniff_mtu | string)) not in ludus_so_existing_net1
         and not (ludus_so_net1_has_bad_mtu | default(false) | bool)
       }}
 

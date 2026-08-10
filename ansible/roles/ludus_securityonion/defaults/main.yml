@@ -2,11 +2,22 @@
 # Install type passed to so-setup test_profile: standalone (default) or eval
 ludus_so_install_type: standalone
 
+# so-setup standalone needs ≥ this MemTotal (GiB). Target RAM is higher so MemTotal clears the floor.
+ludus_so_mem_min_gb: 16
+ludus_so_mem_target_gb: 20
 # so-setup profile suffix: net (DHCP/lab) or iso
 ludus_so_setup_profile_suffix: net
 
-# Attach sniff net1 via Proxmox API during Ludus deploy (no LUX required)
+# Attach sniff net1 via Proxmox API (Ludus deploy injects PROXMOX_*)
 ludus_so_attach_sniff_nic: true
+
+# Optional Proxmox API overrides when PROXMOX_* env is unset (GOAD provision)
+ludus_so_proxmox_api_url: ""
+ludus_so_proxmox_api_user: ""
+ludus_so_proxmox_api_token: ""
+ludus_so_proxmox_api_secret: ""
+# Optional Proxmox VM name when inventory_hostname is short (GOAD: "so")
+ludus_so_proxmox_vm_name: ""
 
 # VLAN tag on the range bridge for sniff traffic (targets VLAN in SO lab blueprints)
 ludus_so_sniff_tag: 10
@@ -64,6 +75,18 @@ ludus_so_dns_check_hosts:
 # Strip broken docker registry-mirrors (e.g. https://:5000) before so-setup pulls images
 ludus_so_sanitize_docker_daemon: true
 
-# After setup (and on redeploy), enslave sniff NIC to bond0 + persist via systemd oneshot.
-# Without this, zeek/suricata listen on bond0 with NO-CARRIER and see zero traffic.
+# Redeploy heal: recreate bond0 + enslave sniff NIC; start missing/unhealthy containers.
 ludus_so_heal_sniff_bond: true
+ludus_so_heal_containers: true
+ludus_so_heal_containers_fail: true
+ludus_so_heal_container_retries: 12
+ludus_so_heal_container_delay: 20
+# Required containers that must be running before elastic_security proceeds.
+ludus_so_required_containers:
+  - so-elasticsearch
+  - so-kibana
+  - so-nginx
+  - so-soc
+  - so-suricata
+  - so-zeek
+  - so-elastic-fleet

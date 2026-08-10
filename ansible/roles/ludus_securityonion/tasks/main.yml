@@ -65,6 +65,11 @@
           Last NIC count: {{ ludus_so_nic_wait.stdout | default('unknown') }}.
       when: ludus_so_nic_wait.rc != 0
 
+    # Sniff often DHCP on the target VLAN before so-setup; sanitize before DNS/copy
+    # tasks or ansible SSH dies (dual default route / asymmetric return path).
+    - name: Sanitize sniff NIC before DNS preflight
+      ansible.builtin.include_tasks: sanitize-sniff-nic.yml
+
     - name: Build so-setup test profile name
       ansible.builtin.set_fact:
         ludus_so_test_profile: "{{ ludus_so_install_type | lower }}-{{ ludus_so_setup_profile_suffix }}"
@@ -79,6 +84,9 @@
 
     - name: Prepare guest networking for so-setup
       ansible.builtin.include_tasks: prepare-so-setup.yml
+
+    - name: Ensure guest has ≥16 GiB for so-setup standalone
+      ansible.builtin.include_tasks: ensure-memory.yml
 
     - name: Sanitize docker daemon.json (broken registry-mirrors)
       ansible.builtin.include_tasks: sanitize-docker-daemon.yml
@@ -102,6 +110,7 @@
           WEBUSER: "{{ ludus_so_web_user }}"
           WEBPASSWD1: "{{ ludus_so_web_password }}"
           WEBPASSWD2: "{{ ludus_so_web_password }}"
+      no_log: true
 
     - name: Run so-setup iso with test profile (best-effort automation)
       ansible.builtin.include_tasks: run-so-setup.yml
@@ -120,3 +129,8 @@
 - name: Ensure sniff NIC enslaved to bond0
   ansible.builtin.include_tasks: ensure-sniff-bond.yml
   when: ludus_so_heal_sniff_bond | default(true) | bool
+
+# so-status missing/unhealthy (e.g. so-suricata after bond0 loss) — start + recheck.
+- name: Heal unhealthy Security Onion containers
+  ansible.builtin.include_tasks: heal-containers.yml
+  when: ludus_so_heal_containers | default(true) | bool

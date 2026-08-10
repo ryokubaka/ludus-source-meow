@@ -1,0 +1,198 @@
+---
+# so-setup standalone needs ≥16 GiB MemTotal. Raise Proxmox RAM + reboot guest if low.
+# Read MemTotal via awk (Jinja/slurp parsing is unreliable here).
+- name: Read guest MemTotal (KiB)
+  ansible.builtin.shell: |
+    set -euo pipefail
+    awk '/^MemTotal:/{print $2; exit}' /proc/meminfo
+  args:
+    executable: /bin/bash
+  register: ludus_so_meminfo_awk
+  changed_when: false
+
+- name: Parse MemTotal
+  ansible.builtin.set_fact:
+    ludus_so_mem_total_kib: "{{ ludus_so_meminfo_awk.stdout | trim | int }}"
+    ludus_so_mem_min_kib: "{{ (ludus_so_mem_min_gb | default(16) | int) * 1024 * 1024 }}"
+    # Prefer 20 GiB Proxmox RAM: a 16 GiB VM commonly reports ~15 GiB MemTotal.
+    ludus_so_mem_target_mib: "{{ [ludus_so_mem_target_gb | default(20) | int, 20] | max * 1024 }}"
+
+- name: Report guest memory
+  ansible.builtin.debug:
+    msg: >-
+      MemTotal={{ (ludus_so_mem_total_kib | int / 1024 / 1024) | round(1) }} GiB
+      (need ≥ {{ ludus_so_mem_min_gb | default(16) }} GiB for so-setup {{ ludus_so_install_type }})
+
+- name: Resolve Proxmox VM for memory fix when facts missing
+  when:
+    - (ludus_so_mem_total_kib | int) < (ludus_so_mem_min_kib | int)
+    - ludus_so_pve_vmid | default('') | string | length == 0
+      or ludus_so_proxmox_url | default('') | length == 0
+  block:
+    - name: Load Proxmox API credentials for memory fix
+      ansible.builtin.set_fact:
+        ludus_so_proxmox_url: >-
+          {{
+            ludus_so_proxmox_api_url
+            | default(lookup('env', 'PROXMOX_URL'), true)
+            | default('', true)
+            | regex_replace('/+$', '')
+          }}
+        ludus_so_proxmox_user: >-
+          {{
+            ludus_so_proxmox_api_user
+            | default(lookup('env', 'PROXMOX_USERNAME'), true)
+            | default('', true)
+          }}
+        ludus_so_proxmox_token: >-
+          {{
+            ludus_so_proxmox_api_token
+            | default(lookup('env', 'PROXMOX_TOKEN'), true)
+            | default('', true)
+          }}
+        ludus_so_proxmox_secret: >-
+          {{
+            ludus_so_proxmox_api_secret
+            | default(lookup('env', 'PROXMOX_SECRET'), true)
+            | default('', true)
+          }}
+      no_log: true
+
+    - name: Build Proxmox Authorization header for memory fix
+      ansible.builtin.set_fact:
+        ludus_so_pve_auth: >-
+          {{
+            ('PVEAPIToken=' ~ ludus_so_proxmox_token ~ '=' ~ ludus_so_proxmox_secret)
+            if ('!' in ludus_so_proxmox_token)
+            else ('PVEAPIToken=' ~ ludus_so_proxmox_user ~ '!' ~ ludus_so_proxmox_token ~ '=' ~ ludus_so_proxmox_secret)
+          }}
+      when:
+        - ludus_so_proxmox_url | length > 0
+        - ludus_so_proxmox_user | length > 0
+        - ludus_so_proxmox_token | length > 0
+        - ludus_so_proxmox_secret | length > 0
+      no_log: true
+
+    - name: List Proxmox VMs for memory fix
+      ansible.builtin.uri:
+        url: "{{ ludus_so_proxmox_url }}/api2/json/cluster/resources?type=vm"
+        method: GET
+        headers:
+          Authorization: "{{ ludus_so_pve_auth }}"
+        status_code: [200]
+        validate_certs: false
+      register: ludus_so_mem_pve_resources
+      delegate_to: localhost
+      become: false
+      no_log: true
+      when: ludus_so_pve_auth | default('') | length > 0
+
+    - name: Match Proxmox VM for memory fix
+      ansible.builtin.set_fact:
+        ludus_so_pve_node: "{{ item.node }}"
+        ludus_so_pve_vmid: "{{ item.vmid }}"
+      loop: "{{ ludus_so_mem_pve_resources.json.data | default([]) }}"
+      when:
+        - ludus_so_mem_pve_resources is defined
+        - ludus_so_pve_vmid | default('') | string | length == 0
+        - >
+          (item.name | default('') | lower) in
+          (
+            [
+              ludus_so_proxmox_vm_name | default('', true),
+              inventory_hostname,
+              inventory_hostname_short | default(''),
+            ]
+            | select('string') | select('ne', '') | map('lower') | list
+            + [inventory_hostname | lower ~ '-so', 'so']
+          )
+          or (item.name | default('') | lower).endswith('-so')
+          or (item.name | default('') | lower).endswith('-' ~ (inventory_hostname | lower))
+      loop_control:
+        label: "{{ item.name | default('?') }}"
+
+- name: Raise Proxmox memory + balloon when guest MemTotal is too low
+  when:
+    - (ludus_so_mem_total_kib | int) < (ludus_so_mem_min_kib | int)
+    - ludus_so_proxmox_url | default('') | length > 0
+    - ludus_so_pve_vmid | default('') | string | length > 0
+    - ludus_so_pve_node | default('') | length > 0
+    - ludus_so_pve_auth | default('') | length > 0
+  block:
+    - name: Set Proxmox memory and balloon floors (MiB)
+      ansible.builtin.uri:
+        url: "{{ ludus_so_proxmox_url }}/api2/json/nodes/{{ ludus_so_pve_node }}/qemu/{{ ludus_so_pve_vmid }}/config"
+        method: PUT
+        headers:
+          Authorization: "{{ ludus_so_pve_auth }}"
+        body_format: form-urlencoded
+        body:
+          # Ensure max RAM and balloon floor both clear so-setup's 16 GiB check.
+          memory: "{{ ludus_so_mem_target_mib }}"
+          balloon: "{{ ludus_so_mem_target_mib }}"
+        status_code: [200]
+        validate_certs: false
+      delegate_to: localhost
+      become: false
+      no_log: true
+
+    - name: Wait briefly for hot balloon (often insufficient alone)
+      ansible.builtin.shell: |
+        set -euo pipefail
+        awk '/^MemTotal:/{print $2; exit}' /proc/meminfo
+      args:
+        executable: /bin/bash
+      register: ludus_so_mem_retry
+      until: (ludus_so_mem_retry.stdout | int) >= (ludus_so_mem_min_kib | int)
+      retries: 4
+      delay: 5
+      changed_when: false
+      failed_when: false
+
+    - name: Refresh MemTotal after hot balloon
+      ansible.builtin.set_fact:
+        ludus_so_mem_total_kib: "{{ ludus_so_mem_retry.stdout | default(ludus_so_mem_total_kib) | int }}"
+      when: ludus_so_mem_retry is defined and ludus_so_mem_retry.stdout | default('') | length > 0
+
+    - name: Reboot guest so MemTotal reflects new Proxmox memory/balloon
+      ansible.builtin.reboot:
+        msg: "Ludus SO: reboot to apply ≥{{ ludus_so_mem_min_gb | default(16) }} GiB RAM for so-setup"
+        reboot_timeout: 900
+        pre_reboot_delay: 2
+        post_reboot_delay: 15
+      become: true
+      when: (ludus_so_mem_total_kib | int) < (ludus_so_mem_min_kib | int)
+
+    - name: Re-read MemTotal after reboot
+      ansible.builtin.shell: |
+        set -euo pipefail
+        awk '/^MemTotal:/{print $2; exit}' /proc/meminfo
+      args:
+        executable: /bin/bash
+      register: ludus_so_mem_after_reboot
+      changed_when: false
+      when: (ludus_so_mem_total_kib | int) < (ludus_so_mem_min_kib | int)
+
+    - name: Refresh MemTotal after reboot
+      ansible.builtin.set_fact:
+        ludus_so_mem_total_kib: "{{ ludus_so_mem_after_reboot.stdout | int }}"
+      when:
+        - ludus_so_mem_after_reboot is defined
+        - ludus_so_mem_after_reboot.stdout | default('') | length > 0
+
+    - name: Report guest memory after Proxmox fix
+      ansible.builtin.debug:
+        msg: >-
+          MemTotal after fix={{ (ludus_so_mem_total_kib | int / 1024 / 1024) | round(1) }} GiB
+          (target {{ ludus_so_mem_min_gb | default(16) }} GiB)
+
+- name: Fail when guest memory is below so-setup minimum
+  ansible.builtin.fail:
+    msg: >
+      Guest MemTotal is {{ (ludus_so_mem_total_kib | int / 1024 / 1024) | round(1) }} GiB;
+      so-setup {{ ludus_so_install_type }} requires ≥ {{ ludus_so_mem_min_gb | default(16) }} GiB.
+      Set Ludus ram_min_gb ≥ 16 and ram_gb ≥ 20, then on Proxmox:
+      `qm set <vmid> --memory 20480 --balloon 20480` and reboot the guest,
+      then re-run provision_extension. A 16 GiB VM often shows ~15 GiB MemTotal
+      (kernel reserve) and still fails so-setup; hot balloon alone does not fix it.
+  when: (ludus_so_mem_total_kib | int) < (ludus_so_mem_min_kib | int)

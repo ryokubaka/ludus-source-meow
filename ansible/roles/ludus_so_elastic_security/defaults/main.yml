@@ -32,3 +32,7 @@ ludus_so_elastic_security_force: false
 # Require SO setup marker first
 ludus_so_elastic_security_require_so_setup: true
 ludus_so_setup_marker: /etc/ludus-so-setup-complete
+
+# Wait for ES API after so-setup (containers up ≠ API ready). retries × delay.
+ludus_so_elastic_security_es_wait_retries: 90
+ludus_so_elastic_security_es_wait_delay: 20

@@ -30,8 +30,21 @@ ludus_so_agent_windows_staging: 'C:\Windows\Temp\so-elastic-agent_windows_amd64_
 # Skip installing on the SO manager itself
 ludus_so_agent_skip_manager: true
 
+# Wait for ludus_securityonion marker before Fleet prep (seconds).
+# Prefer Ludus role-level depends_on so SO finishes first; this is a short race buffer.
+ludus_so_agent_setup_marker: /etc/ludus-so-setup-complete
+ludus_so_agent_setup_wait_timeout: 600
+ludus_so_agent_setup_wait_sleep: 15
+
 # Re-run installer even when marker / service present
 ludus_so_agent_force: false
+
+# Tear down any prior agent before enroll (needed when SO manager IP/Fleet changes)
+ludus_so_agent_uninstall_before_install: true
+ludus_so_agent_install_path_linux: /opt/Elastic/Agent
+ludus_so_agent_install_path_windows: 'C:\Program Files\Elastic\Agent'
+# Optional Elastic Defend tamper-protection uninstall token
+ludus_so_agent_uninstall_token: ""
 
 # Marker written after successful enroll
 ludus_so_agent_marker_linux: /etc/ludus-so-elastic-agent-installed

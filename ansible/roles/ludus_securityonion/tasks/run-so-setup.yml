@@ -1,9 +1,10 @@
 ---
-# Detached so-setup: bond creation drops SSH; ansible async poll can kill workers.
+# Detached so-setup (bond churn drops SSH). Poll completion from controller (localhost).
 - name: Define so-setup runtime paths
   ansible.builtin.set_fact:
     ludus_so_setup_log: /var/log/ludus-so-setup.log
     ludus_so_setup_pidfile: /var/run/ludus-so-setup.pid
+    ludus_so_sosetup_log: /root/sosetup.log
 
 - name: Start DNS keeper before so-setup (survives NM/bond resolv.conf wipes)
   ansible.builtin.shell: |
@@ -30,6 +31,7 @@
   ansible.builtin.shell: |
     set -euo pipefail
     LOG="{{ ludus_so_setup_log }}"
+    SOLOG="{{ ludus_so_sosetup_log }}"
     PIDFILE="{{ ludus_so_setup_pidfile }}"
     if [[ -f "$PIDFILE" ]]; then
       pid=$(cat "$PIDFILE")
@@ -38,10 +40,27 @@
         exit 0
       fi
     fi
+    # Truncate BOTH logs. Template first-boot often leaves sosetup.log with
+    # "User cancelled setup." AND "Setup completed at ..." — that false-matches
+    # completion and skips a real install (empty /opt/so, no so-firewall).
+    if [[ -s "$SOLOG" ]]; then
+      mv "$SOLOG" "${SOLOG}.stale-$(date +%s)" || true
+    fi
     : > "$LOG"
+    : > "$SOLOG"
     nohup {{ ludus_so_setup_bin }} iso {{ ludus_so_test_profile }} >> "$LOG" 2>&1 &
     echo $! > "$PIDFILE"
-    echo "started pid=$(cat "$PIDFILE")"
+    sleep 3
+    pid=$(cat "$PIDFILE")
+    if ! kill -0 "$pid" 2>/dev/null; then
+      echo "died-immediately pid=${pid}"
+      echo "--- $LOG ---"
+      tail -40 "$LOG" 2>/dev/null || true
+      echo "--- $SOLOG ---"
+      tail -40 "$SOLOG" 2>/dev/null || true
+      exit 1
+    fi
+    echo "started pid=${pid}"
   args:
     executable: /bin/bash
   environment: "{{ ludus_so_setup_env }}"
@@ -53,17 +72,39 @@
   ansible.builtin.debug:
     msg: "{{ ludus_so_setup_start.stdout | trim }} (log {{ ludus_so_setup_log }})"
 
-- name: Wait for so-setup to finish (retry through SSH loss during bond setup)
-  # NOTE: no bash functions here — Ansible Jinja treats `{` as template syntax.
+- name: Wait for so-setup to finish (poll from Ludus host — survives SO SSH/bond flaps)
+  # NOTE: no bash functions / bare `{` — Ansible Jinja treats `{` as template syntax.
+  # Poll via ssh from localhost so ansible workers never sit on a dying SO SSH session.
   ansible.builtin.shell: |
     set -euo pipefail
+    HOST="{{ ansible_host | default(inventory_hostname) }}"
+    USER="{{ ansible_user | default('onion') }}"
+    PASS={{ ansible_password | default('') | quote }}
+    KEY="{{ ansible_ssh_private_key_file | default('') }}"
     LOG="{{ ludus_so_setup_log }}"
     PIDFILE="{{ ludus_so_setup_pidfile }}"
-    # so-setup writes nmcli errors into /root/sosetup.log (often not ansible stdout).
-    SOLOG=/root/sosetup.log
-    # Terminal failures only. Do NOT match bare "giving up." — so-elasticsearch-wait
-    # writes that during retries and leaves it in sosetup.log even after heal/highstate.
-    FAIL_RE='unrecoverable failure|unknown connection|Command continues to fail|Setup encountered an unrecoverable'
+    SOLOG="{{ ludus_so_sosetup_log }}"
+    SSH_BASE=(ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
+      -o ControlMaster=no -o ControlPath=none -o ConnectTimeout=15
+      -o ServerAliveInterval=10 -o ServerAliveCountMax=2)
+    if [[ -n "$KEY" && -f "$KEY" ]]; then
+      SSH_BASE+=(-i "$KEY" -o IdentitiesOnly=yes -o BatchMode=yes)
+    elif [[ -n "$PASS" ]]; then
+      if ! command -v sshpass >/dev/null 2>&1; then
+        echo "sshpass-missing"
+        exit 1
+      fi
+      export SSHPASS="$PASS"
+      SSH_BASE=(sshpass -e "${SSH_BASE[@]}" -o PreferredAuthentications=password -o PubkeyAuthentication=no)
+    else
+      SSH_BASE+=(-o BatchMode=yes)
+    fi
+    REMOTE=$(cat <<'EOS'
+    set -euo pipefail
+    LOG=__LOG__
+    PIDFILE=__PIDFILE__
+    SOLOG=__SOLOG__
+    FAIL_RE='unrecoverable failure|unknown connection|Command continues to fail|Setup encountered an unrecoverable|User cancelled'
     failed=0
     if grep -qiE "$FAIL_RE" "$LOG" 2>/dev/null || grep -qiE "$FAIL_RE" "$SOLOG" 2>/dev/null; then
       failed=1
@@ -91,15 +132,6 @@
       fi
       exit 2
     fi
-    # Prefer live health over stale log FAIL_RE after so-setup exits.
-    if command -v so-status >/dev/null 2>&1 && so-status >/dev/null 2>&1; then
-      echo "complete-so-status"
-      exit 0
-    fi
-    if grep -qiE 'setup complete|installation complete|Setup completed|SO setup complete' "$LOG" "$SOLOG" 2>/dev/null; then
-      echo "complete-log"
-      exit 0
-    fi
     if [[ "$failed" -eq 1 ]]; then
       echo "failed-log"
       echo "--- $LOG ---"
@@ -108,22 +140,58 @@
       tail -40 "$SOLOG" 2>/dev/null || true
       exit 1
     fi
-    echo "exited-unknown"
+    if command -v so-status >/dev/null 2>&1 && so-status >/dev/null 2>&1; then
+      echo "complete-so-status"
+      exit 0
+    fi
+    if [[ -d /opt/so ]] && { command -v so-firewall >/dev/null 2>&1 || [[ -x /usr/sbin/so-firewall ]]; }; then
+      echo "complete-opt-so"
+      exit 0
+    fi
+    echo "exited-incomplete"
+    echo "pid=${pid} exited without so-status/so-firewall (/opt/so missing or install incomplete)"
     echo "--- $LOG ---"
     tail -40 "$LOG" 2>/dev/null || true
     echo "--- $SOLOG ---"
     tail -40 "$SOLOG" 2>/dev/null || true
     exit 1
+    EOS
+    )
+    REMOTE="${REMOTE//__LOG__/$LOG}"
+    REMOTE="${REMOTE//__PIDFILE__/$PIDFILE}"
+    REMOTE="${REMOTE//__SOLOG__/$SOLOG}"
+    set +e
+    out=$("${SSH_BASE[@]}" -l "$USER" "$HOST" "sudo bash -s" <<<"$REMOTE" 2>&1)
+    rc=$?
+    set -e
+    # SSH/network flap during bond — keep waiting
+    if [[ "$rc" -eq 255 ]] || echo "$out" | grep -qiE 'Connection (timed out|refused|reset)|No route to host|Connection closed|kex_exchange|Permission denied'; then
+      echo "ssh-unreachable rc=${rc}"
+      echo "$out" | tail -5
+      exit 2
+    fi
+    echo "$out"
+    exit "$rc"
   args:
     executable: /bin/bash
-  become: true
+  delegate_to: localhost
+  become: false
+  vars:
+    ansible_connection: local
+    ansible_become: false
   register: ludus_so_setup_wait
   until: ludus_so_setup_wait.rc | int == 0
   retries: "{{ ((ludus_so_setup_timeout | int) / (ludus_so_setup_poll | int)) | int }}"
   delay: "{{ ludus_so_setup_poll | int }}"
   failed_when: ludus_so_setup_wait.rc | int == 1
   changed_when: false
-  ignore_unreachable: true
+  no_log: true
+
+- name: Show so-setup wait result
+  ansible.builtin.debug:
+    msg: "{{ ludus_so_setup_wait.stdout_lines | default(['(no stdout)']) | last | default(ludus_so_setup_wait.stdout | default('ok')) }}"
+  when: ludus_so_setup_wait.rc | default(1) | int == 0
+  failed_when: false
 
 - name: Stop DNS keeper after so-setup wait
   ansible.builtin.shell: |
@@ -151,5 +219,6 @@
     msg: >
       so-setup did not complete successfully.
       Log: {{ ludus_so_setup_log }} on {{ inventory_hostname }}.
-      Last wait: {{ ludus_so_setup_wait.stdout | default('unreachable') }}.
+      Last wait rc={{ ludus_so_setup_wait.rc | default('unset') }}.
+      Re-run deploy after checking {{ ludus_so_setup_log }} / {{ ludus_so_sosetup_log }}.
   when: ludus_so_setup_wait.rc | default(1) != 0
