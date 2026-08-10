@@ -1,14 +1,6 @@
 # yaml-language-server: $schema=https://docs.ludus.cloud/schemas/range-config.json
-# =============================================================================
-# Security Onion 2.4 Standalone Lab
-# =============================================================================
-# VLAN 10 — AD targets (sniffed): DC meow.local + Win11 member
-# VLAN 20 — Security Onion management / SOC
-# VLAN 99 — attacker (Kali + Adaptix C2)
-#
-# Role attaches SO net1 after IP config. LUX: hub-mode during deploy; net1 only after DEPLOYING (not before).
-# RAM: SO balloon 8–24 GB + DC 4 + Win11 4 + kali 4
-# =============================================================================
+# Security Onion 2.4 lab — VLAN 10 targets (sniffed), 20 SO/SOC, 99 attacker.
+# Role attaches SO net1 after IP config. Prefer hub-mode on the range bridge during deploy.
 
 network:
   inter_vlan_default: DROP
@@ -73,7 +65,7 @@ ludus:
       ludus_so_install_type: standalone
       ludus_so_allow_cidr: "10.{{ range_second_octet }}.0.0/16"
       ludus_so_web_user: "onionadmin@ludus.local"
-      ludus_so_web_password: "0n10nAdm1n!"
+      ludus_so_web_password: "MeowMeow123"
 
   - vm_name: "{{ range_id }}-dc01"
     hostname: "{{ range_id }}-DC01"

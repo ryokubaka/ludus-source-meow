@@ -1,7 +1,5 @@
 ---
-# After so-setup, sensors listen on bond0. If BNICS (ens19) is not enslaved — or
-# bond0 was deleted mid-reprovision — zeek/suricata crash (af-packet: No such device).
-# Create bond0 when missing, enslave sniff NIC, persist via oneshot unit.
+# Sensors listen on bond0. Recreate/enslave sniff NIC and persist via oneshot unit.
 - name: Detect sniff NIC name (first non-mgmt, non-virtual)
   ansible.builtin.shell: |
     set -euo pipefail

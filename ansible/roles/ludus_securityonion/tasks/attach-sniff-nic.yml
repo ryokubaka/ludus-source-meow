@@ -74,7 +74,7 @@
     msg: >
       Proxmox API credentials not available (PROXMOX_URL / PROXMOX_USERNAME /
       PROXMOX_TOKEN / PROXMOX_SECRET). Ludus range-deploy injects these; GOAD
-      provision needs LUX (root SSH) to inject them, or set ludus_so_proxmox_api_*.
+      provision needs Ludus UX (root SSH) to inject them, or set ludus_so_proxmox_api_*.
   when: >
     ludus_so_proxmox_url | length == 0
     or ludus_so_proxmox_user | length == 0
@@ -105,8 +105,8 @@
   register: ludus_so_pve_resources
   no_log: true
 
-# Ludus inventory uses full VM name (catshadowstep-so). GOAD extension inventory
-# uses short name "so" — match ansible_hostname / optional override too.
+# Ludus inventory uses full VM name (e.g. {{ range_id }}-so). GOAD extension
+# inventory uses short name "so" — also match ansible_hostname / override.
 - name: Resolve Proxmox VM name candidates
   ansible.builtin.set_fact:
     ludus_so_pve_name_candidates: >-

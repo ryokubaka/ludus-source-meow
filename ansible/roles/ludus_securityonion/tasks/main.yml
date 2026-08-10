@@ -110,6 +110,7 @@
           WEBUSER: "{{ ludus_so_web_user }}"
           WEBPASSWD1: "{{ ludus_so_web_password }}"
           WEBPASSWD2: "{{ ludus_so_web_password }}"
+      no_log: true
 
     - name: Run so-setup iso with test profile (best-effort automation)
       ansible.builtin.include_tasks: run-so-setup.yml

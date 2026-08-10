@@ -1,11 +1,7 @@
 ---
-# SO ships installer as so-elastic-agent_windows_amd64_msi (no .msi suffix).
-# Copy to a real .msi path — msiexec/win_package are unreliable without it.
-# win_package state=present often no-ops (changed=false) when MSI product is
-# registered but files are gone — always verify elastic-agent.exe before marker.
-#
-# NOTE: never re-register the same var on a skipped task — Ansible overwrites
-# the prior result with skipped (no .stat) and the binary check then false-fails.
+# SO ships the MSI without a .msi suffix; copy to a real .msi path for msiexec.
+# Verify elastic-agent.exe before writing the marker (stale MSI registration is common).
+# Do not re-register the same var on a skipped task — Ansible drops .stat and false-fails.
 - name: Select Windows amd64 MSI
   ansible.builtin.set_fact:
     ludus_so_agent_installer_name: so-elastic-agent_windows_amd64_msi

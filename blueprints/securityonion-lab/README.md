@@ -56,7 +56,7 @@ graph TB
 | Account | Username | Password | Scope |
 |---|---|---|---|
 | OS | onion | onion | SO SSH (template default) |
-| SOC | onionadmin@ludus.local | 0n10nAdm1n! | Security Onion Console |
+| SOC | onionadmin@ludus.local | MeowMeow123 | Security Onion Console |
 | Domain admin | `MEOW\domainadmin` | `password` | `meow.local` (Ludus defaults) |
 | Domain user | `MEOW\domainuser` | `password` | `meow.local` |
 | Windows local | `localuser` | `password` | DC / Win11 local admin |
@@ -74,7 +74,7 @@ During deploy, `ryokubaka.ludus_securityonion`:
 2. Sets `bridge-ageing 0` on `vmbr10XX` when the Ludus host can reach the bridge (local or SSH)
 3. Waits for the guest to see the second NIC, then runs `so-setup iso standalone-net`
 
-[LUX](https://github.com/ryokubaka/ludus-ux) enables hub-mode during deploy and may attach `net1` only after Ludus finishes IP config (attaching earlier breaks Ludus MAC→iface lookup when mgmt and sniff share a VLAN tag). Cleans up on range delete.
+[Ludus UX](https://github.com/ryokubaka/ludus-ux) can enable hub-mode during deploy and attach `net1` only after Ludus finishes IP config (earlier attach breaks Ludus MAC→iface lookup when mgmt and sniff share a VLAN tag).
 
 ## Adding SO / agents to an existing range
 

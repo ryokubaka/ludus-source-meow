@@ -1,8 +1,6 @@
 ---
-# so-setup standalone: "This install type will fail with less than 16 GB of memory."
-# Ludus ram_min_gb/balloon can leave the guest under that floor. Raising Proxmox
-# balloon alone often does NOT lift MemTotal until the guest reboots.
-# slurp + Jinja regex_replace often yields 0 for MemTotal; awk is reliable.
+# so-setup standalone needs ≥16 GiB MemTotal. Raise Proxmox RAM + reboot guest if low.
+# Read MemTotal via awk (Jinja/slurp parsing is unreliable here).
 - name: Read guest MemTotal (KiB)
   ansible.builtin.shell: |
     set -euo pipefail

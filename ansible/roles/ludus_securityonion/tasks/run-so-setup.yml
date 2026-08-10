@@ -1,8 +1,5 @@
 ---
-# Detached so-setup: bond creation drops SSH; ansible async poll can kill workers.
-# Wait MUST poll from Ludus controller (delegate_to localhost). Running the wait
-# shell ON the SO host over SSH dies with "A worker was found in a dead state"
-# when the bond/NIC churn kills ControlMaster / the ansible fork.
+# Detached so-setup (bond churn drops SSH). Poll completion from controller (localhost).
 - name: Define so-setup runtime paths
   ansible.builtin.set_fact:
     ludus_so_setup_log: /var/log/ludus-so-setup.log

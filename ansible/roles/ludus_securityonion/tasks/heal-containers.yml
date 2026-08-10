@@ -1,7 +1,5 @@
 ---
-# After so-setup (and on redeploy), so-status can show missing/unhealthy containers
-# (common: so-suricata exits when bond0 is gone). Assumes ensure-sniff-bond ran first.
-# Start bad containers, wait on so-status -j, fail if required ones stay bad.
+# Start missing/unhealthy containers from so-status -j (run after ensure-sniff-bond).
 - name: Collect so-status bad containers (JSON)
   ansible.builtin.shell: |
     set -euo pipefail

@@ -1,11 +1,6 @@
 ---
-# Switch Elastic Defend from SO default DataCollection (protections off)
-# to EDRComplete with malware/ransomware/memory/behavior in detect mode.
-# Mirrors GOAD-mod extensions/elk endpoint_integration.json protection modes.
-#
-# detect/prevent → always create alerts in Elastic/SO.
-# popup.*.enabled → whether the endpoint user sees a notification (boolean).
-# Note: device_control popups require deny_all USB policy — leave those alone.
+# Switch Elastic Defend from DataCollection → EDRComplete (malware/etc in detect/prevent).
+# Leave device_control popups alone (need USB deny_all).
 - name: Configure Elastic Defend protections (detect mode)
   ansible.builtin.shell: |
     set -euo pipefail

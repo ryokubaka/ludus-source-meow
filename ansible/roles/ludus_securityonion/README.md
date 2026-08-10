@@ -34,7 +34,7 @@ Works with plain Ludus CLI/API deploy. No LUX required.
 | `ludus_so_setup_profile_suffix` | `net` | Profile suffix for so-setup |
 | `ludus_so_sniff_wait_timeout` | `1800` | Seconds to wait for sniff NIC in guest |
 | `ludus_so_web_user` | `onionadmin@ludus.local` | SOC user (TESTING profile) |
-| `ludus_so_web_password` | `MeowMeow123` | SOC password |
+| `ludus_so_web_password` | `MeowMeow123` | SOC password (lab default) |
 | `ludus_so_allow_cidr` | `""` | Firewall allow CIDR (empty → open in TESTING) |
 | `ludus_so_require_dns` | `true` | Fail before `so-setup` if SO repo hostnames do not resolve |
 | `ludus_so_range_number_override` | `""` | Rare fallback if range number extra var missing |

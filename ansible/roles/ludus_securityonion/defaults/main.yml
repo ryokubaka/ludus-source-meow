@@ -2,15 +2,13 @@
 # Install type passed to so-setup test_profile: standalone (default) or eval
 ludus_so_install_type: standalone
 
-# so-setup standalone refuses to run below this MemTotal (GiB). Matches upstream iso check.
+# so-setup standalone needs ≥ this MemTotal (GiB). Target RAM is higher so MemTotal clears the floor.
 ludus_so_mem_min_gb: 16
-# Proxmox memory/balloon to apply when MemTotal is low. 16 GiB config often yields
-# ~15 GiB MemTotal after kernel reserve — use 20 so the guest clears the 16 GiB floor.
 ludus_so_mem_target_gb: 20
 # so-setup profile suffix: net (DHCP/lab) or iso
 ludus_so_setup_profile_suffix: net
 
-# Attach sniff net1 via Proxmox API during Ludus deploy (no LUX required)
+# Attach sniff net1 via Proxmox API (Ludus deploy injects PROXMOX_*)
 ludus_so_attach_sniff_nic: true
 
 # Optional Proxmox API overrides when PROXMOX_* env is unset (GOAD provision)
@@ -77,11 +75,8 @@ ludus_so_dns_check_hosts:
 # Strip broken docker registry-mirrors (e.g. https://:5000) before so-setup pulls images
 ludus_so_sanitize_docker_daemon: true
 
-# After setup (and on redeploy), create bond0 if missing, enslave sniff NIC, persist oneshot.
-# Without this, zeek/suricata crash (af-packet: bond0 No such device) or see zero traffic.
+# Redeploy heal: recreate bond0 + enslave sniff NIC; start missing/unhealthy containers.
 ludus_so_heal_sniff_bond: true
-
-# After bond heal, parse so-status -j and start missing/unhealthy containers.
 ludus_so_heal_containers: true
 ludus_so_heal_containers_fail: true
 ludus_so_heal_container_retries: 12
