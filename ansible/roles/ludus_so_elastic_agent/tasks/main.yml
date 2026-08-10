@@ -16,9 +16,10 @@
       ansible.builtin.include_tasks: prepare-manager.yml
       run_once: true
 
-    - name: Load shared enrollment token
+    - name: Load shared enrollment token + SO instance id
       ansible.builtin.set_fact:
         ludus_so_agent_token: "{{ hostvars['localhost'].ludus_so_agent_token_shared }}"
+        ludus_so_agent_manager_id: "{{ hostvars['localhost'].ludus_so_agent_manager_id_shared }}"
       no_log: true
 
     # Prefer connection/shell over os_family — facts often empty on WinRM before
@@ -112,27 +113,38 @@
 
     - name: Set enroll skip / install flags
       ansible.builtin.set_fact:
-        # Already enrolled to this Fleet URL and agent still on disk — idempotent skip
+        # Skip only when marker has THIS SO instance id (not IP/hostname — rebuilds reuse those)
+        ludus_so_agent_marker_has_manager_id: >-
+          {{
+            ('manager_id=' ~ (ludus_so_agent_manager_id | string))
+            in (ludus_so_agent_marker_text | default(''))
+          }}
         ludus_so_agent_already_current: >-
           {{
             (not (ludus_so_agent_force | bool))
             and (ludus_so_agent_bin_present | bool)
-            and (ludus_so_agent_fleet_url_resolved | string in (ludus_so_agent_marker_text | default('')))
+            and (
+              ('manager_id=' ~ (ludus_so_agent_manager_id | string))
+              in (ludus_so_agent_marker_text | default(''))
+            )
           }}
         ludus_so_agent_needs_install: >-
           {{
             (ludus_so_agent_force | bool)
             or not (
               (ludus_so_agent_bin_present | bool)
-              and (ludus_so_agent_fleet_url_resolved | string in (ludus_so_agent_marker_text | default('')))
+              and (
+                ('manager_id=' ~ (ludus_so_agent_manager_id | string))
+                in (ludus_so_agent_marker_text | default(''))
+              )
             )
           }}
 
-    - name: Skip when already enrolled to current SO Fleet
+    - name: Skip when already enrolled to this SO instance
       ansible.builtin.debug:
         msg: >-
-          Elastic Agent on {{ inventory_hostname }} already points at
-          {{ ludus_so_agent_fleet_url_resolved }}; skipping
+          Elastic Agent on {{ inventory_hostname }} already enrolled to SO instance
+          {{ ludus_so_agent_manager_id }}; skipping
           (set ludus_so_agent_force=true to reinstall).
       when: ludus_so_agent_already_current | bool
 

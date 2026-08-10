@@ -37,6 +37,7 @@
     dest: "{{ ludus_so_agent_marker_linux }}"
     content: |
       manager={{ ludus_so_agent_manager }}
+      manager_id={{ ludus_so_agent_manager_id }}
       fleet={{ ludus_so_agent_fleet_url_resolved }}
       policy={{ ludus_so_agent_policy_id }}
       completed={{ ansible_date_time.iso8601 | default(lookup('pipe', 'date -Iseconds')) }}

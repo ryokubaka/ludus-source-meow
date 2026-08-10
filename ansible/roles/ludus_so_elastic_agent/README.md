@@ -75,6 +75,6 @@ roles:
 - Ludus inter-VLAN default is DROP — add Fleet TCP ports (8220 / 5055 / 8443) toward the SO management VLAN.
 - Installers are ~200–300MB; first fetch caches under `/tmp/ludus-so-elastic-agent-cache` on the Ludus host.
 - Marker files: `/etc/ludus-so-elastic-agent-installed` (Linux), `C:\ProgramData\ludus-so-elastic-agent-installed` (Windows).
-- Skip only when marker Fleet URL matches the current SO **and** the agent binary is still present. Otherwise uninstall (`elastic-agent uninstall --force`) then reinstall.
+- Skip only when marker `manager_id` matches this SO instance (setup-marker sha256 + Fleet enrollment key id) **and** agent binary present. IP/hostname ignored — rebuilds reuse them. Old markers without `manager_id` always reinstall.
 - SO Fleet outputs use hostname **`manager`**. Role writes `manager → <SO IP>` into the guest hosts file (`ludus_so_agent_fix_manager_hosts`).
 - Adding SO to an existing range: put the agent role on endpoints with role-level `depends_on` SO as above, then `ludus range deploy` (or `--only-roles` after SO is up).
