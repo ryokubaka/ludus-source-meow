@@ -128,3 +128,8 @@
 - name: Ensure sniff NIC enslaved to bond0
   ansible.builtin.include_tasks: ensure-sniff-bond.yml
   when: ludus_so_heal_sniff_bond | default(true) | bool
+
+# so-status missing/unhealthy (e.g. so-suricata after bond0 loss) — start + recheck.
+- name: Heal unhealthy Security Onion containers
+  ansible.builtin.include_tasks: heal-containers.yml
+  when: ludus_so_heal_containers | default(true) | bool

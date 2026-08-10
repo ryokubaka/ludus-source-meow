@@ -1,6 +1,7 @@
 ---
-# After so-setup, sensors listen on bond0. If BNICS (ens19) is not enslaved,
-# zeek/suricata see zero traffic. Heal + persist via oneshot unit.
+# After so-setup, sensors listen on bond0. If BNICS (ens19) is not enslaved — or
+# bond0 was deleted mid-reprovision — zeek/suricata crash (af-packet: No such device).
+# Create bond0 when missing, enslave sniff NIC, persist via oneshot unit.
 - name: Detect sniff NIC name (first non-mgmt, non-virtual)
   ansible.builtin.shell: |
     set -euo pipefail
@@ -38,21 +39,63 @@
     mode: "0755"
     content: |
       #!/bin/bash
-      # Ensure {{ ludus_so_sniff_nic }} is a slave of bond0 (SO sensors listen on bond0).
+      # Ensure bond0 exists and {{ ludus_so_sniff_nic }} is enslaved (SO sensors use bond0).
       set -euo pipefail
       SNIFF="{{ ludus_so_sniff_nic }}"
       BOND=bond0
-      [[ -d /sys/class/net/$BOND ]] || exit 0
-      [[ -d /sys/class/net/$SNIFF ]] || exit 0
+      MTU="{{ ludus_so_bond_mtu | int }}"
+      [[ -d /sys/class/net/$SNIFF ]] || { echo "sniff-missing=$SNIFF"; exit 1; }
+
+      create_bond() {
+        if command -v nmcli >/dev/null 2>&1; then
+          while IFS= read -r con; do
+            [[ -z "$con" ]] && continue
+            nmcli con down "$con" 2>/dev/null || true
+            nmcli con delete "$con" 2>/dev/null || true
+          done < <(nmcli -t -f NAME con show 2>/dev/null | grep -E '^(bond0|bond0-slave-)' || true)
+          nmcli device disconnect "$SNIFF" 2>/dev/null || true
+          nmcli con add type bond con-name bond0 ifname bond0 mode balance-rr \
+            ipv4.method disabled ipv6.method ignore connection.autoconnect yes \
+            802-3-ethernet.mtu "$MTU" >/dev/null
+          nmcli con add type ethernet con-name "bond0-slave-${SNIFF}" ifname "$SNIFF" master bond0 \
+            connection.autoconnect yes ipv4.method disabled ipv6.method ignore \
+            802-3-ethernet.mtu "$MTU" >/dev/null
+          nmcli con up bond0 >/dev/null || true
+          nmcli con up "bond0-slave-${SNIFF}" >/dev/null || true
+        fi
+        if [[ ! -d /sys/class/net/$BOND ]]; then
+          modprobe bonding 2>/dev/null || true
+          [[ -f /sys/class/net/bonding_masters ]] && echo "+${BOND}" > /sys/class/net/bonding_masters 2>/dev/null || true
+          ip link add name "$BOND" type bond mode balance-rr miimon 100 2>/dev/null \
+            || ip link add name "$BOND" type bond mode 0 miimon 100 2>/dev/null \
+            || true
+          ip link set "$SNIFF" down 2>/dev/null || true
+          ip link set "$SNIFF" nomaster 2>/dev/null || true
+          ip link set "$SNIFF" master "$BOND" 2>/dev/null || true
+          ip link set "$BOND" mtu "$MTU" 2>/dev/null || true
+          ip link set "$SNIFF" up 2>/dev/null || true
+          ip link set "$BOND" up 2>/dev/null || true
+        fi
+      }
+
+      if [[ ! -d /sys/class/net/$BOND ]]; then
+        create_bond
+        if [[ ! -d /sys/class/net/$BOND ]]; then
+          echo "bond-create-failed"
+          exit 1
+        fi
+        echo "created-bond0"
+      fi
+
       slaves=$(cat /sys/class/net/$BOND/bonding/slaves 2>/dev/null || true)
       if [[ " $slaves " == *" $SNIFF "* ]]; then
-        # still ensure up + mtu
-        ip link set "$BOND" mtu "{{ ludus_so_bond_mtu | int }}" 2>/dev/null || true
+        ip link set "$BOND" mtu "$MTU" 2>/dev/null || true
         ip link set "$SNIFF" up 2>/dev/null || true
         ip link set "$BOND" up 2>/dev/null || true
+        echo "bond-ok=$SNIFF"
         exit 0
       fi
-      # Avoid NM fighting if present
+
       systemctl stop NetworkManager 2>/dev/null || true
       ip link set "$SNIFF" down 2>/dev/null || true
       ip link set "$BOND" down 2>/dev/null || true
@@ -60,9 +103,10 @@
         echo "-$s" > /sys/class/net/$BOND/bonding/slaves 2>/dev/null || true
       done
       echo "+$SNIFF" > /sys/class/net/$BOND/bonding/slaves
-      ip link set "$BOND" mtu "{{ ludus_so_bond_mtu | int }}"
+      ip link set "$BOND" mtu "$MTU"
       ip link set "$SNIFF" up
       ip link set "$BOND" up
+      systemctl start NetworkManager 2>/dev/null || true
       echo "enslaved $SNIFF -> $BOND"
   become: true
 
@@ -72,7 +116,7 @@
     mode: "0644"
     content: |
       [Unit]
-      Description=Enslave Security Onion sniff NIC to bond0
+      Description=Ensure Security Onion bond0 + sniff NIC slave
       After=network-pre.target
       Before=docker.service
 
@@ -93,11 +137,21 @@
     daemon_reload: true
   become: true
 
-- name: Run sniff bond enslave now
+- name: Run sniff bond create/enslave now
   ansible.builtin.command: /usr/local/sbin/ludus-so-enslave-sniff
   become: true
   register: ludus_so_enslave_now
-  changed_when: "'enslaved' in (ludus_so_enslave_now.stdout | default(''))"
+  changed_when: >-
+    'enslaved' in (ludus_so_enslave_now.stdout | default(''))
+    or 'created-bond0' in (ludus_so_enslave_now.stdout | default(''))
+
+- name: Fail when bond0 could not be created
+  ansible.builtin.fail:
+    msg: >
+      Failed to create/enslave bond0 for sniff NIC {{ ludus_so_sniff_nic }}.
+      Output: {{ ludus_so_enslave_now.stdout | default('') }}
+      {{ ludus_so_enslave_now.stderr | default('') }}
+  when: ludus_so_enslave_now.rc | default(1) != 0
 
 - name: Re-assert Proxmox range bridge hub-mode (ageing 0)
   ansible.builtin.shell: |
@@ -118,7 +172,7 @@
   changed_when: false
   failed_when: false
 
-- name: Restart zeek/suricata when bond was just healed
+- name: Restart zeek/suricata when bond was created or healed
   ansible.builtin.shell: |
     set -euo pipefail
     command -v so-zeek-restart >/dev/null && so-zeek-restart || true

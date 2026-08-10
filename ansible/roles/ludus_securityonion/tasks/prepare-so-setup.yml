@@ -9,6 +9,20 @@
 - name: Remove stale Security Onion bond0 before so-setup
   ansible.builtin.shell: |
     set -euo pipefail
+    # Never tear down bond0 while a detached so-setup is still running — that
+    # leaves sensors (suricata/zeek) with af-packet "No such device" forever.
+    PIDFILE=/var/run/ludus-so-setup.pid
+    if [[ -f "$PIDFILE" ]]; then
+      pid=$(cat "$PIDFILE" 2>/dev/null || true)
+      if [[ -n "${pid:-}" ]] && kill -0 "$pid" 2>/dev/null; then
+        echo "skip-bond-cleanup-setup-running pid=${pid}"
+        exit 0
+      fi
+    fi
+    if pgrep -f 'so-setup iso' >/dev/null 2>&1; then
+      echo "skip-bond-cleanup-so-setup-process"
+      exit 0
+    fi
     changed=0
     while IFS= read -r con; do
       [[ -z "$con" ]] && continue

@@ -77,6 +77,21 @@ ludus_so_dns_check_hosts:
 # Strip broken docker registry-mirrors (e.g. https://:5000) before so-setup pulls images
 ludus_so_sanitize_docker_daemon: true
 
-# After setup (and on redeploy), enslave sniff NIC to bond0 + persist via systemd oneshot.
-# Without this, zeek/suricata listen on bond0 with NO-CARRIER and see zero traffic.
+# After setup (and on redeploy), create bond0 if missing, enslave sniff NIC, persist oneshot.
+# Without this, zeek/suricata crash (af-packet: bond0 No such device) or see zero traffic.
 ludus_so_heal_sniff_bond: true
+
+# After bond heal, parse so-status -j and start missing/unhealthy containers.
+ludus_so_heal_containers: true
+ludus_so_heal_containers_fail: true
+ludus_so_heal_container_retries: 12
+ludus_so_heal_container_delay: 20
+# Required containers that must be running before elastic_security proceeds.
+ludus_so_required_containers:
+  - so-elasticsearch
+  - so-kibana
+  - so-nginx
+  - so-soc
+  - so-suricata
+  - so-zeek
+  - so-elastic-fleet

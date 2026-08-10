@@ -1,0 +1,171 @@
+---
+# After so-setup (and on redeploy), so-status can show missing/unhealthy containers
+# (common: so-suricata exits when bond0 is gone). Assumes ensure-sniff-bond ran first.
+# Start bad containers, wait on so-status -j, fail if required ones stay bad.
+- name: Collect so-status bad containers (JSON)
+  ansible.builtin.shell: |
+    set -euo pipefail
+    out=$(so-status -j 2>/dev/null || echo '{"status_code":1,"containers":[]}')
+    python3 - <<'PY' "$out"
+    import json, sys
+    data = json.loads(sys.argv[1])
+    code = int(data.get("status_code", 1))
+    bad = []
+    for c in data.get("containers") or []:
+        name = c.get("Name") or ""
+        st = (c.get("Status") or "").lower()
+        det = (c.get("Details") or "").lower()
+        if st != "running":
+            bad.append(name)
+        elif "unhealthy" in det and "health: starting" not in det:
+            bad.append(name)
+    print(f"code={code}")
+    print("bad=" + ",".join(bad))
+    PY
+  args:
+    executable: /bin/bash
+  register: ludus_so_status_scan
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: Parse so-status scan facts
+  ansible.builtin.set_fact:
+    ludus_so_status_code: >-
+      {{
+        (ludus_so_status_scan.stdout_lines | select('match', '^code=') | first | default('code=1'))
+        | regex_replace('^code=', '')
+        | int
+      }}
+    ludus_so_bad_containers: >-
+      {{
+        (
+          (ludus_so_status_scan.stdout_lines | select('match', '^bad=') | first | default('bad='))
+          | regex_replace('^bad=', '')
+        ).split(',')
+        | select('ne', '')
+        | list
+      }}
+
+- name: Report so-status baseline
+  ansible.builtin.debug:
+    msg: >-
+      so-status code={{ ludus_so_status_code }}
+      bad={{ ludus_so_bad_containers | join(',') if ludus_so_bad_containers else '(none)' }}
+
+- name: Start each bad container (so-*-start / docker start)
+  ansible.builtin.shell: |
+    set -euo pipefail
+    NAME="{{ item }}"
+    # Map so-suricata -> so-suricata-start; so-elastic-fleet -> so-elastic-fleet-start
+    if command -v "${NAME}-start" >/dev/null 2>&1; then
+      "${NAME}-start" || "${NAME}-restart" || true
+    else
+      short="${NAME#so-}"
+      if command -v "so-${short}-start" >/dev/null 2>&1; then
+        "so-${short}-start" || "so-${short}-restart" || true
+      else
+        docker start "$NAME" 2>/dev/null || true
+        echo "no-wrapper-used-docker=${NAME}"
+      fi
+    fi
+    echo "healed=${NAME}"
+  args:
+    executable: /bin/bash
+  loop: "{{ ludus_so_bad_containers }}"
+  when: ludus_so_bad_containers | length > 0
+  become: true
+  register: ludus_so_container_heal_loops
+  changed_when: true
+  failed_when: false
+
+- name: Wait for required containers to be running
+  ansible.builtin.shell: |
+    set -euo pipefail
+    REQUIRED='{{ ludus_so_required_containers | join(" ") }}'
+    out=$(so-status -j 2>/dev/null || echo '{"status_code":1,"containers":[]}')
+    python3 - <<'PY' "$out" "$REQUIRED"
+    import json, sys
+    data = json.loads(sys.argv[1])
+    required = set(sys.argv[2].split())
+    code = int(data.get("status_code", 1))
+    bad = []
+    for c in data.get("containers") or []:
+        name = c.get("Name") or ""
+        if name not in required:
+            continue
+        st = (c.get("Status") or "").lower()
+        det = (c.get("Details") or "").lower()
+        if st != "running":
+            bad.append(f"{name}:{st}")
+        elif "unhealthy" in det and "health: starting" not in det:
+            bad.append(f"{name}:unhealthy")
+    print(f"code={code}")
+    print("bad=" + ",".join(bad))
+    # Accept fully healthy, or still-starting with no required failures
+    if code == 0:
+        sys.exit(0)
+    if not bad and code == 2:
+        sys.exit(0)
+    if not bad:
+        sys.exit(0)
+    sys.exit(1)
+    PY
+  args:
+    executable: /bin/bash
+  register: ludus_so_status_wait
+  until: ludus_so_status_wait.rc == 0
+  retries: "{{ ludus_so_heal_container_retries | int }}"
+  delay: "{{ ludus_so_heal_container_delay | int }}"
+  changed_when: false
+  failed_when: false
+  become: true
+  when: >
+    (ludus_so_bad_containers | length > 0)
+    or ((ludus_so_status_code | int) not in [0, 2])
+
+- name: Parse post-heal so-status
+  ansible.builtin.set_fact:
+    ludus_so_bad_required: >-
+      {{
+        (
+          (
+            (ludus_so_status_wait.stdout_lines | default(ludus_so_status_scan.stdout_lines) | select('match', '^bad=') | first | default('bad='))
+            | regex_replace('^bad=', '')
+          ).split(',')
+          | select('ne', '')
+          | map('regex_replace', ':.*$', '')
+          | list
+        )
+        if (ludus_so_status_wait is defined and ludus_so_status_wait.stdout_lines is defined)
+        else ludus_so_bad_containers
+      }}
+    ludus_so_status_code_after: >-
+      {{
+        (
+          (ludus_so_status_wait.stdout_lines | default(ludus_so_status_scan.stdout_lines) | select('match', '^code=') | first | default('code=1'))
+          | regex_replace('^code=', '')
+          | int
+        )
+        if (ludus_so_status_wait is defined and ludus_so_status_wait.stdout_lines is defined)
+        else (ludus_so_status_code | int)
+      }}
+
+- name: Report so-status after heal
+  ansible.builtin.debug:
+    msg: >-
+      so-status after heal code={{ ludus_so_status_code_after }}
+      bad_required={{ ludus_so_bad_required | join(',') if ludus_so_bad_required else '(none)' }}
+
+- name: Fail when required containers still missing/unhealthy
+  ansible.builtin.fail:
+    msg: >
+      Security Onion containers still unhealthy after heal:
+      {{ ludus_so_bad_required | join(', ') }}.
+      Check bond0 (sensors need it), /opt/so/log/<name>/, and `so-status`.
+      Re-run provision after fixing host networking.
+  when:
+    - ludus_so_heal_containers_fail | default(true) | bool
+    - ludus_so_status_wait is defined
+    - ludus_so_status_wait.rc | default(0) != 0
+    - ludus_so_bad_required | default([]) | length > 0
