@@ -1,0 +1,13 @@
+# Trusted from origin/main. commands and agent are not read from feature branches.
+agent: cursor
+
+document:
+  instructions: |
+    CHANGELOG.md [Unreleased] owns user-facing changes in the current branch.
+    After merge to main, CI promotes Unreleased into the next GitHub Release (patch
+    by default). Put `<!-- release: minor -->` or `<!-- release: major -->` in
+    Unreleased when the bump is not a patch. Do not invent a version heading on
+    a feature branch.
+    docs/ owns dummy-friendly Packer / template notes.
+    CONTRIBUTING.md owns source layout and authoring rules.
+    Do not add new top-level docs to close a perceived gap; update the owner.

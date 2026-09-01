@@ -70,6 +70,7 @@ Roles and collections live under [`ansible/`](./ansible/). See [`ansible/README.
 ludus-source-meow/
 ├── source.yml                 # repo-level metadata (required for a clean catalog)
 ├── docs/                      # dummy-friendly Packer / template notes
+├── scripts/                   # changelog release (CI on main)
 ├── blueprints/<id>/           # blueprint.yml + range-config.yml (+ requirements.yml, README)
 ├── templates/<name>/          # Packer *.pkr.hcl (+ http/ or Autounattend.xml)
 └── ansible/
