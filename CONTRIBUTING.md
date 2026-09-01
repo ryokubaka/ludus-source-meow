@@ -7,11 +7,13 @@ This repo is a [Ludus source](https://docs.ludus.cloud/docs/using-ludus/sources)
 ```text
 blueprints/
 └── starter-lab/             each: blueprint.yml, range-config.yml, requirements.yml?, README.md
+docs/                        Dummy-friendly Packer / template notes (see docs/README.md)
 templates/                   Packer templates (one dir per template)
 ansible/
 ├── roles/                   Roles (dirs or git submodules pinned to tags)
 └── collections/             Collections (dirs with galaxy.yml, or submodules)
 source.yml                   Source metadata
+.gitattributes               Shell script line endings (LF) and related git attrs
 .gitmodules                  Submodule definitions (absolute upstream URLs)
 ```
 
@@ -124,6 +126,7 @@ Identity comes from `galaxy.yml` (`namespace.name`), not the directory name.
 templates/my-debian-base/
 ├── my-debian-base.pkr.hcl   # include description + icon_path variables
 ├── icon.png                 # optional catalog icon
+├── scripts/                 # shell-local helpers (must be +x in git)
 ├── http/                    # Linux preseed / kickstart
 └── Autounattend.xml         # Windows only
 ```
@@ -148,7 +151,7 @@ Scripts that Packer or operators run as programs must be executable **in git** (
 git update-index --chmod=+x templates/my-debian-base/scripts/*.sh
 ```
 
-Prefer `execute_command` that invokes `bash {{.Script}}` so a lost `+x` cannot fail the bake. Walkthrough: [docs/templates-for-dummies.md](./docs/templates-for-dummies.md).
+Prefer `execute_command` that invokes `bash {{.Script}}` so a lost `+x` cannot fail the bake. Keep `*.sh` line endings LF (see `.gitattributes`); CRLF breaks shebangs on the Ludus / Packer host. Walkthrough: [docs/templates-for-dummies.md](./docs/templates-for-dummies.md).
 
 ## Local Dev Loop
 

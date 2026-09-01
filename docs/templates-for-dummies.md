@@ -127,6 +127,7 @@ Then `ludus templates build` again.
 
 | Symptom | Likely cause |
 |---|---|
+| Script fails immediately / `bad interpreter` | CRLF line endings on a `.sh` file; keep LF (repo `.gitattributes` enforces this on checkout). |
 | No SSH/WinRM in the template DHCP pool | First-boot wizard still owns the TTY, or DHCP never came up. Watch the Proxmox console during the keystroke phase. |
 | `sshpass required` | Packer host missing `sshpass` (password SSH from a shell-local script). |
 | `ANSIBLE_HOME unset` | Ludus did not inject `var.ansible_home` — template file is missing the required variable block. |

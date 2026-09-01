@@ -42,7 +42,7 @@ ludus templates build -n securityonion-2.4-x64-template
 ludus templates build -n securityonion-3-x64-template
 ```
 
-Packer runs `scripts/packer-provision-via-dhcp.sh` via `bash` so a missing execute bit cannot fail the bake. Git still marks those scripts `+x`. On an older checkout, or if you copied files without mode bits:
+Packer invokes `scripts/packer-provision-via-dhcp.sh` via `bash`; git marks those scripts `+x`. Shell-local permission failures: [docs/templates-for-dummies.md](../docs/templates-for-dummies.md). SO script paths on an older checkout, or if you copied files without mode bits:
 
 ```bash
 chmod +x templates/securityonion-2.4/scripts/*.sh templates/securityonion-3/scripts/*.sh
