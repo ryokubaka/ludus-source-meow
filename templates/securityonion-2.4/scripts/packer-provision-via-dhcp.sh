@@ -6,6 +6,9 @@
 # Ludus template DHCP pool (.50-.100) then run the same ansible playbooks BSL uses.
 #
 # Playbook order matches ludus-source-bsl: prereqs → app prep → machine-id → ssh keys.
+#
+# Packer must invoke this with `bash script.sh` (see *.pkr.hcl execute_command).
+# Running it as a bare path requires the git executable bit (+x).
 set -u
 
 SCRIPT_VERSION="1.0.0"

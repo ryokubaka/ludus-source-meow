@@ -1,5 +1,7 @@
 # Ludus Templates
 
+Dummy-friendly walkthrough (ISO → golden VM → range clone, plus “build destroyed the VM”): [docs/templates-for-dummies.md](../docs/templates-for-dummies.md).
+
 | Template | Description |
 |---|---|
 | `securityonion-2.4-x64-template` | SO **2.4.211** (`securityonion-2.4.211-20260407.iso`). `so-setup` at range deploy. |
@@ -38,6 +40,15 @@ After installing from this source, Packer content lives under `/opt/ludus/packer
 ```bash
 ludus templates build -n securityonion-2.4-x64-template
 ludus templates build -n securityonion-3-x64-template
+```
+
+Packer runs `scripts/packer-provision-via-dhcp.sh` via `bash` so a missing execute bit cannot fail the bake. Git still marks those scripts `+x`. On an older checkout, or if you copied files without mode bits:
+
+```bash
+chmod +x templates/securityonion-2.4/scripts/*.sh templates/securityonion-3/scripts/*.sh
+# already installed on a Ludus host:
+# chmod +x /opt/ludus/packer/securityonion-2.4/scripts/*.sh
+# chmod +x /opt/ludus/packer/securityonion-3/scripts/*.sh
 ```
 
 ## Unit tests

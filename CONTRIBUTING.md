@@ -142,6 +142,14 @@ variable "icon_path" {
 
 Template catalog key = `*-template` name inside the `.pkr.hcl`.
 
+Scripts that Packer or operators run as programs must be executable **in git** (Windows `core.filemode=false` will not notice a local `chmod`):
+
+```bash
+git update-index --chmod=+x templates/my-debian-base/scripts/*.sh
+```
+
+Prefer `execute_command` that invokes `bash {{.Script}}` so a lost `+x` cannot fail the bake. Walkthrough: [docs/templates-for-dummies.md](./docs/templates-for-dummies.md).
+
 ## Local Dev Loop
 
 ```bash

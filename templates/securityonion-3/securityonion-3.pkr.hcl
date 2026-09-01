@@ -171,7 +171,9 @@ build {
   sources = ["source.proxmox-iso.securityonion3"]
 
   provisioner "shell-local" {
-    execute_command = ["bash", "-c", "{{.Vars}} {{.Script}}"]
+    # `bash script` — do not exec the file directly. Git on Windows stores 0644,
+    # and Packer then fails with permission denied and destroys the VM.
+    execute_command = ["bash", "-c", "{{.Vars}} bash {{.Script}}"]
     env = {
       VM_NAME              = "${var.vm_name}"
       SSH_USER             = "${var.ssh_username}"
