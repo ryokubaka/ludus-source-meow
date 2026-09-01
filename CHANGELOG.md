@@ -22,6 +22,7 @@ bump is not a patch. Do not invent a version heading on a feature branch.
 ## [Unreleased]
 
 - [Add] **Changelog release CI** — On `main`, promote `[Unreleased]` to the next semver, tag `vX.Y.Z`, and publish a GitHub Release (`scripts/release.mjs`). PRs run release-script tests and `bash -n` on shipped `.sh` files.
+- [Fix] **Same-run promote** — After tagging or publishing the current version, CI continues and promotes `[Unreleased]` in the same job (do not wait for a later merge).
 
 ## [1.1.2] - 2026-09-02
 

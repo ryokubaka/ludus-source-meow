@@ -172,8 +172,8 @@ Put user-facing notes under `CHANGELOG.md` **`[Unreleased]`**. Do not add a `## 
 
 After merge to `main`, [`.github/workflows/ci.yml`](./.github/workflows/ci.yml) runs `node scripts/release.mjs ci`:
 
-1. If the newest versioned heading is not tagged yet, tag and publish that version first.
-2. Otherwise promote `[Unreleased]` to the next **patch** (`v1.1.2` → `v1.1.3`), commit `chore(release): vX.Y.Z`, tag, and create the GitHub Release.
+1. If the newest versioned heading is not tagged yet, tag and publish that version, then continue in the same job.
+2. Promote `[Unreleased]` to the next **patch** (`v1.1.2` → `v1.1.3`), commit `chore(release): vX.Y.Z`, tag, and create the GitHub Release.
 3. For a minor or major bump, put `<!-- release: minor -->` or `<!-- release: major -->` in Unreleased.
 
 Local check: `node --test scripts/release.test.mjs` and `node scripts/release.mjs plan`.
