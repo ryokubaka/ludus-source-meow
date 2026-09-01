@@ -13,6 +13,7 @@ ansible/
 ├── roles/                   Roles (dirs or git submodules pinned to tags)
 └── collections/             Collections (dirs with galaxy.yml, or submodules)
 source.yml                   Source metadata
+scripts/                     release.mjs (changelog → tag / GitHub Release)
 .gitattributes               Shell script line endings (LF) and related git attrs
 .gitmodules                  Submodule definitions (absolute upstream URLs)
 ```
@@ -164,6 +165,18 @@ ludus range deploy
 ```
 
 When ready: push remote, `ludus source rm meow`, then `ludus source add https://github.com/ryokubaka/ludus-source-meow`.
+
+## Changelog
+
+Put user-facing notes under `CHANGELOG.md` **`[Unreleased]`**. Do not add a `## [X.Y.Z]` heading on a feature branch.
+
+After merge to `main`, [`.github/workflows/ci.yml`](./.github/workflows/ci.yml) runs `node scripts/release.mjs ci`:
+
+1. If the newest versioned heading is not tagged yet, tag and publish that version first.
+2. Otherwise promote `[Unreleased]` to the next **patch** (`v1.1.2` → `v1.1.3`), commit `chore(release): vX.Y.Z`, tag, and create the GitHub Release.
+3. For a minor or major bump, put `<!-- release: minor -->` or `<!-- release: major -->` in Unreleased.
+
+Local check: `node --test scripts/release.test.mjs` and `node scripts/release.mjs plan`.
 
 ## Blueprint README
 

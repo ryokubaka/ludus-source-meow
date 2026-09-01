@@ -7,6 +7,7 @@ Dummy-friendly notes for Ludus sources. Official product docs stay at [docs.ludu
 | [Templates & Packer for dummies](./templates-for-dummies.md) | You want the ISO → golden VM → range clone story, or a build just ate your VM |
 | [Templates README](../templates/README.md) | You need this source’s ISO pins, inventory notes, and shared-storage caveats |
 | [Contributing](../CONTRIBUTING.md) | You are adding a blueprint, role, or template |
+| [Changelog](../CHANGELOG.md) | You are writing release notes — put them under `[Unreleased]` |
 
 ## Official Ludus (go deeper)
 

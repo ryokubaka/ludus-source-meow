@@ -2,13 +2,26 @@
 
 All notable changes to [ludus-source-meow](https://github.com/ryokubaka/ludus-source-meow) will be documented in this file.
 
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
 Each bullet uses a single tag:
 
 - **[Add]** — New capability
 - **[Improve]** — UX polish or refactor without a new feature
+- **[Fix]** — Bug fix
 - **[Docs]** — Documentation improvement
 
+Write new notes under **[Unreleased]**. After merge to `main`, CI promotes that
+section to the next GitHub Release (patch by default). Put
+`<!-- release: minor -->` or `<!-- release: major -->` in Unreleased when the
+bump is not a patch. Do not invent a version heading on a feature branch.
+
 ---
+
+## [Unreleased]
+
+- [Add] **Changelog release CI** — On `main`, promote `[Unreleased]` to the next semver, tag `vX.Y.Z`, and publish a GitHub Release (`scripts/release.mjs`). PRs run release-script tests and `bash -n` on shipped `.sh` files.
 
 ## [1.1.2] - 2026-09-02
 
