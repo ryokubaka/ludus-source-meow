@@ -10,6 +10,7 @@ import {
   hasUnreleasedNotes,
   latestChangelogVersion,
   notesForRelease,
+  ciShouldContinue,
   planRelease,
   promoteUnreleased,
   withGitIdent,
@@ -92,11 +93,52 @@ describe("release notes", () => {
     assert.equal(hasUnreleasedNotes(plan.changelog), false);
   });
 
-  it("tags the current version before promoting Unreleased", () => {
-    const plan = planRelease({ changelog: SAMPLE, version: "1.1.2", tagExists: false });
-    assert.equal(plan.kind, "tag-current");
-    assert.equal(plan.version, "1.1.2");
-    assert.equal(plan.notes, "Fix missing execute bit.");
+  it("tags the current version first, then CI continues to promote Unreleased", () => {
+    const first = planRelease({ changelog: SAMPLE, version: "1.1.2", tagExists: false });
+    assert.equal(first.kind, "tag-current");
+    assert.equal(first.version, "1.1.2");
+    assert.equal(first.notes, "Fix missing execute bit.");
+    assert.equal(ciShouldContinue(first), true);
+
+    const second = planRelease({
+      changelog: SAMPLE,
+      version: "1.1.2",
+      tagExists: true,
+      releaseExists: true,
+      date: "2026-09-02",
+    });
+    assert.equal(second.kind, "promote");
+    assert.equal(second.to, "1.1.3");
+    assert.equal(ciShouldContinue(second), false);
+  });
+
+  it("continues CI after publishing a missing GitHub release", () => {
+    const plan = planRelease({
+      changelog: SAMPLE,
+      version: "1.1.2",
+      tagExists: true,
+      releaseExists: false,
+    });
+    assert.equal(plan.kind, "publish-release");
+    assert.equal(ciShouldContinue(plan), true);
+  });
+
+  it("does not continue CI after promote or noop", () => {
+    const promote = planRelease({
+      changelog: SAMPLE,
+      version: "1.1.2",
+      tagExists: true,
+      releaseExists: true,
+      date: "2026-09-02",
+    });
+    const noop = planRelease({
+      changelog: `# Changelog\n\n## [Unreleased]\n\n## [1.1.2]\n\nFix.\n`,
+      version: "1.1.2",
+      tagExists: true,
+      releaseExists: true,
+    });
+    assert.equal(ciShouldContinue(promote), false);
+    assert.equal(ciShouldContinue(noop), false);
   });
 
   it("no-ops when the current version is already tagged and Unreleased is empty", () => {

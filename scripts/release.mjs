@@ -159,6 +159,11 @@ export function planRelease(input) {
   return { kind: "noop", version, reason: "already-released" };
 }
 
+/** After tagging or publishing the current version, CI should promote Unreleased in the same job. */
+export function ciShouldContinue(plan) {
+  return plan.kind === "tag-current" || plan.kind === "publish-release";
+}
+
 /**
  * @param {string} root
  * @param {ReturnType<typeof planRelease>} plan
@@ -237,12 +242,7 @@ function runPlan(root, bump) {
   });
 }
 
-function runCi(root, bump) {
-  const plan = runPlan(root, bump);
-  if (plan.kind === "noop") {
-    console.log(`release: ${plan.reason} (v${plan.version})`);
-    return;
-  }
+function applyCiPlan(root, plan) {
   if (plan.kind === "tag-current") {
     const tag = `v${plan.version}`;
     gitIdent(root, ["tag", "-a", tag, "-m", tag]);
@@ -257,6 +257,10 @@ function runCi(root, bump) {
     console.log(`release: published ${tag}`);
     return;
   }
+  if (plan.kind !== "promote") {
+    const exhausted = /** @type {never} */ (plan);
+    throw new Error(`unhandled plan: ${JSON.stringify(exhausted)}`);
+  }
   applyPlan(root, plan);
   git(root, ["add", CHANGELOG_FILE]);
   git(root, ["status", "--short"]);
@@ -266,6 +270,18 @@ function runCi(root, bump) {
   git(root, ["push", "origin", "HEAD:refs/heads/main", tag]);
   createGithubRelease(tag, tag, plan.notes);
   console.log(`release: published ${tag}`);
+}
+
+function runCi(root, bump) {
+  for (let i = 0; i < 2; i += 1) {
+    const plan = runPlan(root, bump);
+    if (plan.kind === "noop") {
+      if (i === 0) console.log(`release: ${plan.reason} (v${plan.version})`);
+      return;
+    }
+    applyCiPlan(root, plan);
+    if (!ciShouldContinue(plan)) return;
+  }
 }
 
 function parseArgs(argv) {

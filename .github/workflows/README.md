@@ -6,10 +6,10 @@
 
 ## Release job
 
-Same shape as [ctf-arena](https://github.com/ryokubaka/ctf-arena): notes live under `[Unreleased]`. After tests pass on `main`, `node scripts/release.mjs ci` either:
+Same shape as [ctf-arena](https://github.com/ryokubaka/ctf-arena): notes live under `[Unreleased]`. After tests pass on `main`, `node scripts/release.mjs ci`:
 
-- tags the newest `## [X.Y.Z]` heading if that tag is missing, or
-- promotes Unreleased to the next patch (or minor/major when Unreleased includes `<!-- release: minor -->` / `<!-- release: major -->`), then tags and creates the GitHub Release.
+- tags the newest `## [X.Y.Z]` heading if that tag is missing, then
+- promotes Unreleased to the next patch (or minor/major when Unreleased includes `<!-- release: minor -->` / `<!-- release: major -->`) in the **same job**, then tags and creates the GitHub Release.
 
 `chore(release):` commits skip the workflow so the bot push does not loop.
 
