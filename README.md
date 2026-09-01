@@ -30,6 +30,8 @@ ludus range logs -f
 
 See [Ludus Sources docs](https://docs.ludus.cloud/docs/using-ludus/sources) for flags (`--blueprints`, `--templates`, `--source-roles`, `--ref`, private git, etc.).
 
+New to Packer / Ludus templates? Start with [docs/templates-for-dummies.md](./docs/templates-for-dummies.md).
+
 ## Blueprints
 
 | Blueprint ID | Name | VMs | Description |
@@ -67,6 +69,7 @@ Roles and collections live under [`ansible/`](./ansible/). See [`ansible/README.
 ```text
 ludus-source-meow/
 ├── source.yml                 # repo-level metadata (required for a clean catalog)
+├── docs/                      # dummy-friendly Packer / template notes
 ├── blueprints/<id>/           # blueprint.yml + range-config.yml (+ requirements.yml, README)
 ├── templates/<name>/          # Packer *.pkr.hcl (+ http/ or Autounattend.xml)
 └── ansible/
@@ -75,6 +78,8 @@ ludus-source-meow/
 ```
 
 ## Contributing
+
+See [docs/](./docs/) for a dummy-friendly Packer / template walkthrough.
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for blueprint authoring rules and range-config conventions.
 

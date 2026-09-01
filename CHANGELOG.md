@@ -10,6 +10,14 @@ Each bullet uses a single tag:
 
 ---
 
+## [1.1.2] - 2026-09-02
+
+**Templates**
+- [Fix] **Packer provision scripts** — Git stored `.sh` as `0644`; Packer `shell-local` exec'd the file and failed, then destroyed the VM. Invoke via `bash {{.Script}}` and mark provision scripts `+x` in git.
+
+**Docs**
+- [Docs] **Templates for dummies** — `docs/` walkthrough of ISO → Packer → Proxmox template → range clone, plus the common bake failures.
+
 ## [1.1.1] - 2026-08-09
 
 **Ansible**

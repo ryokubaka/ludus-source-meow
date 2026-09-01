@@ -4,6 +4,9 @@
 # Standard Ludus Linux templates use communicator=ssh + packer ansible provisioner.
 # Stock SO ISO has no guest-agent during install (proxmox#91), so we SSH-scan the
 # Ludus template DHCP pool (.50-.100) then run the same ansible playbooks BSL uses.
+#
+# Packer must invoke this with `bash script.sh` (see *.pkr.hcl execute_command).
+# Running it as a bare path requires the git executable bit (+x).
 set -u
 
 SCRIPT_VERSION="1.0.0"

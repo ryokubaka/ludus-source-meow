@@ -1,0 +1,2 @@
+# Shell scripts must stay LF. CRLF breaks shebangs on the Ludus / Packer host.
+*.sh text eol=lf
