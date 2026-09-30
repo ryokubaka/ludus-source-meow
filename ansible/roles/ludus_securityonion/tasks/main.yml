@@ -1,4 +1,8 @@
 ---
+- name: Require the expected Security Onion release
+  ansible.builtin.include_tasks: assert-so-version.yml
+  when: ludus_so_expect_version | default('') | length > 0
+
 - name: Check if Security Onion setup already completed
   ansible.builtin.stat:
     path: "{{ ludus_so_setup_marker }}"

@@ -4,10 +4,11 @@ galaxy_info:
   author: ryokubaka
   description: >
     Attach sniff net1 via Proxmox API, wait for guest NIC, run Security Onion so-setup
-    (standalone-net by default) for Ludus ranges. No LUX required.
+    (standalone-net by default) for Ludus ranges. Supports SO 2.4, 3.2, and 3.3.
+    No LUX required.
   license: AGPL-3.0-or-later
   min_ansible_version: "2.14"
-  version: "1.0.3"
+  version: "1.1.0"
   platforms:
     - name: EL
       versions:

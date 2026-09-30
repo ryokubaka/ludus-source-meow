@@ -1,0 +1,30 @@
+---
+# ISO tree VERSION (setup/../VERSION), not /etc/soversion. Salt skips
+# /etc/soversion on standalone/manager/eval, so that file is absent after a
+# fresh standalone so-setup.
+- name: Read Security Onion VERSION from the ISO tree
+  ansible.builtin.shell: |
+    set -euo pipefail
+    for f in /root/SecurityOnion/VERSION /home/onion/SecurityOnion/VERSION; do
+      if [[ -f "$f" ]]; then
+        tr -d '[:space:]' < "$f"
+        exit 0
+      fi
+    done
+    echo "missing"
+    exit 1
+  args:
+    executable: /bin/bash
+  become: true
+  register: ludus_so_iso_version
+  changed_when: false
+
+- name: Fail when the guest is not the expected Security Onion release
+  ansible.builtin.assert:
+    that:
+      - ludus_so_iso_version.stdout is match('^' ~ (ludus_so_expect_version | regex_escape))
+    fail_msg: >-
+      Expected Security Onion {{ ludus_so_expect_version }} but the ISO VERSION
+      file is {{ ludus_so_iso_version.stdout | default('missing') }}.
+      Deploy this lab on securityonion-{{ ludus_so_expect_version }}-x64-template.
+    success_msg: "Security Onion {{ ludus_so_iso_version.stdout }}"

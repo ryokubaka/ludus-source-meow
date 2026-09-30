@@ -27,6 +27,9 @@ bump is not a patch. Do not invent a version heading on a feature branch.
 - [Improve] **`securityonion-3.3-x64-template`** — Security Onion **3.3.0** (`securityonion-3.3.0-20260911.iso`, the 3.3.0 hotfix) as its own Packer template (`templates/securityonion-3.3`, `vm_name` `securityonion-3.3-x64-template`). SHA256 from upstream `DOWNLOAD_AND_VERIFY_ISO.md`. `so-setup` still runs at range deploy. `main` keeps `securityonion-3-x64-template` (3.2.0).
 - [Improve] **`securityonion3-lab`** — Blueprint version `1.2.0` (was `1.1.0`) so a source install treats this lab as newer than the copy already on the host.
 
+**Ansible**
+- [Improve] **`ludus_securityonion`** — `securityonion3-lab` sets `ludus_so_expect_version: "3.3"`. The role reads the ISO `VERSION` file and stops when the guest is not Security Onion 3.3. Role `1.1.0`.
+
 ## [1.1.3] - 2026-09-01
 
 - [Add] **Changelog release CI** — On `main`, promote `[Unreleased]` to the next semver, tag `vX.Y.Z`, and publish a GitHub Release (`scripts/release.mjs`). PRs run release-script tests and `bash -n` on shipped `.sh` files.

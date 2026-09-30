@@ -31,6 +31,7 @@ Works with plain Ludus CLI/API deploy. No LUX required.
 | `ludus_so_sniff_mtu` | `""` | Optional Proxmox `net1` MTU (empty = inherit Ludus `vmbr`, usually 1500) |
 | `ludus_so_bond_mtu` | `1500` | Monitor/bond MTU for `so-setup` (virtio labs; do not use 9000 without jumbo bridge) |
 | `ludus_so_install_type` | `standalone` | `standalone` or `eval` |
+| `ludus_so_expect_version` | `""` | Require the ISO `VERSION` to start with this release (`3.3` matches `3.3.0`). Empty skips the check. |
 | `ludus_so_setup_profile_suffix` | `net` | Profile suffix for so-setup |
 | `ludus_so_sniff_wait_timeout` | `1800` | Seconds to wait for sniff NIC in guest |
 | `ludus_so_web_user` | `onionadmin@ludus.local` | SOC user (TESTING profile) |

@@ -2,6 +2,11 @@
 # Install type passed to so-setup test_profile: standalone (default) or eval
 ludus_so_install_type: standalone
 
+# When set, refuse to run unless the ISO tree VERSION starts with this release
+# (for example "3.3" matches 3.3.0). Empty skips the check so 2.4 and 3.2 labs
+# keep using this role.
+ludus_so_expect_version: ""
+
 # so-setup standalone needs ≥ this MemTotal (GiB). Target RAM is higher so MemTotal clears the floor.
 ludus_so_mem_min_gb: 16
 ludus_so_mem_target_gb: 20
