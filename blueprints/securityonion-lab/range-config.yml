@@ -55,6 +55,10 @@ ludus:
     ram_gb: 20
     cpus: 8
     linux: true
+    # Guest agent reports Oracle Linux id "ol". Ludus ships no vars for that group.
+    # rhel group_vars are localuser:password, created by the SO template.
+    ansible_groups:
+      - rhel
     testing:
       snapshot: false
       block_internet: true
