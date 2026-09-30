@@ -21,6 +21,8 @@ bump is not a patch. Do not invent a version heading on a feature branch.
 
 ## [Unreleased]
 
+## [1.1.4] - 2026-09-30
+
 - [Fix] **Security Onion deploy SSH** — Templates create `localuser` and the SO VM joins Ludus's built-in `rhel` group. Range deploy no longer needs a file under `/opt/ludus`. Rebuild the template before the next deploy.
 
 ## [1.1.3] - 2026-09-01
