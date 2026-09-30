@@ -25,7 +25,8 @@ bump is not a patch. Do not invent a version heading on a feature branch.
 
 **Templates**
 - [Improve] **`securityonion-3.3-x64-template`** — Security Onion **3.3.0** (`securityonion-3.3.0-20260911.iso`, the 3.3.0 hotfix) as its own Packer template (`templates/securityonion-3.3`, `vm_name` `securityonion-3.3-x64-template`). SHA256 from upstream `DOWNLOAD_AND_VERIFY_ISO.md`. `so-setup` still runs at range deploy. `main` keeps `securityonion-3-x64-template` (3.2.0).
-- [Improve] **`securityonion3-lab`** — Blueprint version `1.2.0`. SO VM RAM is `ram_min_gb: 16` and `ram_gb: 20`. Login stays `onion:onion` via the host `ol` group vars, same as 2.4 and 3.2.
+- [Improve] **`securityonion3-lab`** — Blueprint version `1.2.0`. SO VM RAM is `ram_min_gb: 16` and `ram_gb: 20`.
+- [Fix] **Security Onion deploy SSH** — The template creates `localuser` and the SO VM joins Ludus's built-in `rhel` group. Deploy SSH no longer depends on a file under `/opt/ludus`. Rebuild `securityonion-3.3-x64-template` before the next deploy.
 
 **Ansible**
 - [Improve] **`ludus_securityonion`** — `securityonion3-lab` sets `ludus_so_expect_version: "3.3"`. The role reads the ISO `VERSION` file and stops when the guest is not Security Onion 3.3. Role `1.1.0`.
