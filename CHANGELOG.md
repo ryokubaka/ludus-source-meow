@@ -25,6 +25,7 @@ bump is not a patch. Do not invent a version heading on a feature branch.
 
 - [Fix] **Security Onion deploy SSH** — Templates create `localuser` and the SO VM joins Ludus's built-in `rhel` group. Range deploy no longer needs a file under `/opt/ludus`. Rebuild the template before the next deploy.
 - [Fix] **Security Onion memory** — `ludus_securityonion` 1.0.4 stops and starts the VM from Proxmox when MemTotal is under 16 GiB. A guest reboot leaves QEMU at the old RAM cap, so a 16 GiB VM still reports ~15 GiB and so-setup aborts. Applies to 2.4 and 3.2.
+- [Fix] **Security Onion so-setup tree** — `ludus_securityonion` 1.0.5 links the ISO tree into the SSH user's home before `so-setup`. `so-setup` rsyncs `/home/$SUDO_USER/SecurityOnion`, and `localuser` has no copy, so Salt states never installed.
 
 ## [1.1.3] - 2026-09-01
 

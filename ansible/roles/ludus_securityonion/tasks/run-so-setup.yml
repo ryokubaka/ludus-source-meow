@@ -27,6 +27,47 @@
   changed_when: "'keeper-started' in (ludus_so_dns_keeper_start.stdout | default(''))"
   failed_when: false
 
+# so-setup sets INSTALLUSERNAME=${SUDO_USER:-$USER} and rsyncs
+# /home/$INSTALLUSERNAME/SecurityOnion/{salt,pillar}. Ansible become leaves
+# SUDO_USER as the SSH account. localuser has no ISO tree; the image keeps it
+# under /root and /home/onion.
+- name: Link the Security Onion ISO tree into the SSH user's home
+  ansible.builtin.shell: |
+    set -euo pipefail
+    src=""
+    for candidate in /root/SecurityOnion /home/onion/SecurityOnion; do
+      if [[ -d "$candidate/salt" && -d "$candidate/pillar" ]]; then
+        src="$candidate"
+        break
+      fi
+    done
+    if [[ -z "$src" ]]; then
+      echo "iso-tree-missing"
+      exit 1
+    fi
+    user="${SUDO_USER:-}"
+    if [[ -z "$user" || "$user" == "root" ]]; then
+      echo "link-not-needed src=$src"
+      exit 0
+    fi
+    home=$(getent passwd "$user" | cut -d: -f6 || true)
+    if [[ -z "${home:-}" || "$home" == "/" ]]; then
+      echo "no-home user=$user"
+      exit 1
+    fi
+    if [[ -d "$home/SecurityOnion/salt" && -d "$home/SecurityOnion/pillar" ]]; then
+      echo "already-present $home/SecurityOnion"
+      exit 0
+    fi
+    rm -rf "$home/SecurityOnion"
+    ln -sfn "$src" "$home/SecurityOnion"
+    echo "linked $home/SecurityOnion -> $src"
+  args:
+    executable: /bin/bash
+  become: true
+  register: ludus_so_iso_link
+  changed_when: "'linked ' in (ludus_so_iso_link.stdout | default(''))"
+
 - name: Start so-setup iso detached (nohup)
   ansible.builtin.shell: |
     set -euo pipefail
