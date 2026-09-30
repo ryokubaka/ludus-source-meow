@@ -47,7 +47,7 @@ network:
 ludus:
   - vm_name: "{{ range_id }}-so"
     hostname: "{{ range_id }}-so"
-    template: securityonion-3-x64-template
+    template: securityonion-3.3-x64-template
     vlan: 20
     ip_last_octet: 20
     # SO so-setup aborts below 16 GiB — keep min=max so Proxmox cannot balloon under floor

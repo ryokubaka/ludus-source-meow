@@ -11,7 +11,7 @@ set -u
 
 SCRIPT_VERSION="1.0.0"
 
-VM_NAME="${VM_NAME:-securityonion-3-x64-template}"
+VM_NAME="${VM_NAME:-securityonion-3.3-x64-template}"
 SSH_USER="${SSH_USER:-onion}"
 SSH_PASS="${SSH_PASS:-onion}"
 PLAYBOOKS="${PLAYBOOKS:-ansible/ludus-linux-prereqs.yml ansible/securityonion-prep.yml ansible/reset-machine-id.yml ansible/reset-ssh-host-keys.yml}"

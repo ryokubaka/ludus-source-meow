@@ -40,7 +40,7 @@ variable "vm_memory" {
 
 variable "vm_name" {
   type    = string
-  default = "securityonion-3-x64-template"
+  default = "securityonion-3.3-x64-template"
 }
 
 variable "ssh_password" {

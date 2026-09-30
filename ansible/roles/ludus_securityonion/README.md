@@ -8,7 +8,7 @@ Works with plain Ludus CLI/API deploy. No LUX required.
 
 ## Requirements
 
-- VM built from `securityonion-2.4-x64-template` or `securityonion-3-x64-template`
+- VM built from `securityonion-2.4-x64-template`, `securityonion-3-x64-template`, or `securityonion-3.3-x64-template`
 - Role run during **Ludus range deploy** (Ludus injects `PROXMOX_*` into ansible-playbook)
 - Uses Ludus extra vars: `range_second_octet`, `vm_target_nodes`, `inventory_hostname`
 - Internet on the SO management VLAN for Standard install pulls (unless airgap images present)

@@ -45,11 +45,11 @@ New to Packer / Ludus templates? Start with [docs/templates-for-dummies.md](./do
 | Template | Description |
 |---|---|
 | `securityonion-2.4-x64-template` | SO 2.4.211 Packer base — see [`templates/README.md`](./templates/README.md) |
-| `securityonion-3-x64-template` | SO 3.3.0 Packer base |
+| `securityonion-3.3-x64-template` | SO 3.3.0 Packer base |
 
 ```bash
 ludus templates build -n securityonion-2.4-x64-template
-ludus templates build -n securityonion-3-x64-template
+ludus templates build -n securityonion-3.3-x64-template
 ```
 
 Security Onion labs use the `ludus_securityonion` role to attach a sniff NIC (`net1`) via Proxmox API during deploy and run `so-setup`. [LUX](https://github.com/ryokubaka/ludus-ux) may also attach the same NIC (idempotent). Set bridge `ageing_time 0` on the range `vmbr` for packet capture — see [Ludus docs](https://docs.ludus.cloud/docs/networking#packet-capture).
