@@ -55,12 +55,6 @@ ludus:
     ram_gb: 20
     cpus: 8
     linux: true
-    # QEMU guest agent reports Oracle Linux ("ol"). Ludus has no group_vars/ol.yml,
-    # so without this group Ansible SSHes as the controller user `ludus` and
-    # Gathering Facts dies creating /home/ludus/.ansible/tmp. rhel group_vars
-    # are localuser:password, which the template creates.
-    ansible_groups:
-      - rhel
     testing:
       snapshot: false
       block_internet: true

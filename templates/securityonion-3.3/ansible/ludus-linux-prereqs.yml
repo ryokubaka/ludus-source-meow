@@ -32,28 +32,6 @@
         mode: "0440"
         validate: "visudo -cf %s"
 
-    # Guest agent OS id is "ol" (no Ludus group_vars). The lab blueprint adds
-    # the rhel group, whose vars are localuser:password.
-    - name: Ensure Ludus localuser exists
-      ansible.builtin.user:
-        name: localuser
-        groups: wheel
-        append: true
-        create_home: true
-        shell: /bin/bash
-
-    - name: Set Ludus localuser password
-      ansible.builtin.shell: printf '%s\n' 'localuser:password' | chpasswd
-      changed_when: true
-      no_log: true
-
-    - name: Ensure localuser has passwordless sudo
-      ansible.builtin.copy:
-        dest: /etc/sudoers.d/localuser
-        content: "localuser ALL=(ALL) NOPASSWD: ALL\n"
-        mode: "0440"
-        validate: "visudo -cf %s"
-
     - name: Install qemu-guest-agent (required for Ludus)
       ansible.builtin.script: "{{ playbook_dir }}/../scripts/install-qemu-guest-agent.sh"
       args:
