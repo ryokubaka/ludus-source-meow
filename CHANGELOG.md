@@ -29,7 +29,8 @@ bump is not a patch. Do not invent a version heading on a feature branch.
 - [Fix] **Security Onion deploy SSH** — The template creates `localuser` and the SO VM joins Ludus's built-in `rhel` group. Deploy SSH no longer depends on a file under `/opt/ludus`. Rebuild `securityonion-3.3-x64-template` before the next deploy.
 
 **Ansible**
-- [Improve] **`ludus_securityonion`** — `securityonion3-lab` sets `ludus_so_expect_version: "3.3"`. The role reads the ISO `VERSION` file and stops when the guest is not Security Onion 3.3. Role `1.1.0`.
+- [Improve] **`ludus_securityonion`** — `securityonion3-lab` sets `ludus_so_expect_version: "3.3"`. The role reads the ISO `VERSION` file and stops when the guest is not Security Onion 3.3. Role `1.1.1`.
+- [Fix] **Security Onion memory** — When MemTotal is under 16 GiB, the role stops and starts the VM from Proxmox after raising RAM to 20 GiB. A guest reboot leaves QEMU at the old cap, so a 16 GiB VM still reports ~15 GiB and so-setup aborts. Same behavior for 2.4 and 3.3.
 - [Fix] **Adaptix role** — SO labs declare `badsectorlabs.ludus_adaptix_c2` with no version pin, so a source sync leaves an already-installed copy in place.
 
 ## [1.1.3] - 2026-09-01

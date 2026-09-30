@@ -154,13 +154,61 @@
         ludus_so_mem_total_kib: "{{ ludus_so_mem_retry.stdout | default(ludus_so_mem_total_kib) | int }}"
       when: ludus_so_mem_retry is defined and ludus_so_mem_retry.stdout | default('') | length > 0
 
-    - name: Reboot guest so MemTotal reflects new Proxmox memory/balloon
-      ansible.builtin.reboot:
-        msg: "Ludus SO: reboot to apply ≥{{ ludus_so_mem_min_gb | default(16) }} GiB RAM for so-setup"
-        reboot_timeout: 900
-        pre_reboot_delay: 2
-        post_reboot_delay: 15
-      become: true
+    # A guest reboot leaves the QEMU process at the old -m. Stop and start
+    # from Proxmox so the new memory and balloon values actually apply.
+    - name: Stop the VM so QEMU applies the new memory cap
+      ansible.builtin.uri:
+        url: "{{ ludus_so_proxmox_url }}/api2/json/nodes/{{ ludus_so_pve_node }}/qemu/{{ ludus_so_pve_vmid }}/status/stop"
+        method: POST
+        headers:
+          Authorization: "{{ ludus_so_pve_auth }}"
+        status_code: [200]
+        validate_certs: false
+      delegate_to: localhost
+      become: false
+      when: (ludus_so_mem_total_kib | int) < (ludus_so_mem_min_kib | int)
+
+    - name: Wait until the VM has stopped
+      ansible.builtin.uri:
+        url: "{{ ludus_so_proxmox_url }}/api2/json/nodes/{{ ludus_so_pve_node }}/qemu/{{ ludus_so_pve_vmid }}/status/current"
+        method: GET
+        headers:
+          Authorization: "{{ ludus_so_pve_auth }}"
+        status_code: [200]
+        validate_certs: false
+      register: ludus_so_mem_vm_status
+      until: (ludus_so_mem_vm_status.json.data.status | default('')) == 'stopped'
+      retries: 24
+      delay: 5
+      delegate_to: localhost
+      become: false
+      when: (ludus_so_mem_total_kib | int) < (ludus_so_mem_min_kib | int)
+
+    - name: Start the VM with the new memory cap
+      ansible.builtin.uri:
+        url: "{{ ludus_so_proxmox_url }}/api2/json/nodes/{{ ludus_so_pve_node }}/qemu/{{ ludus_so_pve_vmid }}/status/start"
+        method: POST
+        headers:
+          Authorization: "{{ ludus_so_pve_auth }}"
+        status_code: [200]
+        validate_certs: false
+      delegate_to: localhost
+      become: false
+      when: (ludus_so_mem_total_kib | int) < (ludus_so_mem_min_kib | int)
+
+    - name: Wait for SSH after the Proxmox restart
+      ansible.builtin.wait_for:
+        host: "{{ ansible_host }}"
+        port: 22
+        delay: 15
+        timeout: 300
+      delegate_to: localhost
+      when: (ludus_so_mem_total_kib | int) < (ludus_so_mem_min_kib | int)
+
+    - name: Wait for Ansible after the Proxmox restart
+      ansible.builtin.wait_for_connection:
+        delay: 5
+        timeout: 300
       when: (ludus_so_mem_total_kib | int) < (ludus_so_mem_min_kib | int)
 
     - name: Re-read MemTotal after reboot
@@ -184,7 +232,7 @@
       ansible.builtin.debug:
         msg: >-
           MemTotal after fix={{ (ludus_so_mem_total_kib | int / 1024 / 1024) | round(1) }} GiB
-          (target {{ ludus_so_mem_min_gb | default(16) }} GiB)
+          (Proxmox target {{ (ludus_so_mem_target_mib | int / 1024) | round(0) }} GiB)
 
 - name: Fail when guest memory is below so-setup minimum
   ansible.builtin.fail:
