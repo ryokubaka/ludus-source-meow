@@ -46,7 +46,7 @@ graph TB
 | `{{ range_id }}-win11` | win11-22h2-x64-enterprise-template | 10.X.10.11 | domain member + Fleet agent |
 | `{{ range_id }}-kali` | kali-x64-desktop-template | 10.X.99.1 | attacker + Adaptix C2 |
 
-**RAM required:** ~36 GB (SO 24 + DC 4 + Win11 4 + Kali 4; SO min=max 24)  
+**RAM required:** ~28 GB (SO max 20 / min 16 + DC 4 + Win11 4 + Kali 4)  
 **Domain:** `meow.local`
 
 ## Credentials
