@@ -29,7 +29,7 @@ bump is not a patch. Do not invent a version heading on a feature branch.
 
 **Ansible**
 - [Improve] **`ludus_securityonion`** — `securityonion3-lab` sets `ludus_so_expect_version: "3.3"`. The role reads the ISO `VERSION` file and stops when the guest is not Security Onion 3.3. Role `1.1.0`.
-- [Fix] **Adaptix pin** — SO labs request `badsectorlabs.ludus_adaptix_c2` `1.1.0` instead of `main`, so a source sync does not fail when `1.1.0` is already installed.
+- [Fix] **Adaptix role** — SO labs declare `badsectorlabs.ludus_adaptix_c2` with no version pin, so a source sync leaves an already-installed copy in place.
 
 ## [1.1.3] - 2026-09-01
 
