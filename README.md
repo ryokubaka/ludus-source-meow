@@ -38,14 +38,14 @@ New to Packer / Ludus templates? Start with [docs/templates-for-dummies.md](./do
 |---|---|---|---|
 | [`starter-lab`](./blueprints/starter-lab/) | Starter Lab | 2 | Minimal Kali + Debian target — skeleton for new blueprints |
 | [`securityonion-lab`](./blueprints/securityonion-lab/) | Security Onion 2.4 Lab | 3 | Standalone SO 2.4 + target + Kali |
-| [`securityonion3-lab`](./blueprints/securityonion3-lab/) | Security Onion 3 Lab | 3 | Standalone SO 3.2 + target + Kali |
+| [`securityonion3-lab`](./blueprints/securityonion3-lab/) | Security Onion 3 Lab | 3 | Standalone SO 3.3.0 + target + Kali |
 
 ## Templates
 
 | Template | Description |
 |---|---|
 | `securityonion-2.4-x64-template` | SO 2.4.211 Packer base — see [`templates/README.md`](./templates/README.md) |
-| `securityonion-3-x64-template` | SO 3.2.0 Packer base |
+| `securityonion-3-x64-template` | SO 3.3.0 Packer base |
 
 ```bash
 ludus templates build -n securityonion-2.4-x64-template

@@ -1,6 +1,6 @@
 variable "description" {
   type    = string
-  default = "Security Onion 3.2.0 Standalone-ready base (ISO securityonion-3.2.0-20260729). so-setup runs at range deploy."
+  default = "Security Onion 3.3.0 Standalone-ready base (ISO securityonion-3.3.0-20260911). so-setup runs at range deploy."
 }
 
 variable "icon_path" {
@@ -10,7 +10,7 @@ variable "icon_path" {
 
 variable "iso_checksum" {
   type    = string
-  default = "sha256:7465163C1D1ADFCDC3935530EAFB312E987C016941ADC11841B214553314D1FF"
+  default = "sha256:0938C73B76CE30EC9E4394D312C79EA7CAC721B6818541697279A6221F7D870D"
 }
 
 variable "os" {
@@ -20,7 +20,7 @@ variable "os" {
 
 variable "iso_url" {
   type    = string
-  default = "https://download.securityonion.net/file/securityonion/securityonion-3.2.0-20260729.iso"
+  default = "https://download.securityonion.net/file/securityonion/securityonion-3.3.0-20260911.iso"
 }
 
 variable "vm_cpu_cores" {
@@ -91,7 +91,7 @@ variable "ludus_nat_interface" {
 ####
 
 locals {
-  template_description = "Security Onion 3.2.0 template built ${legacy_isotime("2006-01-02 03:04:05")} username:password => onion:onion (so-setup not run)"
+  template_description = "Security Onion 3.3.0 template built ${legacy_isotime("2006-01-02 03:04:05")} username:password => onion:onion (so-setup not run)"
 }
 
 source "proxmox-iso" "securityonion3" {

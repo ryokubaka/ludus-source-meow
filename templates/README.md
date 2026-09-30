@@ -5,7 +5,7 @@ Dummy-friendly walkthrough (ISO → golden VM → range clone, plus “build des
 | Template | Description |
 |---|---|
 | `securityonion-2.4-x64-template` | SO **2.4.211** (`securityonion-2.4.211-20260407.iso`). `so-setup` at range deploy. |
-| `securityonion-3-x64-template` | SO **3.2.0** (`securityonion-3.2.0-20260729.iso`). `so-setup` at range deploy. |
+| `securityonion-3-x64-template` | SO **3.3.0** (`securityonion-3.3.0-20260911.iso`). `so-setup` at range deploy. |
 
 ## Ludus template compliance
 

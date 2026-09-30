@@ -1,6 +1,6 @@
 # Security Onion 3 Lab
 
-Standalone Security Onion 3 with a `meow.local` domain (Win2019 DC + domain-joined Win11), Kali attacker with [Adaptix C2](https://github.com/badsectorlabs/ludus_adaptix_c2), and Fleet agents on the AD hosts. Same topology as `securityonion-lab`; uses `securityonion-3-x64-template`.
+Standalone Security Onion 3.3.0 with a `meow.local` domain (Win2019 DC + domain-joined Win11), Kali attacker with [Adaptix C2](https://github.com/badsectorlabs/ludus_adaptix_c2), and Fleet agents on the AD hosts. Same topology as `securityonion-lab`; uses `securityonion-3-x64-template`.
 
 ## Quick Start
 
