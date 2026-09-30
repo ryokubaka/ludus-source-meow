@@ -50,8 +50,8 @@ ludus:
     template: securityonion-3.3-x64-template
     vlan: 20
     ip_last_octet: 20
-    # so-setup aborts below 16 GiB MemTotal. Floor 16, max 20.
-    ram_min_gb: 16
+    # so-setup checks MemTotal ≥ 16 GiB. A 16 GiB VM reports ~15.2 GiB, so min and max are both 20.
+    ram_min_gb: 20
     ram_gb: 20
     cpus: 8
     linux: true

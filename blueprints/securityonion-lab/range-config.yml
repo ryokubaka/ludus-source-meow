@@ -50,8 +50,8 @@ ludus:
     template: securityonion-2.4-x64-template
     vlan: 20
     ip_last_octet: 20
-    # so-setup aborts below 16 GiB — keep balloon floor ≥16 so Proxmox cannot reclaim under that
-    ram_min_gb: 16
+    # so-setup checks MemTotal ≥ 16 GiB. A 16 GiB VM reports ~15.2 GiB, so min and max are both 20.
+    ram_min_gb: 20
     ram_gb: 20
     cpus: 8
     linux: true

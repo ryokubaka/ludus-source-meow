@@ -25,7 +25,8 @@ bump is not a patch. Do not invent a version heading on a feature branch.
 
 **Templates**
 - [Improve] **`securityonion-3.3-x64-template`** — Security Onion **3.3.0** (`securityonion-3.3.0-20260911.iso`, the 3.3.0 hotfix) as its own Packer template (`templates/securityonion-3.3`, `vm_name` `securityonion-3.3-x64-template`). SHA256 from upstream `DOWNLOAD_AND_VERIFY_ISO.md`. `so-setup` still runs at range deploy. `main` keeps `securityonion-3-x64-template` (3.2.0).
-- [Improve] **`securityonion3-lab`** — Blueprint version `1.2.0`. SO VM RAM is `ram_min_gb: 16` and `ram_gb: 20`.
+- [Improve] **`securityonion3-lab`** — Blueprint version `1.2.1`. SO VM RAM is `ram_min_gb: 20` and `ram_gb: 20`. A 16 GiB VM reports ~15.2 GiB MemTotal, under so-setup's 16 GiB check.
+- [Fix] **`securityonion-lab`** — Blueprint version `1.1.1`. SO VM `ram_min_gb` is 20, matching `ram_gb`, for the same MemTotal gap.
 - [Fix] **Security Onion deploy SSH** — The template creates `localuser` and the SO VM joins Ludus's built-in `rhel` group. Deploy SSH no longer depends on a file under `/opt/ludus`. Rebuild `securityonion-3.3-x64-template` before the next deploy.
 
 **Ansible**

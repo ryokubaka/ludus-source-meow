@@ -239,8 +239,8 @@
     msg: >
       Guest MemTotal is {{ (ludus_so_mem_total_kib | int / 1024 / 1024) | round(1) }} GiB;
       so-setup {{ ludus_so_install_type }} requires ≥ {{ ludus_so_mem_min_gb | default(16) }} GiB.
-      Set Ludus ram_min_gb ≥ 16 and ram_gb ≥ 20, then on Proxmox:
-      `qm set <vmid> --memory 20480 --balloon 20480` and reboot the guest,
-      then re-run provision_extension. A 16 GiB VM often shows ~15 GiB MemTotal
-      (kernel reserve) and still fails so-setup; hot balloon alone does not fix it.
+      Set both Ludus ram_min_gb and ram_gb to at least 20, then on Proxmox:
+      `qm set <vmid> --memory 20480 --balloon 20480` and cold-boot the guest,
+      then re-run provision_extension. A 16 GiB VM reports ~15.2 GiB MemTotal
+      and still fails so-setup; hot balloon alone does not fix it.
   when: (ludus_so_mem_total_kib | int) < (ludus_so_mem_min_kib | int)
