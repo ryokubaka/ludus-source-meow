@@ -21,6 +21,8 @@ bump is not a patch. Do not invent a version heading on a feature branch.
 
 ## [Unreleased]
 
+- [Fix] **Security Onion RAM floor** — SO labs set `ram_min_gb` and `ram_gb` both to 20 (`securityonion-lab` 1.1.1). A 16 GiB VM reports ~15.2 GiB MemTotal, under so-setup's 16 GiB check. The 3.2 lab stays at 24/24.
+
 ## [1.1.4] - 2026-09-30
 
 - [Fix] **Security Onion deploy SSH** — Templates create `localuser` and the SO VM joins Ludus's built-in `rhel` group. Range deploy no longer needs a file under `/opt/ludus`. Rebuild the template before the next deploy.
