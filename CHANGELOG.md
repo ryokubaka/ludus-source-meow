@@ -43,13 +43,19 @@ bump is not a patch. Do not invent a version heading on a feature branch.
 - [Improve] **`securityonion-3.3-x64-template`** — Security Onion **3.3.0** (`securityonion-3.3.0-20260911.iso`, the 3.3.0 hotfix) as its own Packer template (`templates/securityonion-3.3`, `vm_name` `securityonion-3.3-x64-template`). SHA256 from upstream `DOWNLOAD_AND_VERIFY_ISO.md`. `so-setup` still runs at range deploy. `main` keeps `securityonion-3-x64-template` (3.2.0).
 - [Improve] **`securityonion3-lab`** — Blueprint version `1.2.2`. SO VM RAM is `ram_min_gb: 20` and `ram_gb: 20`. A 16 GiB VM reports ~15.2 GiB MemTotal, under so-setup's 16 GiB check.
 - [Fix] **`securityonion-lab`** — Blueprint version `1.1.2`. SO VM `ram_min_gb` is 20, matching `ram_gb`, for the same MemTotal gap.
-- [Fix] **Security Onion deploy SSH** — The template creates `localuser` and the SO VM joins Ludus's built-in `rhel` group. Deploy SSH no longer depends on a file under `/opt/ludus`. Rebuild `securityonion-3.3-x64-template` before the next deploy.
 
 **Ansible**
 - [Improve] **`ludus_securityonion`** — `securityonion3-lab` sets `ludus_so_expect_version: "3.3"`. The role reads the ISO `VERSION` file and stops when the guest is not Security Onion 3.3. Role `1.1.2`.
-- [Fix] **Security Onion memory** — When MemTotal is under 16 GiB, the role stops and starts the VM from Proxmox after raising RAM to 20 GiB. A guest reboot leaves QEMU at the old cap, so a 16 GiB VM still reports ~15 GiB and so-setup aborts. Same behavior for 2.4 and 3.3.
-- [Fix] **Security Onion so-setup tree** — `ludus_securityonion` 1.1.2 links the ISO tree into the SSH user's home before `so-setup`. `so-setup` rsyncs `/home/$SUDO_USER/SecurityOnion`, and `localuser` has no copy, so Salt states never installed.
-- [Fix] **Adaptix role** — SO labs declare `badsectorlabs.ludus_adaptix_c2` with no version pin, so a source sync leaves an already-installed copy in place.
+
+## [1.1.5] - 2026-09-30
+
+- [Fix] **Security Onion RAM floor** — SO labs set `ram_min_gb` and `ram_gb` both to 20 (`securityonion-lab` 1.1.1). A 16 GiB VM reports ~15.2 GiB MemTotal, under so-setup's 16 GiB check. The 3.2 lab stays at 24/24.
+
+## [1.1.4] - 2026-09-30
+
+- [Fix] **Security Onion deploy SSH** — Templates create `localuser` and the SO VM joins Ludus's built-in `rhel` group. Range deploy no longer needs a file under `/opt/ludus`. Rebuild the template before the next deploy.
+- [Fix] **Security Onion memory** — `ludus_securityonion` 1.0.4 stops and starts the VM from Proxmox when MemTotal is under 16 GiB. A guest reboot leaves QEMU at the old RAM cap, so a 16 GiB VM still reports ~15 GiB and so-setup aborts. Applies to 2.4 and 3.2.
+- [Fix] **Security Onion so-setup tree** — `ludus_securityonion` 1.0.5 links the ISO tree into the SSH user's home before `so-setup`. `so-setup` rsyncs `/home/$SUDO_USER/SecurityOnion`, and `localuser` has no copy, so Salt states never installed.
 
 ## [1.1.3] - 2026-09-01
 
