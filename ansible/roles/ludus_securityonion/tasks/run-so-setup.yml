@@ -113,15 +113,26 @@
   ansible.builtin.debug:
     msg: "{{ ludus_so_setup_start.stdout | trim }} (log {{ ludus_so_setup_log }})"
 
+# delegate_to localhost replaces connection vars. ansible_password becomes
+# localhost's (empty), so the poll used BatchMode and retried until timeout
+# after so-setup had already finished. Copy the guest credentials first.
+- name: Capture guest SSH credentials for the localhost poll
+  ansible.builtin.set_fact:
+    ludus_so_poll_host: "{{ ansible_host | default(inventory_hostname) }}"
+    ludus_so_poll_user: "{{ ansible_user | default('onion') }}"
+    ludus_so_poll_pass: "{{ ansible_password | default(ansible_ssh_pass) | default('') }}"
+    ludus_so_poll_key: "{{ ansible_ssh_private_key_file | default('') }}"
+  no_log: true
+
 - name: Wait for so-setup to finish (poll from Ludus host — survives SO SSH/bond flaps)
   # NOTE: no bash functions / bare `{` — Ansible Jinja treats `{` as template syntax.
   # Poll via ssh from localhost so ansible workers never sit on a dying SO SSH session.
   ansible.builtin.shell: |
     set -euo pipefail
-    HOST="{{ ansible_host | default(inventory_hostname) }}"
-    USER="{{ ansible_user | default('onion') }}"
-    PASS={{ ansible_password | default('') | quote }}
-    KEY="{{ ansible_ssh_private_key_file | default('') }}"
+    HOST="{{ ludus_so_poll_host }}"
+    USER="{{ ludus_so_poll_user }}"
+    PASS={{ ludus_so_poll_pass | quote }}
+    KEY="{{ ludus_so_poll_key }}"
     LOG="{{ ludus_so_setup_log }}"
     PIDFILE="{{ ludus_so_setup_pidfile }}"
     SOLOG="{{ ludus_so_sosetup_log }}"
@@ -173,6 +184,16 @@
       fi
       exit 2
     fi
+    # Finished install. A dead pid plus the SO marker or a healthy so-status
+    # is success even when the log mentions a failed NetworkManager profile.
+    if [[ -f /opt/so/state/setup-complete ]]; then
+      echo "complete-opt-so"
+      exit 0
+    fi
+    if command -v so-status >/dev/null 2>&1 && so-status >/dev/null 2>&1; then
+      echo "complete-so-status"
+      exit 0
+    fi
     if [[ "$failed" -eq 1 ]]; then
       echo "failed-log"
       echo "--- $LOG ---"
@@ -180,10 +201,6 @@
       echo "--- $SOLOG ---"
       tail -40 "$SOLOG" 2>/dev/null || true
       exit 1
-    fi
-    if command -v so-status >/dev/null 2>&1 && so-status >/dev/null 2>&1; then
-      echo "complete-so-status"
-      exit 0
     fi
     if [[ -d /opt/so ]] && { command -v so-firewall >/dev/null 2>&1 || [[ -x /usr/sbin/so-firewall ]]; }; then
       echo "complete-opt-so"
@@ -201,12 +218,23 @@
     REMOTE="${REMOTE//__LOG__/$LOG}"
     REMOTE="${REMOTE//__PIDFILE__/$PIDFILE}"
     REMOTE="${REMOTE//__SOLOG__/$SOLOG}"
+    if command -v timeout >/dev/null 2>&1; then
+      SSH_RUN=(timeout 45 "${SSH_BASE[@]}")
+    else
+      SSH_RUN=("${SSH_BASE[@]}")
+    fi
     set +e
-    out=$("${SSH_BASE[@]}" -l "$USER" "$HOST" "sudo bash -s" <<<"$REMOTE" 2>&1)
+    out=$("${SSH_RUN[@]}" -l "$USER" "$HOST" "sudo bash -s" <<<"$REMOTE" 2>&1)
     rc=$?
     set -e
-    # SSH/network flap during bond — keep waiting
-    if [[ "$rc" -eq 255 ]] || echo "$out" | grep -qiE 'Connection (timed out|refused|reset)|No route to host|Connection closed|kex_exchange|Permission denied'; then
+    # A finished poll prints its own status first. Salt logs say "timeout" and
+    # "Permission denied"; those must not be treated as an SSH flap.
+    if echo "$out" | grep -qE '^(running pid=|failed-log|missing-pidfile|complete-so-status|complete-opt-so|exited-incomplete|sshpass-missing)'; then
+      echo "$out"
+      exit "$rc"
+    fi
+    # SSH/network flap during bond, or one poll that never returned — keep waiting
+    if [[ "$rc" -eq 124 || "$rc" -eq 255 ]] || echo "$out" | grep -qiE 'Connection (timed out|refused|reset)|No route to host|Connection closed|kex_exchange|Permission denied'; then
       echo "ssh-unreachable rc=${rc}"
       echo "$out" | tail -5
       exit 2

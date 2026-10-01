@@ -1,0 +1,30 @@
+---
+# so-elastic-fleet-setup exits on the first elasticfleet.install_agent_grid failure.
+# That salt-call often cannot sign in to the local master after the long Fleet
+# state. Retry the grid state after restarting salt so so-setup can finish.
+- name: Copy so-setup Fleet grid retry helper
+  ansible.builtin.copy:
+    src: patch_so_fleet_grid_retry.py
+    dest: /tmp/patch_so_fleet_grid_retry.py
+    mode: "0755"
+  become: true
+
+- name: Patch so-setup to retry elasticfleet.install_agent_grid
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - /tmp/patch_so_fleet_grid_retry.py
+      - "{{ ludus_so_setup_bin }}"
+      - /root/SecurityOnion/setup/so-setup
+      - /home/onion/SecurityOnion/setup/so-setup
+      - /root/manager_setup/securityonion/setup/so-setup
+  become: true
+  register: ludus_so_fleet_grid_patch
+  changed_when: "'patched ' in (ludus_so_fleet_grid_patch.stdout | default(''))"
+  failed_when: >
+    ludus_so_fleet_grid_patch.rc | default(1) not in [0]
+    and 'pattern-not-found' not in (ludus_so_fleet_grid_patch.stdout | default(''))
+
+- name: Show so-setup Fleet grid retry patch result
+  ansible.builtin.debug:
+    msg: "{{ ludus_so_fleet_grid_patch.stdout_lines | default([]) }}"

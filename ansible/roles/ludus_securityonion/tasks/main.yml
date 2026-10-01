@@ -5,16 +5,23 @@
 
 - name: Check if Security Onion setup already completed
   ansible.builtin.stat:
-    path: "{{ ludus_so_setup_marker }}"
-  register: ludus_so_marker
+    path: "{{ item }}"
+  loop:
+    - "{{ ludus_so_setup_marker }}"
+    - /opt/so/state/setup-complete
+  register: ludus_so_marker_checks
+
+- name: Decide whether setup already finished
+  ansible.builtin.set_fact:
+    ludus_so_already_setup: "{{ ludus_so_marker_checks.results | selectattr('stat.exists') | list | length > 0 }}"
 
 - name: Skip setup when already complete
   ansible.builtin.debug:
-    msg: "Security Onion setup marker present at {{ ludus_so_setup_marker }}; skipping."
-  when: ludus_so_marker.stat.exists
+    msg: "Security Onion is already installed; skipping so-setup."
+  when: ludus_so_already_setup | bool
 
 - name: Run Security Onion setup flow
-  when: not ludus_so_marker.stat.exists
+  when: not (ludus_so_already_setup | bool)
   block:
     - name: Locate so-setup binary
       ansible.builtin.stat:
@@ -99,7 +106,10 @@
     - name: Patch so-setup TESTING profile (MNIC != bonding_masters)
       ansible.builtin.include_tasks: patch-so-setup-testing.yml
 
-    - name: Export ALLOW_CIDR for so-setup when provided
+    - name: Patch so-setup Fleet grid retry
+      ansible.builtin.include_tasks: patch-so-fleet-grid-retry.yml
+
+    - name: Export so-setup environment
       ansible.builtin.set_fact:
         ludus_so_setup_env:
           TESTING: "true"
@@ -110,7 +120,8 @@
           MNIC_IP: "{{ ludus_so_main_ip }}"
           BNICS: "{{ ludus_so_bnic }}"
           MDNS: "{{ ludus_so_dns_server | default(ludus_dns_server | default(''), true) }}"
-          ALLOW_CIDR: "{{ ludus_so_allow_cidr | default('0.0.0.0/0', true) }}"
+          # Range router enforces access. The SO analyst group stays open.
+          ALLOW_CIDR: "0.0.0.0/0"
           WEBUSER: "{{ ludus_so_web_user }}"
           WEBPASSWD1: "{{ ludus_so_web_password }}"
           WEBPASSWD2: "{{ ludus_so_web_password }}"
@@ -127,6 +138,20 @@
           completed={{ ansible_date_time.iso8601 | default(lookup('pipe', 'date -Iseconds')) }}
         mode: "0644"
       become: true
+
+# Analyst/SOC is open. The range router decides who can reach this VM.
+- name: Open the Security Onion analyst firewall
+  ansible.builtin.command:
+    argv:
+      - /sbin/so-firewall
+      - includehost
+      - analyst
+      - 0.0.0.0/0
+      - --apply
+  become: true
+  register: ludus_so_analyst_fw
+  changed_when: ludus_so_analyst_fw.rc | int == 0
+  failed_when: ludus_so_analyst_fw.rc | int not in [0, 3]
 
 # Sensors listen on bond0 — BNICS must stay enslaved or zeek/suricata see nothing.
 # Runs after fresh setup and on redeploy when marker already exists (heal).

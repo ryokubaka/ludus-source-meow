@@ -23,6 +23,10 @@ bump is not a patch. Do not invent a version heading on a feature branch.
 
 <!-- release: minor -->
 
+- [Fix] **Security Onion wait** — `ludus_securityonion` 1.1.4 keeps the guest SSH password when the so-setup poll runs on the Ludus host. `delegate_to: localhost` was clearing `ansible_password`, so the poll used key-only SSH and retried until timeout after setup had finished.
+- [Fix] **Security Onion firewall** — The analyst/SOC group is `0.0.0.0/0`. The range router enforces access. SO labs no longer pass the range `/16`.
+- [Fix] **Security Onion Fleet grid** — `ludus_securityonion` 1.1.3 retries `elasticfleet.install_agent_grid` after a Salt master sign-in timeout, instead of aborting so-setup. The so-setup wait also caps each poll at 45s and does not treat Salt log text as an SSH flap.
+
 **Templates**
 - [Improve] **`securityonion-3.3-x64-template`** — Security Onion **3.3.0** (`securityonion-3.3.0-20260911.iso`, the 3.3.0 hotfix) as its own Packer template (`templates/securityonion-3.3`, `vm_name` `securityonion-3.3-x64-template`). SHA256 from upstream `DOWNLOAD_AND_VERIFY_ISO.md`. `so-setup` still runs at range deploy. `main` keeps `securityonion-3-x64-template` (3.2.0).
 - [Improve] **`securityonion3-lab`** — Blueprint version `1.2.1`. SO VM RAM is `ram_min_gb: 20` and `ram_gb: 20`. A 16 GiB VM reports ~15.2 GiB MemTotal, under so-setup's 16 GiB check.

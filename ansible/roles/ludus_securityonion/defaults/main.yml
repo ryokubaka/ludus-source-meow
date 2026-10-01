@@ -51,8 +51,8 @@ ludus_so_min_nics: 2
 ludus_so_web_user: "onionadmin@ludus.local"
 ludus_so_web_password: "MeowMeow123"
 
-# CIDR allowed through SO host firewall to SOC (range /16 recommended)
-# Leave empty to use 0.0.0.0/0 in TESTING profile defaults
+# Kept for compatibility. The analyst/SOC group is always 0.0.0.0/0;
+# the range router enforces who can reach the VM.
 ludus_so_allow_cidr: ""
 
 # Path to so-setup on ISO installs

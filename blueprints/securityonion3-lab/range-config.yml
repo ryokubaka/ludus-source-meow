@@ -68,7 +68,7 @@ ludus:
     role_vars:
       ludus_so_install_type: standalone
       ludus_so_expect_version: "3.3"
-      ludus_so_allow_cidr: "10.{{ range_second_octet }}.0.0/16"
+      ludus_so_allow_cidr: "0.0.0.0/0"
       ludus_so_web_user: "onionadmin@ludus.local"
       ludus_so_web_password: "MeowMeow123"
 
