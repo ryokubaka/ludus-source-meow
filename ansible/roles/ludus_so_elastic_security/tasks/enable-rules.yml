@@ -54,7 +54,6 @@
       ids=()
       nids=0
       page=1
-      # nids, not ${#ids[@]} — Ansible treats {# as a Jinja comment.
       while (( nids < PAGE_SIZE )); do
         resp=$("${CURL[@]}" \
           "${FIND}?per_page=${PAGE_SIZE}&page=${page}&filter=alert.attributes.enabled:false")
