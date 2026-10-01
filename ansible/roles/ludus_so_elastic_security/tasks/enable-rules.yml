@@ -94,7 +94,6 @@
   ansible.builtin.shell: |
     set -euo pipefail
     PAGE_SIZE={{ ludus_so_elastic_security_bulk_page_size | int }}
-    MAX_LOOPS={{ ludus_so_elastic_security_enable_max_loops | int }}
     if (( PAGE_SIZE < 1 || PAGE_SIZE > 1000 )); then
       echo "ludus_so_elastic_security_bulk_page_size must be 1-1000" >&2
       exit 1
@@ -105,96 +104,79 @@
     FIND='http://localhost:5601/api/detection_engine/rules/_find'
     BULK='http://localhost:5601/api/detection_engine/rules/_bulk_action'
     ALERT_BULK='http://localhost:5601/api/alerting/rules/_bulk_enable'
-    declare -A skip=()
-    enabled=0
-    skipped=0
-    loops=0
-    sample_error=""
-    use_alerting=0
 
-    while (( loops < MAX_LOOPS )); do
-      loops=$((loops + 1))
-      ids=()
-      nids=0
-      page=1
-      while (( nids < PAGE_SIZE )); do
-        resp=$("${CURL[@]}" \
-          "${FIND}?per_page=${PAGE_SIZE}&page=${page}&filter=alert.attributes.enabled:false")
-        if ! jq -e '.data and (.total | type == "number")' >/dev/null <<<"$resp"; then
-          echo "rule find failed: $(printf '%s' "$resp" | head -c 500)" >&2
-          exit 1
-        fi
-        count=$(jq -r '.data | length' <<<"$resp")
-        if [[ "$count" -eq 0 ]]; then
-          break
-        fi
-        while IFS= read -r id; do
-          [[ -z "$id" || "$id" == "null" ]] && continue
-          if [[ -n "${skip[$id]+x}" ]]; then
-            continue
-          fi
-          ids+=("$id")
-          nids=$((nids + 1))
-          if (( nids >= PAGE_SIZE )); then
-            break
-          fi
-        done < <(jq -r '.data[].id // empty' <<<"$resp")
-        if (( count < PAGE_SIZE )); then
-          break
-        fi
-        page=$((page + 1))
-        if (( page > 200 )); then
-          break
-        fi
-      done
-
-      if (( nids == 0 )); then
+    # Same shape as GOAD elk: read every disabled id, then one bulk POST per chunk.
+    ids=()
+    page=1
+    while (( page <= 50 )); do
+      resp=$("${CURL[@]}" \
+        "${FIND}?per_page=${PAGE_SIZE}&page=${page}&filter=alert.attributes.enabled:false")
+      if ! jq -e '.data and (.total | type == "number")' >/dev/null <<<"$resp"; then
+        echo "rule find failed: $(printf '%s' "$resp" | head -c 500)" >&2
+        exit 1
+      fi
+      count=$(jq -r '.data | length' <<<"$resp")
+      if [[ "$count" -eq 0 ]]; then
         break
       fi
+      while IFS= read -r id; do
+        [[ -z "$id" || "$id" == null ]] && continue
+        ids+=("$id")
+      done < <(jq -r '.data[].id // empty' <<<"$resp")
+      if (( count < PAGE_SIZE )); then
+        break
+      fi
+      page=$((page + 1))
+    done
 
-      if [[ "$use_alerting" -eq 0 ]]; then
-        ids_json=$(printf '%s\n' "${ids[@]}" | jq -R . | jq -s -c .)
+    ndisabled=0
+    for _id in "${ids[@]}"; do
+      ndisabled=$((ndisabled + 1))
+    done
+    echo "disabled=${ndisabled}"
+    if (( ndisabled == 0 )); then
+      echo "done enabled=0 unenableable=0 remaining=0 chunks=0 sample_error="
+      exit 0
+    fi
+
+    mode=detection
+    enabled=0
+    skipped=0
+    chunks=0
+    sample_error=""
+    batch=()
+    nbatch=0
+
+    flush_batch() {
+      chunks=$((chunks + 1))
+      ids_json=$(printf '%s\n' "${batch[@]}" | jq -R . | jq -s -c .)
+      if [[ "$mode" != alerting ]]; then
         raw=$("${CURL[@]}" -X POST "$BULK" \
           -d "{\"ids\": ${ids_json}, \"action\": \"enable\"}" -w '\n%{http_code}')
         code=$(tail -n1 <<<"$raw")
         body=$(sed '$d' <<<"$raw")
         succeeded=$(jq -r '.attributes.summary.succeeded // 0' <<<"$body" 2>/dev/null || echo 0)
-        [[ "$succeeded" == "null" || -z "$succeeded" ]] && succeeded=0
-        new_skips=0
-        while IFS= read -r eid; do
-          [[ -z "$eid" || "$eid" == "null" ]] && continue
-          if [[ -z "${skip[$eid]+x}" ]]; then
-            skip["$eid"]=1
-            skipped=$((skipped + 1))
-            new_skips=$((new_skips + 1))
-          fi
-        done < <(jq -r '.attributes.errors[]?.rules[]?.id // empty' <<<"$body" 2>/dev/null || true)
-        if [[ -z "$sample_error" ]]; then
-          sample_error=$(jq -r '[.attributes.errors[]?.message // empty] | map(select(length > 0)) | unique | .[0] // empty' <<<"$body" 2>/dev/null || true)
-          sample_error=$(printf '%s' "$sample_error" | tr '\n' ' ' | head -c 240)
+        [[ "$succeeded" == null || -z "$succeeded" ]] && succeeded=0
+        msg=$(jq -r '[.attributes.errors[]?.message // empty] | map(select(length > 0)) | unique | .[0] // empty' <<<"$body" 2>/dev/null || true)
+        if [[ -z "$sample_error" && -n "$msg" ]]; then
+          sample_error=$(printf '%s' "$msg" | tr '\n' ' ' | head -c 240)
         fi
-        echo "loop=${loops} http=${code} enabled_batch=${succeeded} skipped_new=${new_skips} enabled_total=${enabled}"
-        if [[ "$succeeded" -eq 0 && "$new_skips" -eq 0 ]]; then
-          echo "bulk enable made no progress (http ${code}): $(printf '%s' "$body" | head -c 500)" >&2
-          exit 1
-        fi
-        if [[ "$succeeded" -eq 0 && "$sample_error" == *"permission to enable rules"* ]]; then
-          use_alerting=1
-          skipped=$((skipped - new_skips))
-          for id in "${ids[@]}"; do
-            unset "skip[$id]"
-          done
-          echo "detection bulk enable is forbidden for this user; switching to the alerting enable API"
+        if [[ "$succeeded" -eq 0 && "$msg" == *"permission to enable rules"* ]]; then
+          mode=alerting
+          echo "chunk=${chunks} detection bulk forbidden; using alerting bulk"
         else
+          rejected=$(jq -r '[.attributes.errors[]?.rules[]?.id // empty] | length' <<<"$body" 2>/dev/null || echo 0)
+          [[ "$rejected" == null || -z "$rejected" ]] && rejected=0
+          skipped=$((skipped + rejected))
           enabled=$((enabled + succeeded))
-          sleep 1
-          continue
+          echo "chunk=${chunks} http=${code} enabled_batch=${succeeded} rejected=${rejected} enabled_total=${enabled}"
+          if [[ "$succeeded" -eq 0 && "$rejected" -eq 0 ]]; then
+            echo "bulk enable made no progress (http ${code}): $(printf '%s' "$body" | head -c 500)" >&2
+            exit 1
+          fi
+          return
         fi
       fi
-
-      # One bulk call. Per-rule /_enable has no Ansible output until the
-      # whole shell exits, so a few thousand rules look stuck.
-      ids_json=$(printf '%s\n' "${ids[@]}" | jq -R . | jq -s -c .)
       raw=$("${CURL[@]}" -X POST "$ALERT_BULK" \
         -d "{\"ids\": ${ids_json}}" -w '\n%{http_code}')
       code=$(tail -n1 <<<"$raw")
@@ -203,31 +185,37 @@
         echo "alerting bulk enable failed (http ${code}): $(printf '%s' "$body" | head -c 500)" >&2
         exit 1
       fi
-      alert_fail=0
-      while IFS= read -r eid; do
-        [[ -z "$eid" || "$eid" == null ]] && continue
-        if [[ -z "${skip[$eid]+x}" ]]; then
-          skip["$eid"]=1
-          skipped=$((skipped + 1))
-          alert_fail=$((alert_fail + 1))
-        fi
-      done < <(jq -r '(.errors // [])[] | .id // .rule.id // empty' <<<"$body" 2>/dev/null || true)
-      alert_ok=$((nids - alert_fail))
-      if (( alert_ok < 0 )); then
-        alert_ok=0
+      rejected=$(jq -r '[(.errors // [])[]] | length' <<<"$body" 2>/dev/null || echo 0)
+      [[ "$rejected" == null || -z "$rejected" ]] && rejected=0
+      if (( rejected > nbatch )); then
+        rejected=$nbatch
       fi
-      enabled=$((enabled + alert_ok))
-      echo "loop=${loops} http=${code} alerting_enabled=${alert_ok} alerting_failed=${alert_fail} enabled_total=${enabled}"
-      if [[ "$alert_ok" -eq 0 ]]; then
-        echo "alerting bulk enable rejected the batch: $(printf '%s' "$body" | head -c 500)" >&2
+      ok=$((nbatch - rejected))
+      skipped=$((skipped + rejected))
+      enabled=$((enabled + ok))
+      echo "chunk=${chunks} http=${code} alerting_enabled=${ok} alerting_failed=${rejected} enabled_total=${enabled}"
+      if [[ "$ok" -eq 0 ]]; then
+        echo "alerting bulk enable rejected the chunk: $(printf '%s' "$body" | head -c 500)" >&2
         exit 1
       fi
-      sleep 1
+    }
+
+    for id in "${ids[@]}"; do
+      batch+=("$id")
+      nbatch=$((nbatch + 1))
+      if (( nbatch >= PAGE_SIZE )); then
+        flush_batch
+        batch=()
+        nbatch=0
+      fi
     done
+    if (( nbatch > 0 )); then
+      flush_batch
+    fi
 
     resp=$("${CURL[@]}" "${FIND}?per_page=1&page=1&filter=alert.attributes.enabled:false")
     remaining=$(jq -r '.total // 0' <<<"$resp")
-    echo "done enabled=${enabled} unenableable=${skipped} remaining=${remaining} loops=${loops} sample_error=${sample_error}"
+    echo "done enabled=${enabled} unenableable=${skipped} remaining=${remaining} chunks=${chunks} sample_error=${sample_error}"
     if (( remaining > 0 && enabled == 0 )); then
       echo "no detection rules were enabled (remaining=${remaining} unenableable=${skipped} sample_error=${sample_error})" >&2
       exit 1

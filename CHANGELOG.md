@@ -23,6 +23,7 @@ bump is not a patch. Do not invent a version heading on a feature branch.
 
 <!-- release: minor -->
 
+- [Fix] **`ludus_so_elastic_security` 1.0.7** — Enable rules the way GOAD elk does: collect the disabled ids, then one bulk POST per chunk. The run that enabled 1972 rules had been rejected by the detection-engine bulk API and fell back to one HTTP call per rule. Chunk size is 1000, so a full prebuilt set is two calls.
 - [Fix] **`ludus_so_elastic_security` 1.0.6** — Install prebuilt rules the way the Rules UI does: Fleet package `security_detection_engine` on `endpoints-initial`. The old prepackaged PUT never showed up as that install. Enable stays one bulk call per batch, so it does not sit on a per-rule loop with no output.
 - [Fix] **`ludus_securityonion` 1.1.7** — After a reboot, poll until `so-zeek` and `so-suricata` are running (45 minutes). The old 5 minute `so-*-restart` async cap failed the deploy while the boot highstate was still creating them. `health: starting` counts as up.
 - [Fix] **`ludus_securityonion` 1.1.6** — Reboot when so-soc still shows a pending reboot. so-setup installs a newer kernel and leaves `needs-restarting` set; the role now reboots, re-enslaves the sniff NIC, then heals containers.

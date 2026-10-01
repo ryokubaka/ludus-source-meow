@@ -32,8 +32,9 @@ ludus_so_elastic_security_prepackaged_pause: 120
 # Kibana 9 public detection-engine routes require this (bulk enable is versioned).
 ludus_so_elastic_security_api_version: "2023-10-31"
 
-# _find page size. Bulk enable accepts up to 1000 ids; 100 keeps each call short.
-ludus_so_elastic_security_bulk_page_size: 100
+# _find / bulk chunk size. Kibana accepts 1000 ids per bulk action.
+# GOAD elk uses 100; 1000 is two calls for the ~2000 prebuilt rules.
+ludus_so_elastic_security_bulk_page_size: 1000
 
 # File-realm map for the Kibana "Enable/Disable rules" sub-feature (Elastic 9.4).
 ludus_so_elastic_security_users_roles: /opt/so/saltstack/local/salt/elasticsearch/files/users_roles
