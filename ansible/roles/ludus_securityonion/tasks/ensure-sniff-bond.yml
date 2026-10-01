@@ -47,6 +47,13 @@
     mode: "0755"
   become: true
 
+- name: Install sensor wait helper
+  ansible.builtin.copy:
+    src: ludus-so-wait-sensors
+    dest: /usr/local/sbin/ludus-so-wait-sensors
+    mode: "0755"
+  become: true
+
 - name: Install systemd unit for sniff bond on boot
   ansible.builtin.copy:
     dest: /etc/systemd/system/ludus-so-enslave-sniff.service
@@ -109,14 +116,15 @@
   changed_when: false
   failed_when: false
 
-- name: Restart zeek/suricata when bond was created or healed
-  ansible.builtin.shell: |
-    set -euo pipefail
-    command -v so-zeek-restart >/dev/null && so-zeek-restart || true
-    command -v so-suricata-restart >/dev/null && so-suricata-restart || true
-  args:
-    executable: /bin/bash
+# Boot highstate creates so-zeek and so-suricata. so-*-restart queues behind
+# that Salt call. A 5 minute async cap failed the deploy while Zeek was still
+# starting and Suricata did not exist yet. Poll until both are running.
+- name: Wait for Zeek and Suricata after the sniff bond
+  ansible.builtin.command: /usr/local/sbin/ludus-so-wait-sensors
   become: true
   when: ludus_so_enslave_now is changed
-  async: 300
-  poll: 15
+  register: ludus_so_sensor_wait
+  until: ludus_so_sensor_wait.rc == 0
+  retries: "{{ ludus_so_sensor_wait_retries | int }}"
+  delay: "{{ ludus_so_sensor_wait_delay | int }}"
+  changed_when: "'started-sensors' in (ludus_so_sensor_wait.stdout | default(''))"

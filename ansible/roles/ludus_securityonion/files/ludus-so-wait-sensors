@@ -1,0 +1,53 @@
+#!/bin/bash
+# One poll for so-zeek and so-suricata.
+# Exit 0 when both are running (health: starting counts).
+# Exit 2 while Security Onion's boot highstate is still creating them.
+# so-*-restart queues behind that highstate, so this does not call it while
+# salt-call state.highstate is running.
+set -euo pipefail
+
+STATE_DIR="${LUDUS_SO_SENSOR_STATE:-/var/run}"
+mkdir -p "$STATE_DIR"
+
+running() {
+  local name="$1" status
+  status=$(docker inspect -f '{{.State.Running}}' "$name" 2>/dev/null || echo missing)
+  [[ "$status" == "true" ]]
+}
+
+highstate() {
+  pgrep -f 'salt-call state.highstate' >/dev/null 2>&1
+}
+
+zeek=down
+suri=down
+running so-zeek && zeek=up
+running so-suricata && suri=up
+
+if [[ "$zeek" == up && "$suri" == up ]]; then
+  echo "sensors-up zeek=up suricata=up"
+  exit 0
+fi
+
+if highstate; then
+  echo "waiting-highstate zeek=${zeek} suricata=${suri}"
+  exit 2
+fi
+
+# Highstate finished and a sensor is still down. Start once; the next poll
+# observes the result. so-*-start is itself a Salt call.
+flag="$STATE_DIR/ludus-so-sensor-start"
+if [[ ! -f "$flag" ]]; then
+  : >"$flag"
+  if [[ "$zeek" != up ]] && command -v so-zeek-start >/dev/null 2>&1; then
+    timeout 120 so-zeek-start >/dev/null 2>&1 || true
+  fi
+  if [[ "$suri" != up ]] && command -v so-suricata-start >/dev/null 2>&1; then
+    timeout 120 so-suricata-start >/dev/null 2>&1 || true
+  fi
+  echo "started-sensors zeek=${zeek} suricata=${suri}"
+  exit 2
+fi
+
+echo "waiting-sensors zeek=${zeek} suricata=${suri}"
+exit 2

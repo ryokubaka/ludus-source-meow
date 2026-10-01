@@ -86,6 +86,10 @@ ludus_so_heal_containers: true
 ludus_so_heal_containers_fail: true
 ludus_so_heal_container_retries: 12
 ludus_so_heal_container_delay: 20
+# After a reboot, wait for so-zeek and so-suricata while boot highstate runs.
+# 90 * 30s = 45 minutes. health: starting counts as up.
+ludus_so_sensor_wait_retries: 90
+ludus_so_sensor_wait_delay: 30
 # so-soc reboot pill. so-setup leaves needs-restarting set after a kernel update.
 ludus_so_reboot_if_needed: true
 ludus_so_reboot_timeout: 900
