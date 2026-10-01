@@ -23,6 +23,7 @@ bump is not a patch. Do not invent a version heading on a feature branch.
 
 <!-- release: minor -->
 
+- [Fix] **`ludus_so_elastic_security` 1.0.6** — Install prebuilt rules the way the Rules UI does: Fleet package `security_detection_engine` on `endpoints-initial`. The old prepackaged PUT never showed up as that install. Enable stays one bulk call per batch, so it does not sit on a per-rule loop with no output.
 - [Fix] **`ludus_securityonion` 1.1.7** — After a reboot, poll until `so-zeek` and `so-suricata` are running (45 minutes). The old 5 minute `so-*-restart` async cap failed the deploy while the boot highstate was still creating them. `health: starting` counts as up.
 - [Fix] **`ludus_securityonion` 1.1.6** — Reboot when so-soc still shows a pending reboot. so-setup installs a newer kernel and leaves `needs-restarting` set; the role now reboots, re-enslaves the sniff NIC, then heals containers.
 - [Fix] **`ludus_so_elastic_security` 1.0.5** — Detection-rule enable on Elastic 9.4. `so_elastic` is a superuser, but Kibana still returns "User does not have permission to enable rules" until the `securitySolutionRules` enable/disable privilege is granted. The role grants it, and if bulk enable is still denied, enables the same rules through the alerting API.

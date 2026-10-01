@@ -1,33 +1,91 @@
 ---
-# Mirrors GOAD-mod elasticsearch-fleet.yml Detection Rule enablement block:
-# PUT prepackaged → wait → bulk-enable disabled rules.
-# Kibana 9.4 versions POST /api/detection_engine/rules/_bulk_action at
-# elastic-api-version 2023-10-31. Without that header every enable is a 400,
-# curl still exits 0, and the same disabled page is counted forever.
-- name: Install all prepackaged detection rules
+# Kibana 9.4 installs Elastic prebuilt rules as the Fleet package
+# security_detection_engine (the Rules UI POST /api/fleet/package_policies).
+# PUT /api/detection_engine/rules/prepackaged does not show up as that install.
+# Bulk enable still uses elastic-api-version 2023-10-31. Without that header
+# every enable is a 400, curl still exits 0, and the same disabled page is counted forever.
+- name: Install the Elastic prebuilt rules Fleet package
   ansible.builtin.shell: |
     set -euo pipefail
-    curl -sS -K /opt/so/conf/elasticsearch/curl.config \
-      -H 'kbn-xsrf: true' -H 'Content-Type: application/json' \
-      -H 'elastic-api-version: {{ ludus_so_elastic_security_api_version }}' \
-      -X PUT 'http://localhost:5601/api/detection_engine/rules/prepackaged'
+    CFG=/opt/so/conf/elasticsearch/curl.config
+    POL='{{ ludus_so_elastic_security_agent_policy_id }}'
+    PKG='{{ ludus_so_elastic_security_detection_engine_package }}'
+    VER='{{ ludus_so_elastic_security_detection_engine_version }}'
+    H=(-H 'kbn-xsrf: true' -H 'Content-Type: application/json')
+    api() {
+      curl -sS --max-time 120 -K "$CFG" "${H[@]}" "$@"
+    }
+
+    LIST=$(api "http://localhost:5601/api/fleet/package_policies?perPage=200")
+    if ! jq -e '.items' >/dev/null <<<"$LIST"; then
+      echo "package policy list failed: $(printf '%s' "$LIST" | head -c 400)" >&2
+      exit 1
+    fi
+    existing=$(jq -r --arg pkg "$PKG" '
+      [.items[]? | select(.package.name == $pkg)]
+      | .[0]
+      | if . == null then "" else "\(.id) \(.name) \(.package.version)" end
+    ' <<<"$LIST")
+    if [[ -n "$existing" ]]; then
+      echo "already_installed ${existing}"
+    else
+      if [[ -z "$VER" ]]; then
+        info=$(api "http://localhost:5601/api/fleet/epm/packages/${PKG}")
+        VER=$(jq -r '.item.latestVersion // .item.version // .version // empty' <<<"$info")
+      fi
+      if [[ -z "$VER" || "$VER" == null ]]; then
+        echo "could not resolve ${PKG} version: $(printf '%s' "${info:-}" | head -c 400)" >&2
+        exit 1
+      fi
+      name="${PKG}-1"
+      body=$(jq -nc --arg ver "$VER" --arg pol "$POL" --arg name "$name" --arg pkg "$PKG" '{
+        policy_ids: [$pol],
+        package: {name: $pkg, version: $ver},
+        name: $name,
+        description: "",
+        namespace: "",
+        inputs: {}
+      }')
+      raw=$(curl -sS --max-time 600 -K "$CFG" "${H[@]}" \
+        -X POST 'http://localhost:5601/api/fleet/package_policies' \
+        -d "$body" -w '\n%{http_code}')
+      code=$(tail -n1 <<<"$raw")
+      resp=$(sed '$d' <<<"$raw")
+      if [[ "$code" != 200 && "$code" != 201 ]]; then
+        echo "install ${PKG} ${VER} failed (http ${code}): $(printf '%s' "$resp" | head -c 500)" >&2
+        exit 1
+      fi
+      echo "installed $(jq -r '"\(.item.id) \(.item.name) \(.item.package.version)"' <<<"$resp")"
+    fi
+
+    limit={{ ludus_so_elastic_security_prepackaged_pause | int }}
+    waited=0
+    total=0
+    while (( waited <= limit )); do
+      found=$(curl -sS --max-time 30 -K "$CFG" "${H[@]}" \
+        -H 'elastic-api-version: {{ ludus_so_elastic_security_api_version }}' \
+        'http://localhost:5601/api/detection_engine/rules/_find?per_page=1&page=1')
+      total=$(jq -r '.total // 0' <<<"$found")
+      echo "rules_visible=${total}"
+      if [[ "$total" != 0 && "$total" != null ]]; then
+        break
+      fi
+      sleep 5
+      waited=$((waited + 5))
+    done
+    if [[ "$total" == 0 || "$total" == null ]]; then
+      echo "${PKG} did not make any detection rules visible within ${limit}s" >&2
+      exit 1
+    fi
   args:
     executable: /bin/bash
   register: ludus_so_elastic_security_prepackaged
   become: true
-  changed_when: true
-  failed_when: >
-    ludus_so_elastic_security_prepackaged.rc != 0
-    and (ludus_so_elastic_security_prepackaged.stdout | default('') | length) == 0
-  # Kibana sometimes returns 500 while still succeeding (GOAD ignores errors)
+  changed_when: "'installed ' in (ludus_so_elastic_security_prepackaged.stdout | default(''))"
 
-- name: Report prepackaged install response
+- name: Report prebuilt rules package
   ansible.builtin.debug:
-    msg: "{{ ludus_so_elastic_security_prepackaged.stdout | default('') | truncate(500) }}"
-
-- name: Pause for Kibana rule index settle
-  ansible.builtin.pause:
-    seconds: "{{ ludus_so_elastic_security_prepackaged_pause | int }}"
+    msg: "{{ ludus_so_elastic_security_prepackaged.stdout_lines | default([]) | join(' | ') }}"
 
 - name: Grant the curl user permission to enable detection rules
   ansible.builtin.include_tasks: grant-rule-enable.yml
@@ -41,11 +99,12 @@
       echo "ludus_so_elastic_security_bulk_page_size must be 1-1000" >&2
       exit 1
     fi
-    CURL=(curl -sS -K /opt/so/conf/elasticsearch/curl.config \
+    CURL=(curl -sS --max-time 180 -K /opt/so/conf/elasticsearch/curl.config \
       -H 'kbn-xsrf: true' -H 'Content-Type: application/json' \
       -H 'elastic-api-version: {{ ludus_so_elastic_security_api_version }}')
     FIND='http://localhost:5601/api/detection_engine/rules/_find'
     BULK='http://localhost:5601/api/detection_engine/rules/_bulk_action'
+    ALERT_BULK='http://localhost:5601/api/alerting/rules/_bulk_enable'
     declare -A skip=()
     enabled=0
     skipped=0
@@ -133,49 +192,34 @@
         fi
       fi
 
-      # Kibana 9.4 gates detection-engine enable on securitySolutionRulesV4
-      # enable/disable. so_elastic is a file-realm superuser and that sub-feature
-      # is still denied. The alerting route enables the same rule objects.
-      tmpd=$(mktemp -d)
-      n=0
-      for id in "${ids[@]}"; do
-        n=$((n + 1))
-        (
-          code=$("${CURL[@]}" -o "$tmpd/${id}.body" -w '%{http_code}' \
-            -X POST "http://localhost:5601/api/alerting/rule/${id}/_enable" -d '{}') || code=000
-          printf '%s' "$code" > "$tmpd/${id}.code"
-        ) &
-        if (( n % 8 == 0 )); then
-          wait
-        fi
-      done
-      wait || true
-      alert_ok=0
+      # One bulk call. Per-rule /_enable has no Ansible output until the
+      # whole shell exits, so a few thousand rules look stuck.
+      ids_json=$(printf '%s\n' "${ids[@]}" | jq -R . | jq -s -c .)
+      raw=$("${CURL[@]}" -X POST "$ALERT_BULK" \
+        -d "{\"ids\": ${ids_json}}" -w '\n%{http_code}')
+      code=$(tail -n1 <<<"$raw")
+      body=$(sed '$d' <<<"$raw")
+      if [[ "$code" != 200 && "$code" != 201 ]]; then
+        echo "alerting bulk enable failed (http ${code}): $(printf '%s' "$body" | head -c 500)" >&2
+        exit 1
+      fi
       alert_fail=0
-      alert_sample=""
-      for id in "${ids[@]}"; do
-        code=000
-        if [[ -f "$tmpd/${id}.code" ]]; then
-          code=$(tr -d '[:space:]' < "$tmpd/${id}.code")
-        fi
-        if [[ "$code" == 200 || "$code" == 204 ]]; then
-          alert_ok=$((alert_ok + 1))
-        else
+      while IFS= read -r eid; do
+        [[ -z "$eid" || "$eid" == null ]] && continue
+        if [[ -z "${skip[$eid]+x}" ]]; then
+          skip["$eid"]=1
+          skipped=$((skipped + 1))
           alert_fail=$((alert_fail + 1))
-          if [[ -z "$alert_sample" && -f "$tmpd/${id}.body" ]]; then
-            alert_sample=$(tr '\n' ' ' < "$tmpd/${id}.body" | head -c 240)
-          fi
-          if [[ -z "${skip[$id]+x}" ]]; then
-            skip["$id"]=1
-            skipped=$((skipped + 1))
-          fi
         fi
-      done
-      rm -rf "$tmpd"
+      done < <(jq -r '(.errors // [])[] | .id // .rule.id // empty' <<<"$body" 2>/dev/null || true)
+      alert_ok=$((nids - alert_fail))
+      if (( alert_ok < 0 )); then
+        alert_ok=0
+      fi
       enabled=$((enabled + alert_ok))
-      echo "loop=${loops} alerting_enabled=${alert_ok} alerting_failed=${alert_fail} enabled_total=${enabled} sample=${alert_sample}"
+      echo "loop=${loops} http=${code} alerting_enabled=${alert_ok} alerting_failed=${alert_fail} enabled_total=${enabled}"
       if [[ "$alert_ok" -eq 0 ]]; then
-        echo "alerting enable rejected the batch: ${alert_sample}" >&2
+        echo "alerting bulk enable rejected the batch: $(printf '%s' "$body" | head -c 500)" >&2
         exit 1
       fi
       sleep 1

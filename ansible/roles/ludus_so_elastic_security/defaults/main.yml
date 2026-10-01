@@ -20,10 +20,13 @@ ludus_so_elastic_security_defend_user_notify: true
 ludus_so_elastic_security_configure_windows_logs: true
 ludus_so_elastic_security_windows_policy_name: windows-endpoints
 
-# Install Elastic prepackaged detection rules + enable all disabled rules
+# Install Elastic prebuilt rules via the Fleet package the Rules UI uses,
+# then enable disabled rules. Empty version means the latest package Fleet knows.
 ludus_so_elastic_security_enable_rules: true
+ludus_so_elastic_security_detection_engine_package: security_detection_engine
+ludus_so_elastic_security_detection_engine_version: ""
 
-# Pause after prepackaged install (seconds) before enabling — Kibana needs settle time
+# Seconds to wait after the package POST for rules to show up in _find.
 ludus_so_elastic_security_prepackaged_pause: 120
 
 # Kibana 9 public detection-engine routes require this (bulk enable is versioned).

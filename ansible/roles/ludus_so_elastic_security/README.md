@@ -6,7 +6,7 @@ Mirrors the Elastic Security steps used by the GOAD-mod Security Onion extension
 
 1. **Trial license** — `POST _license/start_trial?acknowledge=true` (platinum-class features for 30 days)
 2. **Elastic Defend** — switch `elastic-defend-endpoints` on `endpoints-initial` from SO default `DataCollection` (protections off) to `EDRComplete`, then set malware / ransomware / memory / behavior to **detect**
-3. **Detection rules** — `PUT /api/detection_engine/rules/prepackaged`, then bulk-enable every disabled rule
+3. **Detection rules** — `POST /api/fleet/package_policies` for `security_detection_engine` on `endpoints-initial` (the Rules UI install), then bulk-enable every disabled rule
 
 ## endpoints-initial on Security Onion 3.3
 
@@ -68,14 +68,15 @@ roles:
 | `ludus_so_elastic_security_defend_user_notify` | `true` | Endpoint-user popups for malware/ransomware/memory/behavior. SIEM alerts always fire in detect/prevent. Device-control popups left off (need USB deny_all). |
 | `ludus_so_elastic_security_configure_windows_logs` | `true` | Enable AppLocker, Packaged app, and Windows Defender on `windows-endpoints` |
 | `ludus_so_elastic_security_windows_policy_name` | `windows-endpoints` | Windows integration policy |
-| `ludus_so_elastic_security_enable_rules` | `true` | Install + enable prepackaged rules |
+| `ludus_so_elastic_security_enable_rules` | `true` | Install the `security_detection_engine` Fleet package and enable its rules |
+| `ludus_so_elastic_security_detection_engine_version` | `""` | Package version. Empty uses the latest Fleet has (the UI used `9.4.10` on Elastic 9.4.5) |
 | `ludus_so_elastic_security_api_version` | `2023-10-31` | `elastic-api-version` for Kibana 9 detection-engine routes |
-| `ludus_so_elastic_security_prepackaged_pause` | `120` | Seconds to wait after prepackaged install |
+| `ludus_so_elastic_security_prepackaged_pause` | `120` | Seconds to wait for rules to appear after the Fleet package POST |
 | `ludus_so_elastic_security_force` | `false` | Re-run when marker exists |
 
 ## Notes
 
-- Prepackaged install can take several minutes. Enable sends `elastic-api-version: 2023-10-31` (required on Kibana 9.4). Elastic 9.4 also requires the `securitySolutionRules` enable/disable privilege, which the `so_elastic` superuser does not have; the role grants `ludus_so_detection_rules` and, if bulk enable is still denied, enables rules through `/api/alerting/rule/{id}/_enable`. Rules Kibana rejects, usually ML rules when the manager has no ML node, stay disabled and are reported as `unenableable`. The role fails if none were enabled, or if disabled rules remain that Kibana did not reject.
+- The Rules UI installs prebuilt rules by adding Fleet package `security_detection_engine` to `endpoints-initial`. Enable sends `elastic-api-version: 2023-10-31` (required on Kibana 9.4) and uses one bulk call per batch. Elastic 9.4 also requires the `securitySolutionRules` enable/disable privilege, which the `so_elastic` superuser does not have; the role grants `ludus_so_detection_rules` and, if detection-engine enable is still denied, uses `POST /api/alerting/rules/_bulk_enable`. Rules Kibana rejects, usually ML rules when the manager has no ML node, stay disabled and are reported as `unenableable`. The role fails if none were enabled, or if disabled rules remain that Kibana did not reject.
 - Marker: `/etc/ludus-so-elastic-security-complete`.
 - Trial is time-limited (~30 days).
 - After Defend policy change, agents pick up policy on next check-in (usually ≤ a few minutes).
