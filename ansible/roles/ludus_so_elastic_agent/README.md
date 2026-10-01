@@ -8,6 +8,7 @@ Deploys the Security Onion Elastic Agent to Ludus range endpoints.
 - Fetches the Fleet enrollment token for `endpoints-initial`
 - Pulls the SO-bundled installer from `/nsm/elastic-fleet/so_agent-installers/`
 - Installs Linux (`so-elastic-agent_linux_amd64`) or Windows MSI with `-token` / `TOKEN=` + Fleet URL
+- Uninstalls any existing agent first, then enrolls, so a redeploy follows the SO instance that is up now (same sequence as the GOAD-mod elk extension)
 
 Skips the SO manager itself. Apply this role on every endpoint VM that should enroll.
 
@@ -65,9 +66,10 @@ roles:
 | `ludus_so_agent_fleet_url` | `https://<mgr>:8220` | Fleet Server URL |
 | `ludus_so_agent_allow_cidr` | `10.<range>.0.0/16` | SO firewall hostgroup CIDR |
 | `ludus_so_agent_setup_wait_timeout` | `600` | Seconds to wait for SO setup marker |
-| `ludus_so_agent_force` | `false` | Reinstall even if already enrolled to current Fleet |
-| `ludus_so_agent_uninstall_before_install` | `true` | Uninstall prior agent before enroll (old SO → new SO) |
-| `ludus_so_agent_uninstall_token` | `""` | Elastic Defend tamper-protection uninstall token |
+| `ludus_so_agent_reinstall` | `true` | Uninstall then enroll on every run, against the current SO |
+| `ludus_so_agent_force` | `false` | With `reinstall: false`, reinstall even if the marker matches |
+| `ludus_so_agent_uninstall_before_install` | `true` | Uninstall prior agent before enroll |
+| `ludus_so_agent_uninstall_token` | `""` | Override. Empty uses the Fleet uninstall token for the policy |
 | `ludus_so_agent_skip_manager` | `true` | Never enroll the SO VM |
 
 ## Notes
@@ -75,6 +77,6 @@ roles:
 - Ludus inter-VLAN default is DROP — add Fleet TCP ports (8220 / 5055 / 8443) toward the SO management VLAN.
 - Installers are ~200–300MB; first fetch caches under `/tmp/ludus-so-elastic-agent-cache` on the Ludus host.
 - Marker files: `/etc/ludus-so-elastic-agent-installed` (Linux), `C:\ProgramData\ludus-so-elastic-agent-installed` (Windows).
-- Skip only when marker `manager_id` matches this SO instance (setup-marker sha256 + Fleet enrollment key id) **and** agent binary present. IP/hostname ignored — rebuilds reuse them. Old markers without `manager_id` always reinstall.
+- Default `ludus_so_agent_reinstall: true` uninstalls the installed agent (`elastic-agent uninstall --force`, plus the Fleet uninstall token when Defend tamper protection has issued one) and enrolls again. A role redeploy follows the current SO even when the IP is unchanged. Set `ludus_so_agent_reinstall: false` to skip only when the marker `manager_id` matches this SO instance (setup-marker sha256 + Fleet enrollment key id) and the agent binary is present.
 - SO Fleet outputs use hostname **`manager`**. Role writes `manager → <SO IP>` into the guest hosts file (`ludus_so_agent_fix_manager_hosts`).
 - Adding SO to an existing range: put the agent role on endpoints with role-level `depends_on` SO as above, then `ludus range deploy` (or `--only-roles` after SO is up).

@@ -1,0 +1,138 @@
+---
+# windows-endpoints (Windows integration) ships Sysmon, PowerShell, and Forwarded
+# enabled. The other winlog toggles stay off. Turn on AppLocker, both Packaged
+# app channels, and Windows Defender. Metrics stay off.
+- name: Enable Windows AppLocker, Packaged app, and Defender log streams
+  ansible.builtin.shell: |
+    set -euo pipefail
+    export NOROOT=1
+    # shellcheck disable=SC1091
+    source /usr/sbin/so-elastic-fleet-common
+
+    NAME='{{ ludus_so_elastic_security_windows_policy_name }}'
+    POL='{{ ludus_so_elastic_security_agent_policy_id }}'
+    LIST=$(fleet_api 'package_policies?perPage=100')
+    EP_ID=$(jq -r --arg name "$NAME" --arg pol "$POL" '
+      def on_policy($pol):
+        (.policy_id == $pol) or (((.policy_ids // []) | index($pol)) != null);
+      ([.items[]? | select(.name == $name and on_policy($pol))]
+        + [.items[]? | select(.package.name == "windows" and on_policy($pol))])
+      | .[0].id // empty
+    ' <<<"$LIST")
+    if [[ -z "$EP_ID" || "$EP_ID" == null ]]; then
+      echo "ERROR: no ${NAME} package policy on ${POL}" >&2
+      echo "$LIST" | jq -r '.items[]? | "\(.name)\t\(.package.name)\t\(.policy_id // ((.policy_ids // []) | join(",")))"' >&2
+      exit 1
+    fi
+
+    RAW=$(fleet_api "package_policies/$EP_ID")
+    BODY=$(jq -c '
+      def channel($ds):
+        if $ds == "windows.applocker_exe_and_dll" then "Microsoft-Windows-AppLocker/EXE and DLL"
+        elif $ds == "windows.applocker_msi_and_script" then "Microsoft-Windows-AppLocker/MSI and Script"
+        elif $ds == "windows.applocker_packaged_app_deployment" then "Microsoft-Windows-AppLocker/Packaged app-Deployment"
+        elif $ds == "windows.applocker_packaged_app_execution" then "Microsoft-Windows-AppLocker/Packaged app-Execution"
+        elif $ds == "windows.windows_defender" then "Microsoft-Windows-Windows Defender/Operational"
+        else error("unknown dataset " + $ds) end;
+      def wanted:
+        [
+          "windows.applocker_exe_and_dll",
+          "windows.applocker_msi_and_script",
+          "windows.applocker_packaged_app_deployment",
+          "windows.applocker_packaged_app_execution",
+          "windows.windows_defender"
+        ];
+      def apply_channel($ds):
+        if $ds == "windows.windows_defender" then
+          del(.vars.channel)
+        else
+          .vars.channel = ((.vars.channel // {"type":"text"}) | .type = "text" | .value = channel($ds))
+        end;
+      def enable_winlog:
+        .enabled = true
+        | . as $input
+        | ([.streams[]? | select(.data_stream.dataset == "windows.sysmon_operational")][0]
+           // [.streams[]?][0]) as $proto
+        | if $proto == null then error("windows-endpoints winlog input has no streams to clone") else . end
+        | reduce wanted[] as $ds (
+            .;
+            if any(.streams[]?; .data_stream.dataset == $ds) then
+              .streams |= map(if .data_stream.dataset == $ds then .enabled = true else . end)
+            else
+              .streams += [
+                ($proto
+                  | del(.id, .compiled_stream)
+                  | .enabled = true
+                  | .data_stream.dataset = $ds
+                  | .data_stream.type = "logs"
+                  | apply_channel($ds))
+              ]
+            end
+          );
+      .item
+      | . as $src
+      | if (.inputs | type) != "array" then
+          error("windows package policy inputs are not an array")
+        else . end
+      | .inputs |= map(
+          if .type == "winlog" then enable_winlog else . end
+        )
+      | if any(.inputs[]?; .type == "winlog") then . else error("no winlog input on windows-endpoints") end
+      | {
+          version: .version,
+          name: .name,
+          namespace: .namespace,
+          description: (.description // ""),
+          policy_id: .policy_id,
+          policy_ids: .policy_ids,
+          enabled: .enabled,
+          inputs: .inputs,
+          package: .package,
+          vars: (.vars // {}),
+          force: true
+        }
+        + (if $src.output_id != null then {output_id: $src.output_id} else {} end)
+    ' <<<"$RAW")
+
+    RESP=$(curl -sS -K /opt/so/conf/elasticsearch/curl.config \
+      -H 'kbn-xsrf: true' -H 'Content-Type: application/json' \
+      -X PUT "http://localhost:5601/api/fleet/package_policies/${EP_ID}" -d "$BODY")
+
+    if ! echo "$RESP" | jq -e '.item.id' >/dev/null; then
+      echo "$RESP" | jq -c '{statusCode, message, error}' >&2
+      exit 1
+    fi
+    echo "$RESP" | jq -c '
+      def wanted:
+        [
+          "windows.applocker_exe_and_dll",
+          "windows.applocker_msi_and_script",
+          "windows.applocker_packaged_app_deployment",
+          "windows.applocker_packaged_app_execution",
+          "windows.windows_defender"
+        ];
+      def streams:
+        [.item.inputs[]? | select(.type == "winlog") | .streams[]?];
+      def enabled:
+        [streams[] | select(.enabled == true) | .data_stream.dataset];
+      (wanted - enabled) as $missing
+      | if ($missing | length) > 0 then
+          error("windows streams still disabled: " + ($missing | join(",")))
+        else
+          {
+            id: .item.id,
+            name: .item.name,
+            package: .item.package.version,
+            enabled: (enabled | map(select(. as $d | wanted | index($d))))
+          }
+        end
+    '
+  args:
+    executable: /bin/bash
+  register: ludus_so_elastic_security_windows_logs
+  become: true
+  changed_when: true
+
+- name: Report Windows log streams
+  ansible.builtin.debug:
+    msg: "{{ ludus_so_elastic_security_windows_logs.stdout_lines | default([]) | last }}"

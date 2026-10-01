@@ -1,5 +1,5 @@
 ---
-# Remove an existing Elastic Agent so the next enroll can target the current SO Fleet.
+# Remove an existing Elastic Agent so the next enroll targets the current SO Fleet.
 # Run uninstall from outside the install dir (Elastic requirement).
 
 - name: Check for installed Elastic Agent binary (Linux)
@@ -9,21 +9,37 @@
 
 - name: Uninstall Elastic Agent (Linux)
   ansible.builtin.command:
-    cmd: >-
-      {{ ludus_so_agent_install_path_linux }}/elastic-agent uninstall --force{{
-        (' --uninstall-token=' ~ ludus_so_agent_uninstall_token)
-        if (ludus_so_agent_uninstall_token | default('') | length > 0)
-        else ''
-      }}
+    argv: "{{ [ludus_so_agent_install_path_linux ~ '/elastic-agent', 'uninstall', '--force'] + (['--uninstall-token', ludus_so_agent_uninstall_token_resolved] if (ludus_so_agent_uninstall_token_resolved | default('') | length > 0) else []) }}"
     chdir: /tmp
   become: true
+  no_log: true
   when: ludus_so_agent_bin_linux.stat.exists | default(false)
   register: ludus_so_agent_linux_uninstall
-  failed_when: >
-    ludus_so_agent_linux_uninstall.rc | default(0) != 0
-    and ('not installed' not in (ludus_so_agent_linux_uninstall.stderr | default('') | lower))
-    and ('no such file' not in (ludus_so_agent_linux_uninstall.stderr | default('') | lower))
+  failed_when: false
   changed_when: ludus_so_agent_linux_uninstall.rc | default(1) == 0
+
+- name: Wait until Linux Elastic Agent binary is removed
+  ansible.builtin.stat:
+    path: "{{ ludus_so_agent_install_path_linux }}/elastic-agent"
+  register: ludus_so_agent_bin_linux_after
+  until: not (ludus_so_agent_bin_linux_after.stat.exists | default(false))
+  retries: 15
+  delay: 2
+  failed_when: false
+  when: ludus_so_agent_bin_linux.stat.exists | default(false)
+
+- name: Fail when Linux Elastic Agent uninstall left the binary in place
+  ansible.builtin.fail:
+    msg: >-
+      elastic-agent uninstall did not remove
+      {{ ludus_so_agent_install_path_linux }}/elastic-agent on {{ inventory_hostname }}
+      (rc={{ ludus_so_agent_linux_uninstall.rc | default('n/a') }}).
+      If Elastic Defend tamper protection is on, the Fleet uninstall token for
+      {{ ludus_so_agent_policy_id }} has to be valid. Set ludus_so_agent_uninstall_token
+      when Fleet does not issue one.
+  when:
+    - ludus_so_agent_bin_linux.stat.exists | default(false)
+    - (ludus_so_agent_bin_linux_after.stat | default({})).exists | default(false)
 
 - name: Remove Linux install marker after uninstall
   ansible.builtin.file:
@@ -33,3 +49,7 @@
   when: >
     (ludus_so_agent_bin_linux.stat.exists | default(false))
     or (ludus_so_agent_marker_stat.stat.exists | default(false))
+
+- name: Mark Linux agent binary absent after uninstall
+  ansible.builtin.set_fact:
+    ludus_so_agent_bin_present: false

@@ -59,8 +59,9 @@ Security Onion labs use the `ludus_securityonion` role to attach a sniff NIC (`n
 | Role | Purpose |
 |---|---|
 | [`ludus_securityonion`](./ansible/roles/ludus_securityonion/) | Attach sniff NIC; run `so-setup iso standalone-net` |
-| [`ludus_so_elastic_agent`](./ansible/roles/ludus_so_elastic_agent/) | Enroll Linux/Windows endpoints into SO Elastic Fleet |
+| [`ludus_so_elastic_agent`](./ansible/roles/ludus_so_elastic_agent/) | Enroll Linux/Windows endpoints into SO Elastic Fleet (reinstalls on each run) |
 | [`ludus_so_elastic_security`](./ansible/roles/ludus_so_elastic_security/) | Trial license, Elastic Defend detect mode, enable Kibana detection rules |
+| [`ludus_sysmon`](./ansible/roles/ludus_sysmon/) | Install Sysmon64 on Windows hosts |
 
 Roles and collections live under [`ansible/`](./ansible/). See [`ansible/README.md`](./ansible/README.md).
 

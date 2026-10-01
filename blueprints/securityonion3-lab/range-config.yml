@@ -89,6 +89,7 @@ ludus:
       block_internet: true
     roles:
       # depends_on must be under the role (not the VM) — Ludus cross-VM ordering
+      - name: ryokubaka.ludus_sysmon
       - name: ryokubaka.ludus_so_elastic_agent
         depends_on:
           - vm_name: "{{ range_id }}-so"
@@ -110,6 +111,7 @@ ludus:
       snapshot: true
       block_internet: true
     roles:
+      - name: ryokubaka.ludus_sysmon
       - name: ryokubaka.ludus_so_elastic_agent
         depends_on:
           - vm_name: "{{ range_id }}-so"

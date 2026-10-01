@@ -204,6 +204,57 @@
       Need {{ ludus_so_agent_setup_marker }} + Fleet enrollment key id.
   when: hostvars['localhost'].ludus_so_agent_manager_id_shared | default('') | length == 0
 
+# When agent tamper protection is enabled, uninstall needs the Fleet token.
+# The list is empty when protection is off — uninstall --force still works.
+- name: Fetch Fleet uninstall token for endpoint policy
+  ansible.builtin.shell: |
+    set -euo pipefail
+    raw=$(curl -sS -K /opt/so/conf/elasticsearch/curl.config -L \
+      -H 'kbn-xsrf: true' \
+      --retry 3 --retry-delay 5 \
+      "http://localhost:5601/api/fleet/uninstall_tokens?perPage=100" || true)
+    printf '%s' "$raw" | jq -r --arg pol '{{ ludus_so_agent_policy_id }}' '
+      if type == "object" and ((.items // null) | type) == "array" then
+        ([.items[] | select(.policy_id == $pol) | .token | select(. != null and . != "")] | first) // ""
+      else
+        ""
+      end
+    ' 2>/dev/null || true
+  args:
+    executable: /bin/bash
+  register: ludus_so_agent_uninstall_token_cmd
+  changed_when: false
+  failed_when: false
+  no_log: true
+  delegate_to: "{{ ludus_so_agent_manager }}"
+  become: true
+  become_method: sudo
+  become_user: root
+  vars:
+    ansible_shell_type: sh
+    ansible_connection: ssh
+
+- name: Publish Fleet uninstall token on localhost
+  ansible.builtin.set_fact:
+    ludus_so_agent_uninstall_token_shared: "{{ ludus_so_agent_uninstall_token_cmd.stdout | default('') | trim }}"
+  delegate_to: localhost
+  delegate_facts: true
+  no_log: true
+  vars:
+    ansible_connection: local
+    ansible_shell_type: sh
+    ansible_become: false
+
+- name: Report Fleet uninstall token availability
+  ansible.builtin.debug:
+    msg: >-
+      Fleet uninstall token for {{ ludus_so_agent_policy_id }}:
+      {{
+        'present'
+        if (hostvars['localhost'].ludus_so_agent_uninstall_token_shared | default('') | length > 0)
+        else 'not issued (tamper protection off)'
+      }}
+
 - name: Ensure installer cache dir on controller
   ansible.builtin.file:
     path: "{{ ludus_so_agent_cache_dir }}"

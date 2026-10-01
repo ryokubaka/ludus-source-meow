@@ -1,6 +1,13 @@
 ---
-# Switch Elastic Defend from DataCollection → EDRComplete (malware/etc in detect/prevent).
-# Leave device_control popups alone (need USB deny_all).
+# SO 3.3 (Elastic 9.4.5) ships endpoints-initial with five integrations. This task
+# updates only elastic-defend-endpoints (package name "endpoint", Defend 9.4.1 on
+# that build). Osquery, System, and the custom Defender winlog policy stay as
+# so-setup loaded them. Windows integration log toggles are a separate task.
+#
+# Saved Defend policies use integration_config + policy. The SO create template
+# uses _config and preset DataCollection; Fleet expands that on install. EDRComplete
+# turns protections on in prevent mode, so modes are patched to detect/prevent/off
+# without replacing the 9.4 objects.
 - name: Configure Elastic Defend protections (detect mode)
   ansible.builtin.shell: |
     set -euo pipefail
@@ -8,10 +15,19 @@
     # shellcheck disable=SC1091
     source /usr/sbin/so-elastic-fleet-common
 
-    EP_ID=$(fleet_api 'package_policies?perPage=50' \
-      | jq -r '.items[] | select(.package.name=="endpoint") | .id' | head -1)
+    NAME='{{ ludus_so_elastic_security_defend_policy_name }}'
+    POL='{{ ludus_so_elastic_security_agent_policy_id }}'
+    LIST=$(fleet_api 'package_policies?perPage=100')
+    EP_ID=$(jq -r --arg name "$NAME" --arg pol "$POL" '
+      def on_policy($pol):
+        (.policy_id == $pol) or (((.policy_ids // []) | index($pol)) != null);
+      ([.items[]? | select(.name == $name and on_policy($pol))]
+        + [.items[]? | select(.package.name == "endpoint" and on_policy($pol))])
+      | .[0].id // empty
+    ' <<<"$LIST")
     if [[ -z "$EP_ID" || "$EP_ID" == null ]]; then
-      echo "ERROR: no endpoint package policy found" >&2
+      echo "ERROR: no ${NAME} package policy on ${POL}" >&2
+      echo "$LIST" | jq -r '.items[]? | "\(.name)\t\(.package.name)\t\(.policy_id // ((.policy_ids // []) | join(",")))"' >&2
       exit 1
     fi
 
@@ -22,33 +38,45 @@
     POPUP='{{ ludus_so_elastic_security_defend_user_notify | bool | lower }}'
 
     BODY=$(MODE="$MODE" PRESET="$PRESET" POPUP="$POPUP" jq -c '
+      def with_mode(extra):
+        (. // extra) | .mode = env.MODE;
+      def with_popup:
+        (. // {"message":""}) | .enabled = (env.POPUP == "true");
       .item
-      | .inputs[0].config.integration_config.value.endpointConfig.preset = env.PRESET
-      | .inputs[0].config.policy.value.windows.malware = {"mode":env.MODE,"blocklist":true,"on_write_scan":true}
-      | .inputs[0].config.policy.value.windows.ransomware = {"mode":env.MODE,"supported":true}
-      | .inputs[0].config.policy.value.windows.memory_protection = {"mode":env.MODE,"supported":true}
-      | .inputs[0].config.policy.value.windows.behavior_protection = {"mode":env.MODE,"reputation_service":true,"supported":true}
-      | .inputs[0].config.policy.value.windows.attack_surface_reduction.credential_hardening.enabled = true
-      | .inputs[0].config.policy.value.windows.events = ((.inputs[0].config.policy.value.windows.events // {}) + {
-          "credential_access": true, "dll_and_driver_load": true, "dns": true, "file": true,
-          "network": true, "process": true, "registry": true, "security": true, "api": true
-        })
-      | .inputs[0].config.policy.value.windows.popup.malware = {"message":"","enabled": (env.POPUP == "true")}
-      | .inputs[0].config.policy.value.windows.popup.ransomware = {"message":"","enabled": (env.POPUP == "true")}
-      | .inputs[0].config.policy.value.windows.popup.memory_protection = {"message":"","enabled": (env.POPUP == "true")}
-      | .inputs[0].config.policy.value.windows.popup.behavior_protection = {"message":"","enabled": (env.POPUP == "true")}
-      | .inputs[0].config.policy.value.mac.malware = {"mode":env.MODE,"blocklist":true,"on_write_scan":true}
-      | .inputs[0].config.policy.value.mac.memory_protection = {"mode":env.MODE,"supported":true}
-      | .inputs[0].config.policy.value.mac.behavior_protection = {"mode":env.MODE,"reputation_service":true,"supported":true}
-      | .inputs[0].config.policy.value.mac.popup.malware = {"message":"","enabled": (env.POPUP == "true")}
-      | .inputs[0].config.policy.value.mac.popup.memory_protection = {"message":"","enabled": (env.POPUP == "true")}
-      | .inputs[0].config.policy.value.mac.popup.behavior_protection = {"message":"","enabled": (env.POPUP == "true")}
-      | .inputs[0].config.policy.value.linux.malware = {"mode":env.MODE,"blocklist":true,"on_write_scan":true}
-      | .inputs[0].config.policy.value.linux.memory_protection = {"mode":env.MODE,"supported":true}
-      | .inputs[0].config.policy.value.linux.behavior_protection = {"mode":env.MODE,"reputation_service":true,"supported":true}
-      | .inputs[0].config.policy.value.linux.popup.malware = {"message":"","enabled": (env.POPUP == "true")}
-      | .inputs[0].config.policy.value.linux.popup.memory_protection = {"message":"","enabled": (env.POPUP == "true")}
-      | .inputs[0].config.policy.value.linux.popup.behavior_protection = {"message":"","enabled": (env.POPUP == "true")}
+      | .inputs |= map(
+          if (.type == "endpoint" or .type == "ENDPOINT_INTEGRATION_CONFIG") then
+            .config.integration_config.value.type = "endpoint"
+            | .config.integration_config.value.endpointConfig.preset = env.PRESET
+            | if .config._config.value.endpointConfig then
+                .config._config.value.endpointConfig.preset = env.PRESET
+              else . end
+            | .config.policy.value.windows.malware = (.config.policy.value.windows.malware | with_mode({"blocklist":true,"on_write_scan":true}))
+            | .config.policy.value.windows.ransomware = (.config.policy.value.windows.ransomware | with_mode({"supported":true}))
+            | .config.policy.value.windows.memory_protection = (.config.policy.value.windows.memory_protection | with_mode({"supported":true}))
+            | .config.policy.value.windows.behavior_protection = (.config.policy.value.windows.behavior_protection | with_mode({"reputation_service":true,"supported":true}))
+            | .config.policy.value.windows.attack_surface_reduction.credential_hardening.enabled = true
+            | .config.policy.value.windows.events = ((.config.policy.value.windows.events // {}) + {
+                "credential_access": true, "dll_and_driver_load": true, "dns": true, "file": true,
+                "network": true, "process": true, "registry": true, "security": true, "api": true
+              })
+            | .config.policy.value.windows.popup.malware = (.config.policy.value.windows.popup.malware | with_popup)
+            | .config.policy.value.windows.popup.ransomware = (.config.policy.value.windows.popup.ransomware | with_popup)
+            | .config.policy.value.windows.popup.memory_protection = (.config.policy.value.windows.popup.memory_protection | with_popup)
+            | .config.policy.value.windows.popup.behavior_protection = (.config.policy.value.windows.popup.behavior_protection | with_popup)
+            | .config.policy.value.mac.malware = (.config.policy.value.mac.malware | with_mode({"blocklist":true,"on_write_scan":true}))
+            | .config.policy.value.mac.memory_protection = (.config.policy.value.mac.memory_protection | with_mode({"supported":true}))
+            | .config.policy.value.mac.behavior_protection = (.config.policy.value.mac.behavior_protection | with_mode({"reputation_service":true,"supported":true}))
+            | .config.policy.value.mac.popup.malware = (.config.policy.value.mac.popup.malware | with_popup)
+            | .config.policy.value.mac.popup.memory_protection = (.config.policy.value.mac.popup.memory_protection | with_popup)
+            | .config.policy.value.mac.popup.behavior_protection = (.config.policy.value.mac.popup.behavior_protection | with_popup)
+            | .config.policy.value.linux.malware = (.config.policy.value.linux.malware | with_mode({"blocklist":true,"on_write_scan":true}))
+            | .config.policy.value.linux.memory_protection = (.config.policy.value.linux.memory_protection | with_mode({"supported":true}))
+            | .config.policy.value.linux.behavior_protection = (.config.policy.value.linux.behavior_protection | with_mode({"reputation_service":true,"supported":true}))
+            | .config.policy.value.linux.popup.malware = (.config.policy.value.linux.popup.malware | with_popup)
+            | .config.policy.value.linux.popup.memory_protection = (.config.policy.value.linux.popup.memory_protection | with_popup)
+            | .config.policy.value.linux.popup.behavior_protection = (.config.policy.value.linux.popup.behavior_protection | with_popup)
+          else . end
+        )
       | {
           version: .version,
           name: .name,
@@ -59,7 +87,8 @@
           enabled: .enabled,
           inputs: .inputs,
           package: .package,
-          vars: (.vars // {})
+          vars: (.vars // {}),
+          force: true
         }
     ' <<<"$RAW")
 
@@ -71,16 +100,21 @@
       echo "$RESP" | jq -c '{statusCode, message, error}' >&2
       exit 1
     fi
-    echo "$RESP" | jq -c '{
-      id: .item.id,
-      preset: .item.inputs[0].config.integration_config.value.endpointConfig.preset,
-      win_malware: .item.inputs[0].config.policy.value.windows.malware.mode,
-      win_ransomware: .item.inputs[0].config.policy.value.windows.ransomware.mode,
-      win_memory: .item.inputs[0].config.policy.value.windows.memory_protection.mode,
-      win_behavior: .item.inputs[0].config.policy.value.windows.behavior_protection.mode,
-      user_notify: .item.inputs[0].config.policy.value.windows.popup.malware.enabled,
-      popup: .item.inputs[0].config.policy.value.windows.popup
-    }'
+    echo "$RESP" | jq -c '
+      def ep:
+        (.item.inputs[] | select(.type == "endpoint" or .type == "ENDPOINT_INTEGRATION_CONFIG"));
+      {
+        id: .item.id,
+        name: .item.name,
+        package: .item.package.version,
+        preset: ((ep | .config.integration_config.value.endpointConfig.preset) // (ep | .config._config.value.endpointConfig.preset)),
+        win_malware: (ep | .config.policy.value.windows.malware.mode),
+        win_ransomware: (ep | .config.policy.value.windows.ransomware.mode),
+        win_memory: (ep | .config.policy.value.windows.memory_protection.mode),
+        win_behavior: (ep | .config.policy.value.windows.behavior_protection.mode),
+        user_notify: (ep | .config.policy.value.windows.popup.malware.enabled)
+      }
+    '
   args:
     executable: /bin/bash
   register: ludus_so_elastic_security_defend

@@ -1,0 +1,20 @@
+---
+galaxy_info:
+  role_name: ludus_sysmon
+  author: ryokubaka
+  description: >
+    Install Sysmon64 on Windows Ludus hosts with a lab config.
+    Security Onion endpoints-initial already collects Microsoft-Windows-Sysmon/Operational.
+  license: AGPL-3.0-or-later
+  min_ansible_version: "2.14"
+  version: "1.0.0"
+  platforms:
+    - name: Windows
+      versions:
+        - all
+  galaxy_tags:
+    - windows
+    - sysmon
+    - securityonion
+    - ludus
+dependencies: []

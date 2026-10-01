@@ -23,6 +23,11 @@ bump is not a patch. Do not invent a version heading on a feature branch.
 
 <!-- release: minor -->
 
+- [Improve] **`ludus_so_elastic_security` 1.0.3** — On `windows-endpoints`, enable the AppLocker, Packaged app, and Windows Defender winlog toggles next to Sysmon.
+- [Fix] **`ludus_so_elastic_security` 1.0.2** — Rule enable on Elastic 9.4 sends `elastic-api-version: 2023-10-31` and counts only rules the bulk-action response actually enabled. The previous loop ignored a rejected bulk call, so the disabled count stayed at 1972 for all 50 batches.
+- [Improve] **`ludus_so_elastic_security` 1.0.1** — SO 3.3 (Elastic 9.4.5) `endpoints-initial` already has Elastic Defend 9.4.1, Osquery Manager, System, Windows (Sysmon channel included), and Defender winlog. The role updates only `elastic-defend-endpoints`, and patches protection `.mode` on the existing 9.4 policy objects.
+- [Improve] **`ludus_so_elastic_agent` 1.0.6** — Every run uninstalls the existing agent and enrolls again, so a redeploy follows the Security Onion instance that is up (same sequence as the GOAD-mod elk extension). Uses the Fleet uninstall token when Defend tamper protection has issued one.
+- [Add] **`ludus_sysmon`** — Install Sysmon64 on Windows hosts. `securityonion-lab` 1.1.2 and `securityonion3-lab` 1.2.2 run it on the DC and Win11 before the Fleet agent. `windows-endpoints` already collects `Microsoft-Windows-Sysmon/Operational`.
 - [Fix] **Security Onion sniff bond** — `ludus_securityonion` 1.1.5 lowers `bond0` to the sniff NIC MTU before enslaving it. so-setup leaves the bond at 9000, and a virtio NIC at 1500 makes the enslave write fail with `Invalid argument`.
 - [Fix] **Security Onion wait** — `ludus_securityonion` 1.1.4 keeps the guest SSH password when the so-setup poll runs on the Ludus host. `delegate_to: localhost` was clearing `ansible_password`, so the poll used key-only SSH and retried until timeout after setup had finished.
 - [Fix] **Security Onion firewall** — The analyst/SOC group is `0.0.0.0/0`. The range router enforces access. SO labs no longer pass the range `/16`.
@@ -30,8 +35,8 @@ bump is not a patch. Do not invent a version heading on a feature branch.
 
 **Templates**
 - [Improve] **`securityonion-3.3-x64-template`** — Security Onion **3.3.0** (`securityonion-3.3.0-20260911.iso`, the 3.3.0 hotfix) as its own Packer template (`templates/securityonion-3.3`, `vm_name` `securityonion-3.3-x64-template`). SHA256 from upstream `DOWNLOAD_AND_VERIFY_ISO.md`. `so-setup` still runs at range deploy. `main` keeps `securityonion-3-x64-template` (3.2.0).
-- [Improve] **`securityonion3-lab`** — Blueprint version `1.2.1`. SO VM RAM is `ram_min_gb: 20` and `ram_gb: 20`. A 16 GiB VM reports ~15.2 GiB MemTotal, under so-setup's 16 GiB check.
-- [Fix] **`securityonion-lab`** — Blueprint version `1.1.1`. SO VM `ram_min_gb` is 20, matching `ram_gb`, for the same MemTotal gap.
+- [Improve] **`securityonion3-lab`** — Blueprint version `1.2.2`. SO VM RAM is `ram_min_gb: 20` and `ram_gb: 20`. A 16 GiB VM reports ~15.2 GiB MemTotal, under so-setup's 16 GiB check.
+- [Fix] **`securityonion-lab`** — Blueprint version `1.1.2`. SO VM `ram_min_gb` is 20, matching `ram_gb`, for the same MemTotal gap.
 - [Fix] **Security Onion deploy SSH** — The template creates `localuser` and the SO VM joins Ludus's built-in `rhel` group. Deploy SSH no longer depends on a file under `/opt/ludus`. Rebuild `securityonion-3.3-x64-template` before the next deploy.
 
 **Ansible**

@@ -42,6 +42,10 @@
       ansible.builtin.include_tasks: configure-elastic-defend.yml
       when: ludus_so_elastic_security_configure_defend | bool
 
+    - name: Enable Windows AppLocker, Packaged app, and Defender streams
+      ansible.builtin.include_tasks: configure-windows-logs.yml
+      when: ludus_so_elastic_security_configure_windows_logs | bool
+
     - name: Install and enable prepackaged detection rules
       ansible.builtin.include_tasks: enable-rules.yml
       when: ludus_so_elastic_security_enable_rules | bool
@@ -54,6 +58,7 @@
           defend={{ ludus_so_elastic_security_configure_defend }}
           defend_mode={{ ludus_so_elastic_security_defend_mode }}
           defend_user_notify={{ ludus_so_elastic_security_defend_user_notify }}
+          windows_logs={{ ludus_so_elastic_security_configure_windows_logs }}
           rules={{ ludus_so_elastic_security_enable_rules }}
           completed={{ ansible_date_time.iso8601 | default(lookup('pipe', 'date -Iseconds')) }}
         mode: "0644"

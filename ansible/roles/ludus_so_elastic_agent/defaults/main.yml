@@ -36,10 +36,15 @@ ludus_so_agent_setup_marker: /etc/ludus-so-setup-complete
 ludus_so_agent_setup_wait_timeout: 600
 ludus_so_agent_setup_wait_sleep: 15
 
-# Re-run installer even when marker / service present
+# Every role run uninstalls any existing agent and enrolls to the current SO Fleet.
+# A redeploy then follows whichever Security Onion instance is up (rebuild, 2.4 → 3.3, new certs).
+# Set false to skip when the marker manager_id already matches this Fleet.
+ludus_so_agent_reinstall: true
+
+# Re-run installer even when marker / service present (used when reinstall is false)
 ludus_so_agent_force: false
 
-# Tear down any prior agent before enroll (needed when SO manager IP/Fleet changes)
+# Tear down any prior agent before enroll. Implied by ludus_so_agent_reinstall.
 ludus_so_agent_uninstall_before_install: true
 ludus_so_agent_install_path_linux: /opt/Elastic/Agent
 ludus_so_agent_install_path_windows: 'C:\Program Files\Elastic\Agent'

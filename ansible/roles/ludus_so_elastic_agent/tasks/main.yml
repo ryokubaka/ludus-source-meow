@@ -115,7 +115,7 @@
 
     - name: Set enroll skip / install flags
       ansible.builtin.set_fact:
-        # Skip only when marker has THIS SO instance id (not IP/hostname — rebuilds reuse those)
+        # Marker match is only a skip when reinstall is turned off.
         ludus_so_agent_marker_has_manager_id: >-
           {{
             ('manager_id=' ~ (ludus_so_agent_manager_id | string))
@@ -123,7 +123,8 @@
           }}
         ludus_so_agent_already_current: >-
           {{
-            (not (ludus_so_agent_force | bool))
+            (not (ludus_so_agent_reinstall | bool))
+            and (not (ludus_so_agent_force | bool))
             and (ludus_so_agent_bin_present | bool)
             and (
               ('manager_id=' ~ (ludus_so_agent_manager_id | string))
@@ -132,7 +133,8 @@
           }}
         ludus_so_agent_needs_install: >-
           {{
-            (ludus_so_agent_force | bool)
+            (ludus_so_agent_reinstall | bool)
+            or (ludus_so_agent_force | bool)
             or not (
               (ludus_so_agent_bin_present | bool)
               and (
@@ -142,12 +144,23 @@
             )
           }}
 
+    - name: Resolve Elastic Agent uninstall token
+      ansible.builtin.set_fact:
+        ludus_so_agent_uninstall_token_resolved: >-
+          {{
+            ludus_so_agent_uninstall_token
+            if (ludus_so_agent_uninstall_token | default('') | length > 0)
+            else (hostvars['localhost'].ludus_so_agent_uninstall_token_shared | default('') | trim)
+          }}
+      no_log: true
+      when: ludus_so_agent_needs_install | bool
+
     - name: Skip when already enrolled to this SO instance
       ansible.builtin.debug:
         msg: >-
           Elastic Agent on {{ inventory_hostname }} already enrolled to SO instance
           {{ ludus_so_agent_manager_id }}; skipping
-          (set ludus_so_agent_force=true to reinstall).
+          (ludus_so_agent_reinstall=true reinstalls against the current Fleet).
       when: ludus_so_agent_already_current | bool
 
     - name: Uninstall existing Elastic Agent on Linux
@@ -155,7 +168,7 @@
       when:
         - ludus_so_agent_os == 'linux'
         - ludus_so_agent_needs_install | bool
-        - ludus_so_agent_uninstall_before_install | bool
+        - (ludus_so_agent_uninstall_before_install | bool) or (ludus_so_agent_reinstall | bool)
         - >
           (ludus_so_agent_bin_present | bool)
           or (ludus_so_agent_marker_stat.stat.exists | default(false))
@@ -165,7 +178,7 @@
       when:
         - ludus_so_agent_os == 'windows'
         - ludus_so_agent_needs_install | bool
-        - ludus_so_agent_uninstall_before_install | bool
+        - (ludus_so_agent_uninstall_before_install | bool) or (ludus_so_agent_reinstall | bool)
         - >
           (ludus_so_agent_bin_present | bool)
           or (ludus_so_agent_marker_stat_win.stat.exists | default(false))

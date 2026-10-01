@@ -1,0 +1,112 @@
+<!--
+  Lab Sysmon config for Security Onion endpoints-initial.
+  windows-endpoints already subscribes to Microsoft-Windows-Sysmon/Operational.
+  Schema 4.90 (Sysmon 15). CheckRevocation is off because lab guests have no internet.
+-->
+<Sysmon schemaversion="4.90">
+  <HashAlgorithms>sha256</HashAlgorithms>
+  <CheckRevocation>false</CheckRevocation>
+  <EventFiltering>
+
+    <RuleGroup name="" groupRelation="or">
+      <ProcessCreate onmatch="exclude">
+        <Image condition="is">C:\Windows\System32\conhost.exe</Image>
+        <Image condition="is">C:\Windows\System32\wbem\WmiPrvSE.exe</Image>
+        <Image condition="is">C:\Windows\System32\backgroundTaskHost.exe</Image>
+        <Image condition="is">C:\Windows\System32\SearchProtocolHost.exe</Image>
+        <Image condition="is">C:\Windows\System32\SearchFilterHost.exe</Image>
+        <Image condition="is">C:\Windows\System32\CompatTelRunner.exe</Image>
+        <Image condition="is">C:\Windows\System32\MusNotification.exe</Image>
+        <Image condition="is">C:\Windows\System32\MoUsoCoreWorker.exe</Image>
+      </ProcessCreate>
+    </RuleGroup>
+
+    <RuleGroup name="" groupRelation="or">
+      <NetworkConnect onmatch="exclude">
+        <DestinationIp condition="is">127.0.0.1</DestinationIp>
+        <DestinationIp condition="is">::1</DestinationIp>
+      </NetworkConnect>
+    </RuleGroup>
+
+    <RuleGroup name="" groupRelation="or">
+      <ImageLoad onmatch="include">
+        <Signed condition="is">false</Signed>
+      </ImageLoad>
+    </RuleGroup>
+
+    <RuleGroup name="" groupRelation="or">
+      <ProcessAccess onmatch="include">
+        <TargetImage condition="is">C:\Windows\System32\lsass.exe</TargetImage>
+      </ProcessAccess>
+    </RuleGroup>
+
+    <RuleGroup name="" groupRelation="or">
+      <FileCreate onmatch="include">
+        <TargetFilename condition="end with">.exe</TargetFilename>
+        <TargetFilename condition="end with">.dll</TargetFilename>
+        <TargetFilename condition="end with">.sys</TargetFilename>
+        <TargetFilename condition="end with">.ps1</TargetFilename>
+        <TargetFilename condition="end with">.vbs</TargetFilename>
+        <TargetFilename condition="end with">.js</TargetFilename>
+        <TargetFilename condition="end with">.hta</TargetFilename>
+        <TargetFilename condition="end with">.bat</TargetFilename>
+        <TargetFilename condition="end with">.cmd</TargetFilename>
+        <TargetFilename condition="end with">.lnk</TargetFilename>
+        <TargetFilename condition="end with">.scr</TargetFilename>
+        <TargetFilename condition="end with">.dmp</TargetFilename>
+      </FileCreate>
+    </RuleGroup>
+
+    <RuleGroup name="" groupRelation="or">
+      <RegistryEvent onmatch="include">
+        <TargetObject condition="contains">CurrentVersion\Run</TargetObject>
+        <TargetObject condition="contains">CurrentVersion\RunOnce</TargetObject>
+        <TargetObject condition="contains">CurrentVersion\Windows\Load</TargetObject>
+        <TargetObject condition="contains">CurrentVersion\Windows\Run</TargetObject>
+        <TargetObject condition="contains">\Winlogon\</TargetObject>
+        <TargetObject condition="contains">Policies\Explorer\Run</TargetObject>
+      </RegistryEvent>
+    </RuleGroup>
+
+    <RuleGroup name="" groupRelation="or">
+      <DnsQuery onmatch="include">
+        <QueryName condition="contains">.</QueryName>
+      </DnsQuery>
+    </RuleGroup>
+
+    <RuleGroup name="" groupRelation="or">
+      <DriverLoad onmatch="exclude">
+        <ImageLoaded condition="is">C:\Drivers\this-path-does-not-exist.sys</ImageLoaded>
+      </DriverLoad>
+    </RuleGroup>
+
+    <RuleGroup name="" groupRelation="or">
+      <CreateRemoteThread onmatch="exclude">
+        <SourceImage condition="is">C:\this\path\does\not\exist.exe</SourceImage>
+      </CreateRemoteThread>
+    </RuleGroup>
+
+    <RuleGroup name="" groupRelation="or">
+      <PipeEvent onmatch="exclude">
+        <PipeName condition="is">\this-pipe-does-not-exist</PipeName>
+      </PipeEvent>
+    </RuleGroup>
+
+    <RuleGroup name="" groupRelation="or">
+      <ProcessTampering onmatch="exclude">
+        <Image condition="is">C:\this\path\does\not\exist.exe</Image>
+      </ProcessTampering>
+    </RuleGroup>
+
+    <RuleGroup name="" groupRelation="or">
+      <FileDelete onmatch="include">
+        <TargetFilename condition="end with">.exe</TargetFilename>
+        <TargetFilename condition="end with">.dll</TargetFilename>
+        <TargetFilename condition="end with">.ps1</TargetFilename>
+        <TargetFilename condition="end with">.vbs</TargetFilename>
+        <TargetFilename condition="end with">.dmp</TargetFilename>
+      </FileDelete>
+    </RuleGroup>
+
+  </EventFiltering>
+</Sysmon>

@@ -1,0 +1,20 @@
+---
+# Install directory on the Windows guest. Sysmon copies itself to System32 on -i.
+ludus_sysmon_install_dir: 'C:\ProgramData\ludus\Sysmon'
+
+# Live Sysinternals zip. Downloaded on the Ansible controller — range guests
+# have testing.block_internet and cannot fetch this themselves.
+ludus_sysmon_url: https://download.sysinternals.com/files/Sysmon.zip
+ludus_sysmon_cache_dir: /tmp/ludus-sysmon-cache
+
+# Empty uses files/sysmonconfig.xml from this role.
+ludus_sysmon_config_src: ""
+
+# Uninstall and install again even when Sysmon64 is already running.
+ludus_sysmon_force: false
+
+# Re-download the zip when the cache is already present.
+ludus_sysmon_refresh_installer: false
+
+ludus_sysmon_service_name: Sysmon64
+ludus_sysmon_channel: Microsoft-Windows-Sysmon/Operational

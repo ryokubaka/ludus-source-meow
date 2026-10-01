@@ -2,14 +2,23 @@
 # Start Elastic trial (platinum-class features for 30 days) — mirrors GOAD-mod es_xpack_trial
 ludus_so_elastic_security_start_trial: true
 
-# Elastic Defend on endpoints-initial: leave DataCollection and turn protections on
+# Elastic Defend on endpoints-initial: leave DataCollection and turn protections on.
+# SO 3.3 / Elastic 9.4.5 names this integration elastic-defend-endpoints (Defend 9.4.1).
+# Osquery, System, and the custom windows-defender winlog policy are not rewritten.
 ludus_so_elastic_security_configure_defend: true
-# Fleet preset: DataCollection | NGAV | EDRComplete
+ludus_so_elastic_security_defend_policy_name: elastic-defend-endpoints
+ludus_so_elastic_security_agent_policy_id: endpoints-initial
+# Fleet preset: DataCollection | NGAV | EDREssential | EDRComplete
 ludus_so_elastic_security_defend_preset: EDRComplete
 # Protection mode for malware / ransomware / memory / behavior: detect | prevent | off
 ludus_so_elastic_security_defend_mode: detect
 # Show endpoint-user popups for all protection types (SIEM alerts always fire in detect/prevent)
 ludus_so_elastic_security_defend_user_notify: true
+
+# windows-endpoints already collects Sysmon. Also enable AppLocker (EXE/DLL and
+# MSI/Script), Packaged app-Deployment, Packaged app-Execution, and Windows Defender.
+ludus_so_elastic_security_configure_windows_logs: true
+ludus_so_elastic_security_windows_policy_name: windows-endpoints
 
 # Install Elastic prepackaged detection rules + enable all disabled rules
 ludus_so_elastic_security_enable_rules: true
@@ -17,7 +26,10 @@ ludus_so_elastic_security_enable_rules: true
 # Pause after prepackaged install (seconds) before enabling — Kibana needs settle time
 ludus_so_elastic_security_prepackaged_pause: 120
 
-# Bulk enable page size (Elastic API max 100)
+# Kibana 9 public detection-engine routes require this (bulk enable is versioned).
+ludus_so_elastic_security_api_version: "2023-10-31"
+
+# _find page size. Bulk enable accepts up to 1000 ids; 100 keeps each call short.
 ludus_so_elastic_security_bulk_page_size: 100
 
 # Max enable loops (safety; 100 rules/loop × 50 = 5000 rules)

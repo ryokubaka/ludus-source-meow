@@ -1,0 +1,209 @@
+---
+- name: Detect Windows for Sysmon
+  ansible.builtin.set_fact:
+    ludus_sysmon_is_windows: >-
+      {{
+        (
+          (ansible_connection | default('') | lower) in ['winrm', 'psrp']
+          or (ansible_shell_type | default('') | lower) == 'powershell'
+          or (ansible_os_family | default('') | lower) == 'windows'
+          or (ansible_facts.os_family | default('') | lower) == 'windows'
+          or (ansible_facts.ansible_os_family | default('') | lower) == 'windows'
+        ) | bool
+      }}
+
+- name: Skip non-Windows hosts
+  ansible.builtin.debug:
+    msg: "Skipping {{ inventory_hostname }} — ludus_sysmon installs Sysmon on Windows only."
+  when: not (ludus_sysmon_is_windows | bool)
+
+- name: Install Sysmon on Windows
+  when: ludus_sysmon_is_windows | bool
+  block:
+    - name: Ensure Sysmon cache directory on controller
+      ansible.builtin.file:
+        path: "{{ ludus_sysmon_cache_dir }}"
+        state: directory
+        mode: "0755"
+      delegate_to: localhost
+      become: false
+      vars:
+        ansible_connection: local
+        ansible_shell_type: sh
+
+    - name: Stat cached Sysmon zip
+      ansible.builtin.stat:
+        path: "{{ ludus_sysmon_cache_dir }}/Sysmon.zip"
+      register: ludus_sysmon_zip_stat
+      delegate_to: localhost
+      become: false
+      vars:
+        ansible_connection: local
+        ansible_shell_type: sh
+
+    - name: Download Sysmon zip on controller
+      ansible.builtin.get_url:
+        url: "{{ ludus_sysmon_url }}"
+        dest: "{{ ludus_sysmon_cache_dir }}/Sysmon.zip"
+        mode: "0644"
+        force: "{{ ludus_sysmon_refresh_installer | bool }}"
+      delegate_to: localhost
+      become: false
+      vars:
+        ansible_connection: local
+        ansible_shell_type: sh
+      retries: 3
+      delay: 10
+      when: >
+        (ludus_sysmon_refresh_installer | bool)
+        or not (ludus_sysmon_zip_stat.stat.exists | default(false))
+
+    - name: Stat extracted Sysmon64.exe
+      ansible.builtin.stat:
+        path: "{{ ludus_sysmon_cache_dir }}/Sysmon64.exe"
+      register: ludus_sysmon_exe_stat
+      delegate_to: localhost
+      become: false
+      vars:
+        ansible_connection: local
+        ansible_shell_type: sh
+
+    - name: Extract Sysmon zip on controller
+      ansible.builtin.unarchive:
+        src: "{{ ludus_sysmon_cache_dir }}/Sysmon.zip"
+        dest: "{{ ludus_sysmon_cache_dir }}"
+        remote_src: true
+      delegate_to: localhost
+      become: false
+      vars:
+        ansible_connection: local
+        ansible_shell_type: sh
+      when: >
+        (ludus_sysmon_refresh_installer | bool)
+        or not (ludus_sysmon_exe_stat.stat.exists | default(false))
+
+    - name: Require Sysmon64.exe in the zip
+      ansible.builtin.stat:
+        path: "{{ ludus_sysmon_cache_dir }}/Sysmon64.exe"
+      register: ludus_sysmon_exe_ready
+      delegate_to: localhost
+      become: false
+      vars:
+        ansible_connection: local
+        ansible_shell_type: sh
+
+    - name: Fail when Sysmon64.exe was not extracted
+      ansible.builtin.fail:
+        msg: >
+          {{ ludus_sysmon_cache_dir }}/Sysmon64.exe missing after extracting
+          {{ ludus_sysmon_url }}. Delete the cache dir and rerun, or set
+          ludus_sysmon_refresh_installer=true.
+      when: not (ludus_sysmon_exe_ready.stat.exists | default(false))
+
+    - name: Ensure Sysmon directory on guest
+      ansible.windows.win_file:
+        path: "{{ ludus_sysmon_install_dir }}"
+        state: directory
+
+    - name: Copy Sysmon64.exe to guest
+      ansible.windows.win_copy:
+        src: "{{ ludus_sysmon_cache_dir }}/Sysmon64.exe"
+        dest: "{{ ludus_sysmon_install_dir }}\\Sysmon64.exe"
+
+    - name: Copy Sysmon config to guest
+      ansible.windows.win_copy:
+        src: "{{ ludus_sysmon_config_src if (ludus_sysmon_config_src | default('') | length > 0) else 'sysmonconfig.xml' }}"
+        dest: "{{ ludus_sysmon_install_dir }}\\sysmonconfig.xml"
+
+    - name: Install Sysmon or apply config
+      ansible.windows.win_shell: |
+        $ErrorActionPreference = 'Stop'
+        $exe = Join-Path '{{ ludus_sysmon_install_dir }}' 'Sysmon64.exe'
+        $config = Join-Path '{{ ludus_sysmon_install_dir }}' 'sysmonconfig.xml'
+        $marker = Join-Path '{{ ludus_sysmon_install_dir }}' 'config.sha256'
+        $force = '{{ ludus_sysmon_force | bool | lower }}' -eq 'true'
+
+        $script:LastSysmonOutput = ''
+        function Invoke-SysmonCli {
+          param([string[]]$ArgumentList)
+          $out = Join-Path $env:TEMP ("sysmon-out-{0}.log" -f [guid]::NewGuid().ToString('N'))
+          $err = Join-Path $env:TEMP ("sysmon-err-{0}.log" -f [guid]::NewGuid().ToString('N'))
+          $script:LastSysmonOutput = ''
+          try {
+            $p = Start-Process -FilePath $exe -ArgumentList $ArgumentList -Wait -PassThru `
+              -RedirectStandardOutput $out -RedirectStandardError $err
+            $chunks = New-Object System.Collections.Generic.List[string]
+            foreach ($file in @($out, $err)) {
+              if (Test-Path -LiteralPath $file) {
+                $text = @(Get-Content -LiteralPath $file -ErrorAction SilentlyContinue)
+                if ($text.Count -gt 0) { [void]$chunks.Add(($text -join "`n")) }
+              }
+            }
+            $script:LastSysmonOutput = ($chunks -join "`n")
+            return [int]$p.ExitCode
+          } finally {
+            Remove-Item -LiteralPath $out, $err -Force -ErrorAction SilentlyContinue
+          }
+        }
+
+        function Write-SysmonResult {
+          param([string]$Label, [int]$Code)
+          if ($script:LastSysmonOutput) { Write-Output $script:LastSysmonOutput }
+          Write-Output "$Label=$Code"
+        }
+
+        $hash = (Get-FileHash -LiteralPath $config -Algorithm SHA256).Hash.ToLower()
+        $applied = ''
+        if (Test-Path -LiteralPath $marker) {
+          $applied = (Get-Content -LiteralPath $marker -Raw).Trim().ToLower()
+        }
+        $svc = Get-Service -Name '{{ ludus_sysmon_service_name }}' -ErrorAction SilentlyContinue
+        if ($force -and $svc) {
+          $rc = Invoke-SysmonCli @('-u', 'force')
+          if ($rc -ne 0) { Write-SysmonResult 'sysmon_uninstall_rc' $rc; exit $rc }
+          Start-Sleep -Seconds 2
+          $svc = $null
+        }
+        if (-not $svc) {
+          $rc = Invoke-SysmonCli @('-accepteula', '-i', $config)
+          if ($rc -ne 0) { Write-SysmonResult 'sysmon_install_rc' $rc; exit $rc }
+          Set-Content -LiteralPath $marker -Value $hash -NoNewline
+          if ($script:LastSysmonOutput) { Write-Output $script:LastSysmonOutput }
+          Write-Output "sysmon_installed hash=$hash"
+          exit 0
+        }
+        if ($applied -ne $hash) {
+          $rc = Invoke-SysmonCli @('-accepteula', '-c', $config)
+          if ($rc -ne 0) { Write-SysmonResult 'sysmon_config_rc' $rc; exit $rc }
+          Set-Content -LiteralPath $marker -Value $hash -NoNewline
+          if ($script:LastSysmonOutput) { Write-Output $script:LastSysmonOutput }
+          Write-Output "sysmon_configured hash=$hash"
+          exit 0
+        }
+        Write-Output "sysmon_unchanged hash=$hash"
+        exit 0
+      args:
+        chdir: "{{ ludus_sysmon_install_dir }}"
+      register: ludus_sysmon_install
+      changed_when: "'sysmon_unchanged' not in (ludus_sysmon_install.stdout | default(''))"
+
+    - name: Ensure Sysmon service is running
+      ansible.windows.win_service:
+        name: "{{ ludus_sysmon_service_name }}"
+        start_mode: auto
+        state: started
+
+    - name: Confirm Sysmon operational channel
+      ansible.windows.win_shell: |
+        $log = Get-WinEvent -ListLog '{{ ludus_sysmon_channel }}' -ErrorAction SilentlyContinue
+        if (-not $log) { Write-Output 'sysmon_channel_missing'; exit 1 }
+        Write-Output ("sysmon_channel_enabled=" + $log.IsEnabled)
+      changed_when: false
+      register: ludus_sysmon_channel_check
+
+    - name: Report Sysmon status
+      ansible.builtin.debug:
+        msg: >-
+          {{ inventory_hostname }}:
+          {{ ludus_sysmon_install.stdout | default('') | trim }}
+          {{ ludus_sysmon_channel_check.stdout | default('') | trim }}
