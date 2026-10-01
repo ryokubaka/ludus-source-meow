@@ -52,8 +52,10 @@
     while (( loops < MAX_LOOPS )); do
       loops=$((loops + 1))
       ids=()
+      nids=0
       page=1
-      while (( ${#ids[@]} < PAGE_SIZE )); do
+      # nids, not ${#ids[@]} — Ansible treats {# as a Jinja comment.
+      while (( nids < PAGE_SIZE )); do
         resp=$("${CURL[@]}" \
           "${FIND}?per_page=${PAGE_SIZE}&page=${page}&filter=alert.attributes.enabled:false")
         if ! jq -e '.data and (.total | type == "number")' >/dev/null <<<"$resp"; then
@@ -70,7 +72,8 @@
             continue
           fi
           ids+=("$id")
-          if (( ${#ids[@]} >= PAGE_SIZE )); then
+          nids=$((nids + 1))
+          if (( nids >= PAGE_SIZE )); then
             break
           fi
         done < <(jq -r '.data[].id // empty' <<<"$resp")
@@ -83,7 +86,7 @@
         fi
       done
 
-      if (( ${#ids[@]} == 0 )); then
+      if (( nids == 0 )); then
         break
       fi
 
