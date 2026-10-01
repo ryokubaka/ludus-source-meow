@@ -23,6 +23,7 @@ bump is not a patch. Do not invent a version heading on a feature branch.
 
 <!-- release: minor -->
 
+- [Fix] **Security Onion sniff bond** — `ludus_securityonion` 1.1.5 lowers `bond0` to the sniff NIC MTU before enslaving it. so-setup leaves the bond at 9000, and a virtio NIC at 1500 makes the enslave write fail with `Invalid argument`.
 - [Fix] **Security Onion wait** — `ludus_securityonion` 1.1.4 keeps the guest SSH password when the so-setup poll runs on the Ludus host. `delegate_to: localhost` was clearing `ansible_password`, so the poll used key-only SSH and retried until timeout after setup had finished.
 - [Fix] **Security Onion firewall** — The analyst/SOC group is `0.0.0.0/0`. The range router enforces access. SO labs no longer pass the range `/16`.
 - [Fix] **Security Onion Fleet grid** — `ludus_securityonion` 1.1.3 retries `elasticfleet.install_agent_grid` after a Salt master sign-in timeout, instead of aborting so-setup. The so-setup wait also caps each poll at 45s and does not treat Salt log text as an SSH flap.

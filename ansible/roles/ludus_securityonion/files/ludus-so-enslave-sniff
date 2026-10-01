@@ -1,0 +1,114 @@
+#!/bin/bash
+# Ensure bond0 exists and the sniff NIC is enslaved (SO sensors use bond0).
+# SNIFF and MTU come from /etc/ludus-so-enslave-sniff.conf or the environment.
+set -euo pipefail
+
+CONF="${LUDUS_SO_ENSLAVE_CONF:-/etc/ludus-so-enslave-sniff.conf}"
+if [[ -f "$CONF" ]]; then
+  # shellcheck disable=SC1090
+  source "$CONF"
+fi
+
+SNIFF="${SNIFF:-}"
+BOND="${BOND:-bond0}"
+MTU="${MTU:-1500}"
+SYS="${LUDUS_SO_SYSFS:-/sys/class/net}"
+
+[[ -n "$SNIFF" ]] || { echo "sniff-unset"; exit 1; }
+[[ -d "$SYS/$SNIFF" ]] || { echo "sniff-missing=$SNIFF"; exit 1; }
+
+restore_nm() {
+  if [[ "${LUDUS_SO_SKIP_NM:-}" == "1" ]]; then
+    return 0
+  fi
+  systemctl start NetworkManager >/dev/null 2>&1 || true
+}
+trap restore_nm EXIT
+
+stop_nm() {
+  if [[ "${LUDUS_SO_SKIP_NM:-}" == "1" ]]; then
+    return 0
+  fi
+  systemctl stop NetworkManager >/dev/null 2>&1 || true
+}
+
+# Kernel returns EINVAL ("echo: write error: Invalid argument") when the bond
+# MTU is higher than the slave. so-setup leaves bond0 at 9000; a virtio sniff
+# NIC cannot exceed the range bridge (usually 1500). Lower the bond first.
+lower_bond_mtu() {
+  ip link set "$BOND" mtu "$MTU"
+  ip link set "$SNIFF" mtu "$MTU" 2>/dev/null || true
+}
+
+add_slave() {
+  local bond_mtu slave_mtu
+  bond_mtu=$(cat "$SYS/$BOND/mtu" 2>/dev/null || echo 0)
+  slave_mtu=$(cat "$SYS/$SNIFF/mtu" 2>/dev/null || echo "$MTU")
+  if [[ "$bond_mtu" -gt "$slave_mtu" ]]; then
+    echo "refusing to enslave $SNIFF: bond mtu $bond_mtu > nic mtu $slave_mtu" >&2
+    return 1
+  fi
+  echo "+$SNIFF" > "$SYS/$BOND/bonding/slaves"
+}
+
+create_bond() {
+  if command -v nmcli >/dev/null 2>&1; then
+    while IFS= read -r con; do
+      [[ -z "$con" ]] && continue
+      nmcli con down "$con" 2>/dev/null || true
+      nmcli con delete "$con" 2>/dev/null || true
+    done < <(nmcli -t -f NAME con show 2>/dev/null | grep -E '^(bond0|bond0-slave-)' || true)
+    nmcli device disconnect "$SNIFF" 2>/dev/null || true
+    nmcli con add type bond con-name bond0 ifname bond0 mode balance-rr \
+      ipv4.method disabled ipv6.method ignore connection.autoconnect yes \
+      802-3-ethernet.mtu "$MTU" >/dev/null
+    nmcli con add type ethernet con-name "bond0-slave-${SNIFF}" ifname "$SNIFF" master bond0 \
+      connection.autoconnect yes ipv4.method disabled ipv6.method ignore \
+      802-3-ethernet.mtu "$MTU" >/dev/null
+    nmcli con up bond0 >/dev/null || true
+    nmcli con up "bond0-slave-${SNIFF}" >/dev/null || true
+  fi
+  if [[ ! -d "$SYS/$BOND" ]]; then
+    modprobe bonding 2>/dev/null || true
+    [[ -f "$SYS/bonding_masters" ]] && echo "+${BOND}" > "$SYS/bonding_masters" 2>/dev/null || true
+    ip link add name "$BOND" type bond mode balance-rr miimon 100 2>/dev/null \
+      || ip link add name "$BOND" type bond mode 0 miimon 100 2>/dev/null \
+      || true
+    ip link set "$SNIFF" down 2>/dev/null || true
+    ip link set "$SNIFF" nomaster 2>/dev/null || true
+    lower_bond_mtu || true
+    ip link set "$SNIFF" master "$BOND" 2>/dev/null || true
+    ip link set "$SNIFF" up 2>/dev/null || true
+    ip link set "$BOND" up 2>/dev/null || true
+  fi
+}
+
+if [[ ! -d "$SYS/$BOND" ]]; then
+  create_bond
+  if [[ ! -d "$SYS/$BOND" ]]; then
+    echo "bond-create-failed"
+    exit 1
+  fi
+  echo "created-bond0"
+fi
+
+slaves=$(cat "$SYS/$BOND/bonding/slaves" 2>/dev/null || true)
+if [[ " $slaves " == *" $SNIFF "* ]]; then
+  lower_bond_mtu || true
+  ip link set "$SNIFF" up 2>/dev/null || true
+  ip link set "$BOND" up 2>/dev/null || true
+  echo "bond-ok=$SNIFF"
+  exit 0
+fi
+
+stop_nm
+ip link set "$SNIFF" down 2>/dev/null || true
+ip link set "$BOND" down 2>/dev/null || true
+for s in $slaves; do
+  echo "-$s" > "$SYS/$BOND/bonding/slaves" 2>/dev/null || true
+done
+lower_bond_mtu
+add_slave
+ip link set "$SNIFF" up
+ip link set "$BOND" up
+echo "enslaved $SNIFF -> $BOND"
