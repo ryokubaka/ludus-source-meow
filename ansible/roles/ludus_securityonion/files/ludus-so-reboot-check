@@ -1,0 +1,72 @@
+#!/bin/bash
+# Same reboot signal so-soc shows. Oracle Linux / RHEL: needs-restarting -r
+# (non-zero means reboot). Debian: /var/run/reboot-required.
+# so-common-status-check writes the result to
+# /opt/so/log/sostatus/needs_restarted, and telegraf publishes "os restart".
+# A stale 1 with a live "no" is a dashboard cache, not a real reboot.
+set -euo pipefail
+
+need=0
+reason=none
+live=unknown
+file_flag=0
+
+reboot_required_file="${REBOOT_REQUIRED_FILE:-/var/run/reboot-required}"
+if [[ -f "$reboot_required_file" ]]; then
+  need=1
+  reason=reboot-required
+fi
+
+bin="${NEEDS_RESTARTING_BIN:-}"
+if [[ "$bin" == "-" ]]; then
+  bin=""
+elif [[ -z "$bin" ]] && command -v needs-restarting >/dev/null 2>&1; then
+  bin=$(command -v needs-restarting)
+fi
+
+if [[ -n "$bin" ]]; then
+  set +e
+  "$bin" -r >"${NEEDS_RESTARTING_LOG:-/tmp/ludus-so-needs-restarting.txt}" 2>&1
+  rc=$?
+  set -e
+  if [[ "$rc" -eq 0 ]]; then
+    live=no
+  else
+    live=yes
+    need=1
+    if [[ "$reason" == none ]]; then
+      reason=needs-restarting
+    else
+      reason="${reason},needs-restarting"
+    fi
+  fi
+fi
+
+status_files="${STATUS_FILES:-/opt/so/log/sostatus/needs_restarted /var/log/sostatus/needs_restarted}"
+for f in $status_files; do
+  if [[ -f "$f" ]]; then
+    val=$(tr -d '[:space:]' <"$f" || true)
+    if [[ "$val" == 1 ]]; then
+      file_flag=1
+    fi
+  fi
+done
+
+if [[ "$live" == unknown && "$file_flag" == 1 ]]; then
+  need=1
+  if [[ "$reason" == none ]]; then
+    reason=status-file
+  else
+    reason="${reason},status-file"
+  fi
+fi
+
+if [[ "$live" == no && "$need" == 0 && "$file_flag" == 1 ]]; then
+  action=refresh
+elif [[ "$need" == 1 ]]; then
+  action=reboot
+else
+  action=ok
+fi
+
+printf 'action=%s\nreason=%s\nlive=%s\nfile=%s\n' "$action" "$reason" "$live" "$file_flag"

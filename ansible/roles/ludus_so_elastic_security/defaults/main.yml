@@ -32,6 +32,10 @@ ludus_so_elastic_security_api_version: "2023-10-31"
 # _find page size. Bulk enable accepts up to 1000 ids; 100 keeps each call short.
 ludus_so_elastic_security_bulk_page_size: 100
 
+# File-realm map for the Kibana "Enable/Disable rules" sub-feature (Elastic 9.4).
+ludus_so_elastic_security_users_roles: /opt/so/saltstack/local/salt/elasticsearch/files/users_roles
+ludus_so_elastic_security_rules_role: ludus_so_detection_rules
+
 # Max enable loops (safety; 100 rules/loop × 50 = 5000 rules)
 ludus_so_elastic_security_enable_max_loops: 50
 

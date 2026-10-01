@@ -1,0 +1,97 @@
+---
+# Kibana 9.4 split "Enable/Disable rules" into securitySolutionRulesV4.
+# so_elastic is a file-realm superuser. That wildcard does not satisfy
+# canEnableDisableRules, so detection-engine bulk enable returns
+# "User does not have permission to enable rules" for every rule.
+# Grant the sub-feature explicitly and map it in the file realm.
+
+- name: Grant detection-rule enable privilege to the curl user
+  ansible.builtin.shell: |
+    set -euo pipefail
+    CFG=/opt/so/conf/elasticsearch/curl.config
+    ROLES_FILE="{{ ludus_so_elastic_security_users_roles }}"
+    ROLE_NAME="{{ ludus_so_elastic_security_rules_role }}"
+    line=$(grep -E '^user[[:space:]]*=' "$CFG" | head -n1 || true)
+    value=${line#*=}
+    value=$(printf '%s' "$value" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^"//' -e 's/"$//')
+    user=${value%%:*}
+    if [[ -z "$user" || "$user" == "$value" ]]; then
+      echo "could not parse the username from ${CFG}" >&2
+      exit 1
+    fi
+    echo "curl_user=${user}"
+
+    priv_json=$(curl -sS -k -K "$CFG" 'https://localhost:9200/_security/privilege/kibana-.kibana')
+    if ! jq -e '.["kibana-.kibana"] | type == "object"' >/dev/null <<<"$priv_json"; then
+      echo "Kibana privilege lookup failed: $(printf '%s' "$priv_json" | head -c 400)" >&2
+      exit 1
+    fi
+    mapfile -t privs < <(
+      jq -r '
+        .["kibana-.kibana"] | keys[]
+        | select(test("enable_disable_rules") or test("^feature_securitySolutionRulesV[0-9]+\\.all$"))
+      ' <<<"$priv_json"
+    )
+    nprivs=0
+    for _p in "${privs[@]}"; do
+      nprivs=$((nprivs + 1))
+    done
+    if (( nprivs == 0 )); then
+      echo "no securitySolutionRules enable privilege on this stack; leaving the curl user unchanged"
+      exit 0
+    fi
+    priv_csv=$(printf '%s\n' "${privs[@]}" | jq -R . | jq -s -c .)
+    body=$(jq -nc --argjson privs "$priv_csv" '{
+      applications: [{
+        application: "kibana-.kibana",
+        privileges: $privs,
+        resources: ["*"]
+      }]
+    }')
+    role_body=$(curl -sS -k -K "$CFG" -w '\n%{http_code}' \
+      -X PUT "https://localhost:9200/_security/role/${ROLE_NAME}" \
+      -H 'Content-Type: application/json' \
+      -d "$body")
+    role_code=$(tail -n1 <<<"$role_body")
+    if [[ "$role_code" != 200 && "$role_code" != 201 ]]; then
+      echo "creating ${ROLE_NAME} failed (http ${role_code}): $(printf '%s' "$role_body" | head -c 400)" >&2
+      exit 1
+    fi
+    echo "role=${ROLE_NAME} privileges=${priv_csv}"
+
+    if [[ ! -f "$ROLES_FILE" ]]; then
+      echo "missing ${ROLES_FILE}; cannot map ${ROLE_NAME} onto ${user}" >&2
+      exit 1
+    fi
+    mapping="${ROLE_NAME}:${user}"
+    if ! grep -qF "$mapping" "$ROLES_FILE"; then
+      if [[ -s "$ROLES_FILE" ]] && [[ -n "$(tail -c1 "$ROLES_FILE")" ]]; then
+        printf '\n' >> "$ROLES_FILE"
+      fi
+      printf '%s\n' "$mapping" >> "$ROLES_FILE"
+      echo "roles_file=updated"
+    else
+      echo "roles_file=present"
+    fi
+
+    auth=""
+    for _try in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+      auth=$(curl -sS -k -K "$CFG" 'https://localhost:9200/_security/_authenticate')
+      if jq -e --arg r "$ROLE_NAME" '.roles | index($r) != null' >/dev/null <<<"$auth"; then
+        echo "role_active=yes"
+        exit 0
+      fi
+      sleep 1
+    done
+    echo "role ${ROLE_NAME} is not active for ${user} yet; detection bulk enable may still be denied: $(printf '%s' "$auth" | head -c 400)"
+    echo "role_active=no"
+    exit 0
+  args:
+    executable: /bin/bash
+  register: ludus_so_elastic_security_rule_priv
+  changed_when: "'roles_file=updated' in (ludus_so_elastic_security_rule_priv.stdout | default(''))"
+  become: true
+
+- name: Report detection-rule privilege grant
+  ansible.builtin.debug:
+    msg: "{{ ludus_so_elastic_security_rule_priv.stdout_lines | default([]) | join(' | ') }}"

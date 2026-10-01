@@ -23,6 +23,8 @@ bump is not a patch. Do not invent a version heading on a feature branch.
 
 <!-- release: minor -->
 
+- [Fix] **`ludus_securityonion` 1.1.6** — Reboot when so-soc still shows a pending reboot. so-setup installs a newer kernel and leaves `needs-restarting` set; the role now reboots, re-enslaves the sniff NIC, then heals containers.
+- [Fix] **`ludus_so_elastic_security` 1.0.5** — Detection-rule enable on Elastic 9.4. `so_elastic` is a superuser, but Kibana still returns "User does not have permission to enable rules" until the `securitySolutionRules` enable/disable privilege is granted. The role grants it, and if bulk enable is still denied, enables the same rules through the alerting API.
 - [Fix] **`ludus_so_elastic_security` 1.0.4** — Rule enable no longer uses `${#ids[@]}`. Ansible reads `{#` as a Jinja comment and refuses to load the task.
 - [Improve] **`ludus_so_elastic_security` 1.0.3** — On `windows-endpoints`, enable the AppLocker, Packaged app, and Windows Defender winlog toggles next to Sysmon.
 - [Fix] **`ludus_so_elastic_security` 1.0.2** — Rule enable on Elastic 9.4 sends `elastic-api-version: 2023-10-31` and counts only rules the bulk-action response actually enabled. The previous loop ignored a rejected bulk call, so the disabled count stayed at 1972 for all 50 batches.

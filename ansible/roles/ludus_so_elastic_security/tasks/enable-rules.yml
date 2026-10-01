@@ -29,6 +29,9 @@
   ansible.builtin.pause:
     seconds: "{{ ludus_so_elastic_security_prepackaged_pause | int }}"
 
+- name: Grant the curl user permission to enable detection rules
+  ansible.builtin.include_tasks: grant-rule-enable.yml
+
 - name: Enable all disabled detection rules in batches
   ansible.builtin.shell: |
     set -euo pipefail
@@ -48,6 +51,7 @@
     skipped=0
     loops=0
     sample_error=""
+    use_alerting=0
 
     while (( loops < MAX_LOOPS )); do
       loops=$((loops + 1))
@@ -89,30 +93,89 @@
         break
       fi
 
-      ids_json=$(printf '%s\n' "${ids[@]}" | jq -R . | jq -s -c .)
-      raw=$("${CURL[@]}" -X POST "$BULK" \
-        -d "{\"ids\": ${ids_json}, \"action\": \"enable\"}" -w '\n%{http_code}')
-      code=$(tail -n1 <<<"$raw")
-      body=$(sed '$d' <<<"$raw")
-      succeeded=$(jq -r '.attributes.summary.succeeded // 0' <<<"$body" 2>/dev/null || echo 0)
-      [[ "$succeeded" == "null" || -z "$succeeded" ]] && succeeded=0
-      new_skips=0
-      while IFS= read -r eid; do
-        [[ -z "$eid" || "$eid" == "null" ]] && continue
-        if [[ -z "${skip[$eid]+x}" ]]; then
-          skip["$eid"]=1
-          skipped=$((skipped + 1))
-          new_skips=$((new_skips + 1))
+      if [[ "$use_alerting" -eq 0 ]]; then
+        ids_json=$(printf '%s\n' "${ids[@]}" | jq -R . | jq -s -c .)
+        raw=$("${CURL[@]}" -X POST "$BULK" \
+          -d "{\"ids\": ${ids_json}, \"action\": \"enable\"}" -w '\n%{http_code}')
+        code=$(tail -n1 <<<"$raw")
+        body=$(sed '$d' <<<"$raw")
+        succeeded=$(jq -r '.attributes.summary.succeeded // 0' <<<"$body" 2>/dev/null || echo 0)
+        [[ "$succeeded" == "null" || -z "$succeeded" ]] && succeeded=0
+        new_skips=0
+        while IFS= read -r eid; do
+          [[ -z "$eid" || "$eid" == "null" ]] && continue
+          if [[ -z "${skip[$eid]+x}" ]]; then
+            skip["$eid"]=1
+            skipped=$((skipped + 1))
+            new_skips=$((new_skips + 1))
+          fi
+        done < <(jq -r '.attributes.errors[]?.rules[]?.id // empty' <<<"$body" 2>/dev/null || true)
+        if [[ -z "$sample_error" ]]; then
+          sample_error=$(jq -r '[.attributes.errors[]?.message // empty] | map(select(length > 0)) | unique | .[0] // empty' <<<"$body" 2>/dev/null || true)
+          sample_error=$(printf '%s' "$sample_error" | tr '\n' ' ' | head -c 240)
         fi
-      done < <(jq -r '.attributes.errors[]?.rules[]?.id // empty' <<<"$body" 2>/dev/null || true)
-      if [[ -z "$sample_error" ]]; then
-        sample_error=$(jq -r '[.attributes.errors[]?.message // empty] | map(select(length > 0)) | unique | .[0] // empty' <<<"$body" 2>/dev/null || true)
-        sample_error=$(printf '%s' "$sample_error" | tr '\n' ' ' | head -c 240)
+        echo "loop=${loops} http=${code} enabled_batch=${succeeded} skipped_new=${new_skips} enabled_total=${enabled}"
+        if [[ "$succeeded" -eq 0 && "$new_skips" -eq 0 ]]; then
+          echo "bulk enable made no progress (http ${code}): $(printf '%s' "$body" | head -c 500)" >&2
+          exit 1
+        fi
+        if [[ "$succeeded" -eq 0 && "$sample_error" == *"permission to enable rules"* ]]; then
+          use_alerting=1
+          skipped=$((skipped - new_skips))
+          for id in "${ids[@]}"; do
+            unset "skip[$id]"
+          done
+          echo "detection bulk enable is forbidden for this user; switching to the alerting enable API"
+        else
+          enabled=$((enabled + succeeded))
+          sleep 1
+          continue
+        fi
       fi
-      enabled=$((enabled + succeeded))
-      echo "loop=${loops} http=${code} enabled_batch=${succeeded} skipped_new=${new_skips} enabled_total=${enabled}"
-      if [[ "$succeeded" -eq 0 && "$new_skips" -eq 0 ]]; then
-        echo "bulk enable made no progress (http ${code}): $(printf '%s' "$body" | head -c 500)" >&2
+
+      # Kibana 9.4 gates detection-engine enable on securitySolutionRulesV4
+      # enable/disable. so_elastic is a file-realm superuser and that sub-feature
+      # is still denied. The alerting route enables the same rule objects.
+      tmpd=$(mktemp -d)
+      n=0
+      for id in "${ids[@]}"; do
+        n=$((n + 1))
+        (
+          code=$("${CURL[@]}" -o "$tmpd/${id}.body" -w '%{http_code}' \
+            -X POST "http://localhost:5601/api/alerting/rule/${id}/_enable" -d '{}') || code=000
+          printf '%s' "$code" > "$tmpd/${id}.code"
+        ) &
+        if (( n % 8 == 0 )); then
+          wait
+        fi
+      done
+      wait || true
+      alert_ok=0
+      alert_fail=0
+      alert_sample=""
+      for id in "${ids[@]}"; do
+        code=000
+        if [[ -f "$tmpd/${id}.code" ]]; then
+          code=$(tr -d '[:space:]' < "$tmpd/${id}.code")
+        fi
+        if [[ "$code" == 200 || "$code" == 204 ]]; then
+          alert_ok=$((alert_ok + 1))
+        else
+          alert_fail=$((alert_fail + 1))
+          if [[ -z "$alert_sample" && -f "$tmpd/${id}.body" ]]; then
+            alert_sample=$(tr '\n' ' ' < "$tmpd/${id}.body" | head -c 240)
+          fi
+          if [[ -z "${skip[$id]+x}" ]]; then
+            skip["$id"]=1
+            skipped=$((skipped + 1))
+          fi
+        fi
+      done
+      rm -rf "$tmpd"
+      enabled=$((enabled + alert_ok))
+      echo "loop=${loops} alerting_enabled=${alert_ok} alerting_failed=${alert_fail} enabled_total=${enabled} sample=${alert_sample}"
+      if [[ "$alert_ok" -eq 0 ]]; then
+        echo "alerting enable rejected the batch: ${alert_sample}" >&2
         exit 1
       fi
       sleep 1
@@ -122,7 +185,7 @@
     remaining=$(jq -r '.total // 0' <<<"$resp")
     echo "done enabled=${enabled} unenableable=${skipped} remaining=${remaining} loops=${loops} sample_error=${sample_error}"
     if (( remaining > 0 && enabled == 0 )); then
-      echo "no detection rules were enabled (remaining=${remaining} unenableable=${skipped})" >&2
+      echo "no detection rules were enabled (remaining=${remaining} unenableable=${skipped} sample_error=${sample_error})" >&2
       exit 1
     fi
     if (( remaining > skipped )); then
@@ -133,7 +196,7 @@
     executable: /bin/bash
   register: ludus_so_elastic_security_enable
   become: true
-  changed_when: "'enabled_batch=' in (ludus_so_elastic_security_enable.stdout | default(''))"
+  changed_when: "'enabled_total=' in (ludus_so_elastic_security_enable.stdout | default(''))"
 
 - name: Report rule enable summary
   ansible.builtin.debug:

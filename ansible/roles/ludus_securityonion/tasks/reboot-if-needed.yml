@@ -1,0 +1,109 @@
+---
+# so-soc shows a reboot pill from /opt/so/log/sostatus/needs_restarted.
+# so-setup installs a newer kernel and leaves that set. The status cron only
+# refreshes the file; it does not reboot.
+
+- name: Check whether Security Onion still needs a reboot
+  ansible.builtin.script: ludus-so-reboot-check
+  register: ludus_so_reboot_check
+  changed_when: false
+  become: true
+
+- name: Record the reboot check
+  ansible.builtin.set_fact:
+    ludus_so_rebooted: false
+    ludus_so_reboot_action: >-
+      {{
+        (ludus_so_reboot_check.stdout_lines | select('match', '^action=') | first | default('action=ok'))
+        | regex_replace('^action=', '')
+      }}
+    ludus_so_reboot_reason: >-
+      {{
+        (ludus_so_reboot_check.stdout_lines | select('match', '^reason=') | first | default('reason=none'))
+        | regex_replace('^reason=', '')
+      }}
+
+- name: Report Security Onion reboot check
+  ansible.builtin.debug:
+    msg: >-
+      Security Onion reboot check action={{ ludus_so_reboot_action }}
+      reason={{ ludus_so_reboot_reason }}
+
+- name: Reboot so the pending kernel is running
+  ansible.builtin.reboot:
+    msg: "Ludus Security Onion role applying a pending reboot"
+    connect_timeout: 5
+    reboot_timeout: "{{ ludus_so_reboot_timeout | int }}"
+    pre_reboot_delay: 0
+    post_reboot_delay: 30
+    test_command: whoami
+  become: true
+  when:
+    - ludus_so_reboot_if_needed | bool
+    - ludus_so_reboot_action == 'reboot'
+
+- name: Remember that this run rebooted the guest
+  ansible.builtin.set_fact:
+    ludus_so_rebooted: true
+  when:
+    - ludus_so_reboot_if_needed | bool
+    - ludus_so_reboot_action == 'reboot'
+
+- name: Leave the pending reboot for the operator
+  ansible.builtin.debug:
+    msg: >-
+      Security Onion still needs a reboot ({{ ludus_so_reboot_reason }}).
+      ludus_so_reboot_if_needed is false, so this run did not reboot.
+      so-soc will keep showing the reboot pill until the guest reboots.
+  when:
+    - not (ludus_so_reboot_if_needed | bool)
+    - ludus_so_reboot_action == 'reboot'
+
+- name: Re-check the reboot flag after reboot
+  ansible.builtin.script: ludus-so-reboot-check
+  register: ludus_so_reboot_check_after
+  changed_when: false
+  become: true
+  when: ludus_so_rebooted | bool
+
+- name: Record the post-reboot check
+  ansible.builtin.set_fact:
+    ludus_so_reboot_action_after: >-
+      {{
+        (ludus_so_reboot_check_after.stdout_lines | select('match', '^action=') | first | default('action=ok'))
+        | regex_replace('^action=', '')
+      }}
+  when: ludus_so_rebooted | bool
+
+- name: Fail when the guest still needs a reboot
+  ansible.builtin.fail:
+    msg: >-
+      Rebooted the Security Onion guest, and it still needs a reboot
+      ({{ ludus_so_reboot_reason }}). so-soc will keep showing the reboot pill.
+  when:
+    - ludus_so_rebooted | bool
+    - (ludus_so_reboot_action_after | default('ok')) == 'reboot'
+
+- name: Clear a stale Security Onion reboot flag
+  ansible.builtin.shell: |
+    set -euo pipefail
+    flag=/opt/so/log/sostatus/needs_restarted
+    mkdir -p "$(dirname "$flag")"
+    current=""
+    if [[ -f "$flag" ]]; then
+      current=$(tr -d '[:space:]' < "$flag" || true)
+    fi
+    if [[ "$current" != 0 ]]; then
+      printf '0\n' > "$flag"
+      echo wrote=1
+    else
+      echo wrote=0
+    fi
+  args:
+    executable: /bin/bash
+  register: ludus_so_reboot_flag
+  changed_when: "'wrote=1' in ludus_so_reboot_flag.stdout"
+  become: true
+  when: >-
+    ludus_so_rebooted | bool
+    or ludus_so_reboot_action == 'refresh'

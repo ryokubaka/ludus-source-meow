@@ -75,7 +75,7 @@ roles:
 
 ## Notes
 
-- Prepackaged install can take several minutes. Enable sends `elastic-api-version: 2023-10-31` (required on Kibana 9.4) and only counts rules the bulk response marks succeeded. Rules Kibana rejects, usually ML rules when the manager has no ML node, stay disabled and are reported as `unenableable`. The role fails if none were enabled, or if disabled rules remain that Kibana did not reject.
+- Prepackaged install can take several minutes. Enable sends `elastic-api-version: 2023-10-31` (required on Kibana 9.4). Elastic 9.4 also requires the `securitySolutionRules` enable/disable privilege, which the `so_elastic` superuser does not have; the role grants `ludus_so_detection_rules` and, if bulk enable is still denied, enables rules through `/api/alerting/rule/{id}/_enable`. Rules Kibana rejects, usually ML rules when the manager has no ML node, stay disabled and are reported as `unenableable`. The role fails if none were enabled, or if disabled rules remain that Kibana did not reject.
 - Marker: `/etc/ludus-so-elastic-security-complete`.
 - Trial is time-limited (~30 days).
 - After Defend policy change, agents pick up policy on next check-in (usually ≤ a few minutes).

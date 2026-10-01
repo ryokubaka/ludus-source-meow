@@ -40,6 +40,8 @@ Works with plain Ludus CLI/API deploy. No LUX required.
 | `ludus_so_require_dns` | `true` | Fail before `so-setup` if SO repo hostnames do not resolve |
 | `ludus_so_range_number_override` | `""` | Rare fallback if range number extra var missing |
 | `ludus_so_heal_sniff_bond` | `true` | Enslave sniff NIC to `bond0` + systemd oneshot (sensors listen on bond0) |
+| `ludus_so_reboot_if_needed` | `true` | Reboot when `needs-restarting` or the so-soc reboot flag says the guest still needs one |
+| `ludus_so_reboot_timeout` | `900` | Seconds to wait for SSH after that reboot |
 
 ## DNS and internet (common setup failure)
 

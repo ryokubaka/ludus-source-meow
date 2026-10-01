@@ -86,6 +86,10 @@ ludus_so_heal_containers: true
 ludus_so_heal_containers_fail: true
 ludus_so_heal_container_retries: 12
 ludus_so_heal_container_delay: 20
+# so-soc reboot pill. so-setup leaves needs-restarting set after a kernel update.
+ludus_so_reboot_if_needed: true
+ludus_so_reboot_timeout: 900
+
 # Required containers that must be running before elastic_security proceeds.
 ludus_so_required_containers:
   - so-elasticsearch
