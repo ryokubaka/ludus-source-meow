@@ -14,11 +14,26 @@
 - name: Decide whether setup already finished
   ansible.builtin.set_fact:
     ludus_so_already_setup: "{{ ludus_so_marker_checks.results | selectattr('stat.exists') | list | length > 0 }}"
+    ludus_so_ludus_marker_present: "{{ ludus_so_marker_checks.results | selectattr('item', 'equalto', ludus_so_setup_marker) | selectattr('stat.exists') | list | length > 0 }}"
 
 - name: Skip setup when already complete
   ansible.builtin.debug:
     msg: "Security Onion is already installed; skipping so-setup."
   when: ludus_so_already_setup | bool
+
+# /opt/so/state/setup-complete counts as already installed, but later roles
+# (ludus_so_elastic_security, Fleet agents) only accept the Ludus marker.
+- name: Write Ludus setup marker for an existing Security Onion install
+  ansible.builtin.copy:
+    dest: "{{ ludus_so_setup_marker }}"
+    content: |
+      profile=existing
+      source=/opt/so/state/setup-complete
+    mode: "0644"
+  become: true
+  when:
+    - ludus_so_already_setup | bool
+    - not (ludus_so_ludus_marker_present | bool)
 
 - name: Run Security Onion setup flow
   when: not (ludus_so_already_setup | bool)
