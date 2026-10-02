@@ -21,6 +21,8 @@ bump is not a patch. Do not invent a version heading on a feature branch.
 
 ## [Unreleased]
 
+## [1.2.3] - 2026-10-02
+
 - [Fix] **`ludus_securityonion` 1.1.10** — Controller tasks (`delegate_to: localhost`) write module files under `~/.goad/ansible-remote`. `~/.ansible/tmp` is owned by the Ludus service account, so the range user cannot create a directory there and the Proxmox API call was unreachable. `ludus_so_elastic_agent` 1.0.8 and `ludus_sysmon` 1.0.2 use the same directory.
 
 ## [1.2.2] - 2026-10-02
