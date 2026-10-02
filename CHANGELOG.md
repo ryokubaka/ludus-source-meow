@@ -21,6 +21,8 @@ bump is not a patch. Do not invent a version heading on a feature branch.
 
 ## [Unreleased]
 
+## [1.2.12] - 2026-10-02
+
 - [Fix] **`ludus_securityonion` 1.2.9** — Keep the grid from returning to Fault after the node hostname changes. Telegraf and the console send metrics to `https://manager:8086`. The role adds `manager` to the InfluxDB certificate before boot highstate, and restarts InfluxDB when that certificate is reissued.
 
 ## [1.2.11] - 2026-10-02
