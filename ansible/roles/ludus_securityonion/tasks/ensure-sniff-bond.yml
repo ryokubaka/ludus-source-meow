@@ -97,9 +97,6 @@
       {{ ludus_so_enslave_now.stderr | default('') }}
   when: ludus_so_enslave_now.rc | default(1) != 0
 
-- name: Re-assert Proxmox range bridge hub-mode (ageing 0)
-  ansible.builtin.include_tasks: set-bridge-hub.yml
-
 # Boot highstate creates so-zeek and so-suricata. so-*-restart queues behind
 # that Salt call. A 5 minute async cap failed the deploy while Zeek was still
 # starting and Suricata did not exist yet. Poll until both are running.

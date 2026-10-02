@@ -327,9 +327,6 @@
         )
       }}
 
-- name: Enable range bridge hub-mode for packet capture
-  ansible.builtin.include_tasks: set-bridge-hub.yml
-
 - name: Rescan PCI bus for hot-plugged virtio sniff NIC
   ansible.builtin.shell: |
     set -euo pipefail
