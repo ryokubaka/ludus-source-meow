@@ -21,6 +21,8 @@ bump is not a patch. Do not invent a version heading on a feature branch.
 
 ## [Unreleased]
 
+## [1.2.4] - 2026-10-02
+
 - [Fix] **`ludus_securityonion` 1.2.0** — Write `/etc/ludus-so-setup-complete` when `/opt/so/state/setup-complete` already exists. Later roles only accept the Ludus marker, so an already-installed guest failed `ludus_so_elastic_security` with a `depends_on` message even though `so-setup` had finished.
 
 ## [1.2.3] - 2026-10-02
