@@ -21,6 +21,8 @@ bump is not a patch. Do not invent a version heading on a feature branch.
 
 ## [Unreleased]
 
+- [Fix] **`ludus_securityonion` 1.2.7** — Keep the sniff bond up across reboot when the virtio NIC is 1500 and `bond0` comes back at 9000. The boot helper no longer aborts when NetworkManager is stopped, lowers the bond to the NIC MTU before enslaving, and a timer re-asserts it after Salt.
+
 ## [1.2.9] - 2026-10-02
 
 - [Fix] **`ludus_securityonion` 1.2.6** — Set range-bridge hub mode with the Proxmox API token every Ludus deploy already has. Direct write, passwordless sudo, and root SSH are tried first. The API console stops at a login prompt, and range users are not in sudoers. Before reloading networking, the role records an ifupdown2 keep-taps option on every Linux bridge and `bridge-ageing 0` on the range bridge. The task fails unless that bridge reads `0` and no bridge lost a tap or address.

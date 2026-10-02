@@ -17,27 +17,54 @@ SYS="${LUDUS_SO_SYSFS:-/sys/class/net}"
 [[ -n "$SNIFF" ]] || { echo "sniff-unset"; exit 1; }
 [[ -d "$SYS/$SNIFF" ]] || { echo "sniff-missing=$SNIFF"; exit 1; }
 
+nm_was_active=0
+
+nm_active() {
+  [[ "${LUDUS_SO_SKIP_NM:-}" == "1" ]] && return 1
+  systemctl is-active --quiet NetworkManager 2>/dev/null
+}
+
+# nmcli exits 8 when NetworkManager is not running. SO boots that way, and
+# set -e would abort before the bond MTU is lowered.
+nm() {
+  nm_active || return 0
+  command -v nmcli >/dev/null 2>&1 || return 0
+  nmcli "$@" >/dev/null 2>&1 || true
+}
+
 restore_nm() {
-  if [[ "${LUDUS_SO_SKIP_NM:-}" == "1" ]]; then
-    return 0
-  fi
+  [[ "$nm_was_active" == "1" ]] || return 0
   systemctl start NetworkManager >/dev/null 2>&1 || true
 }
 trap restore_nm EXIT
 
 stop_nm() {
-  if [[ "${LUDUS_SO_SKIP_NM:-}" == "1" ]]; then
-    return 0
-  fi
+  nm_active || return 0
+  nm_was_active=1
   systemctl stop NetworkManager >/dev/null 2>&1 || true
 }
 
-# Kernel returns EINVAL ("echo: write error: Invalid argument") when the bond
-# MTU is higher than the slave. so-setup leaves bond0 at 9000; a virtio sniff
-# NIC cannot exceed the range bridge (usually 1500). Lower the bond first.
+# so-setup leaves bond0 at 9000. A virtio sniff NIC cannot exceed the range
+# bridge (usually 1500); the kernel refuses the enslave with EINVAL. Clamp to
+# the NIC MTU and lower the bond before adding the slave.
+target_mtu() {
+  local nic_mtu="${MTU}"
+  if [[ -f "$SYS/$SNIFF/mtu" ]]; then
+    nic_mtu=$(cat "$SYS/$SNIFF/mtu")
+  fi
+  if [[ "$MTU" -lt "$nic_mtu" ]]; then
+    echo "$MTU"
+  else
+    echo "$nic_mtu"
+  fi
+}
+
 lower_bond_mtu() {
-  ip link set "$BOND" mtu "$MTU"
-  ip link set "$SNIFF" mtu "$MTU" 2>/dev/null || true
+  local target
+  target=$(target_mtu)
+  ip link set "$BOND" down 2>/dev/null || true
+  ip link set "$BOND" mtu "$target"
+  ip link set "$SNIFF" mtu "$target" 2>/dev/null || true
 }
 
 add_slave() {
@@ -52,21 +79,23 @@ add_slave() {
 }
 
 create_bond() {
-  if command -v nmcli >/dev/null 2>&1; then
+  local target
+  target=$(target_mtu)
+  if nm_active && command -v nmcli >/dev/null 2>&1; then
     while IFS= read -r con; do
       [[ -z "$con" ]] && continue
-      nmcli con down "$con" 2>/dev/null || true
-      nmcli con delete "$con" 2>/dev/null || true
+      nm con down "$con"
+      nm con delete "$con"
     done < <(nmcli -t -f NAME con show 2>/dev/null | grep -E '^(bond0|bond0-slave-)' || true)
-    nmcli device disconnect "$SNIFF" 2>/dev/null || true
-    nmcli con add type bond con-name bond0 ifname bond0 mode balance-rr \
+    nm device disconnect "$SNIFF"
+    nm con add type bond con-name bond0 ifname bond0 mode balance-rr \
       ipv4.method disabled ipv6.method ignore connection.autoconnect yes \
-      802-3-ethernet.mtu "$MTU" >/dev/null
-    nmcli con add type ethernet con-name "bond0-slave-${SNIFF}" ifname "$SNIFF" master bond0 \
+      802-3-ethernet.mtu "$target"
+    nm con add type ethernet con-name "bond0-slave-${SNIFF}" ifname "$SNIFF" master bond0 \
       connection.autoconnect yes ipv4.method disabled ipv6.method ignore \
-      802-3-ethernet.mtu "$MTU" >/dev/null
-    nmcli con up bond0 >/dev/null || true
-    nmcli con up "bond0-slave-${SNIFF}" >/dev/null || true
+      802-3-ethernet.mtu "$target"
+    nm con up bond0
+    nm con up "bond0-slave-${SNIFF}"
   fi
   if [[ ! -d "$SYS/$BOND" ]]; then
     modprobe bonding 2>/dev/null || true
