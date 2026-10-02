@@ -21,6 +21,8 @@ bump is not a patch. Do not invent a version heading on a feature branch.
 
 ## [Unreleased]
 
+## [1.2.8] - 2026-10-02
+
 - [Fix] **`ludus_securityonion` 1.2.3** — Stop failing the deploy on hub mode. The Proxmox API console reaches `hostname login:` and cannot set bridge ageing. That work continues on `fix/bridge-hub-mode` and is not on this release.
 
 ## [1.2.7] - 2026-10-02
