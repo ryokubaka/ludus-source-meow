@@ -21,6 +21,8 @@ bump is not a patch. Do not invent a version heading on a feature branch.
 
 ## [Unreleased]
 
+## [1.2.10] - 2026-10-02
+
 - [Fix] **`ludus_securityonion` 1.2.7** — Keep the sniff bond up across reboot when the virtio NIC is 1500 and `bond0` comes back at 9000. The boot helper no longer aborts when NetworkManager is stopped, lowers the bond to the NIC MTU before enslaving, and a timer re-asserts it after Salt.
 
 ## [1.2.9] - 2026-10-02
