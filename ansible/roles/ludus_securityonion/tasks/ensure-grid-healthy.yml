@@ -43,6 +43,7 @@
 
       [Service]
       Type=oneshot
+      ExecStartPre=-/usr/bin/python3 /usr/local/sbin/patch_so_influx_manager_san.py /opt/so/saltstack/default/salt/influxdb/ssl.sls
       ExecStart=/usr/local/sbin/ludus-so-ensure-fleet-policy --best-effort --require-healthy
       RemainAfterExit=yes
 
@@ -79,3 +80,62 @@
     or 'policy=updated' in (ludus_so_fleet_policy.stdout | default(''))
     or 'integration=created' in (ludus_so_fleet_policy.stdout | default(''))
     or 'fleet=restarted' in (ludus_so_fleet_policy.stdout | default(''))
+
+- name: Copy InfluxDB certificate name helper
+  ansible.builtin.copy:
+    src: patch_so_influx_manager_san.py
+    dest: /usr/local/sbin/patch_so_influx_manager_san.py
+    mode: "0755"
+  become: true
+
+- name: Keep the manager name on the InfluxDB certificate state
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - /usr/local/sbin/patch_so_influx_manager_san.py
+      - /opt/so/saltstack/default/salt/influxdb/ssl.sls
+  become: true
+  register: ludus_so_influx_san_patch
+  changed_when: "'patched ' in (ludus_so_influx_san_patch.stdout | default(''))"
+  failed_when: >
+    ludus_so_influx_san_patch.rc | default(1) != 0
+    or 'pattern-not-found' in (ludus_so_influx_san_patch.stdout | default(''))
+
+- name: Read the InfluxDB certificate names
+  ansible.builtin.command:
+    argv:
+      - openssl
+      - x509
+      - -in
+      - /etc/pki/influxdb.crt
+      - -noout
+      - -ext
+      - subjectAltName
+  become: true
+  register: ludus_so_influx_san
+  changed_when: false
+  failed_when: false
+
+- name: Reissue the InfluxDB certificate with the manager name
+  ansible.builtin.command:
+    argv:
+      - salt-call
+      - state.apply
+      - influxdb.ssl
+      - -l
+      - warning
+  become: true
+  when: >
+    ('patched ' in (ludus_so_influx_san_patch.stdout | default('')))
+    or ('DNS:manager' not in (ludus_so_influx_san.stdout | default('')))
+  register: ludus_so_influx_ssl
+  changed_when: "'recreated' in (ludus_so_influx_ssl.stdout | default(''))"
+
+- name: Restart InfluxDB so it serves the new certificate
+  ansible.builtin.command:
+    argv:
+      - docker
+      - restart
+      - so-influxdb
+  become: true
+  when: ludus_so_influx_ssl is changed

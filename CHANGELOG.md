@@ -21,6 +21,8 @@ bump is not a patch. Do not invent a version heading on a feature branch.
 
 ## [Unreleased]
 
+- [Fix] **`ludus_securityonion` 1.2.9** — Keep the grid from returning to Fault after the node hostname changes. Telegraf and the console send metrics to `https://manager:8086`. The role adds `manager` to the InfluxDB certificate before boot highstate, and restarts InfluxDB when that certificate is reissued.
+
 ## [1.2.11] - 2026-10-02
 
 - [Fix] **`ludus_securityonion` 1.2.8** — Keep a reboot from leaving the SOC grid in Fault. The boot highstate waits for Fleet Server on port 8220, and that process stays at 503 when Kibana has no `FleetServer_<hostname>` policy. The role creates that policy, with the Fleet Server integration on the Elasticsearch output, before the highstate wait. Ingest pipeline loads also keep the Elasticsearch response and retry `logs-pfsense.log-1.25.4` while the cluster is still busy, instead of failing the highstate after five hidden errors.
