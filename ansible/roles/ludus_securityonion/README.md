@@ -80,9 +80,15 @@ virtio NICs cannot exceed the bridge MTU, so **`mtu=9000` on net1 will fail** in
 SO may create `bond0` at jumbo MTU — this role passes **`MTU=1500`** to `so-setup`
 for virtio labs. A failed/partial install can leave **`bond0`** behind; the role removes
 it before `so-setup` so the TESTING profile selects **`ens18`** (mgmt) not **`bond0`**.
-Hub mode (`ageing_time 0` on `vmbr10XX`) is not applied by this release. The API
-console stops at a login prompt, and a learning bridge only delivers frames
-addressed to Security Onion. The attempt lives on `fix/bridge-hub-mode`.
+Bridge `ageing_time 0` is set on the Proxmox node that owns `vmbr10XX`.
+The role tries a direct sysfs write, then `sudo -n`, then `ssh root@` the node.
+Range users have neither sudo nor a root SSH key, and the API console stops at
+a login prompt. The Proxmox API token from the deploy then updates every Linux
+bridge with `bridge-ports-condone-regex` so `ifreload` keeps live VM taps, sets
+`bridge-ageing 0` on the range bridge only, and reloads networking. The task
+succeeds only when that bridge reads `0`, every bridge still has the taps it
+had, and `vmbr` addresses are still present. Other ranges stay learning bridges.
+Hub mode floods VLAN 10 frames to the sniff NIC.
 
 After `so-setup`, zeek/suricata listen on **`bond0`**. If the sniff NIC (`ens19`) is not
 enslaved, `bond0` stays NO-CARRIER and NSM sees no range traffic. This role runs

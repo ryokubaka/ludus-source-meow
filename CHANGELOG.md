@@ -21,6 +21,8 @@ bump is not a patch. Do not invent a version heading on a feature branch.
 
 ## [Unreleased]
 
+- [Fix] **`ludus_securityonion` 1.2.6** — Set range-bridge hub mode with the Proxmox API token every Ludus deploy already has. Direct write, passwordless sudo, and root SSH are tried first. The API console stops at a login prompt, and range users are not in sudoers. Before reloading networking, the role records an ifupdown2 keep-taps option on every Linux bridge and `bridge-ageing 0` on the range bridge. The task fails unless that bridge reads `0` and no bridge lost a tap or address.
+
 ## [1.2.8] - 2026-10-02
 
 - [Fix] **`ludus_securityonion` 1.2.3** — Stop failing the deploy on hub mode. The Proxmox API console reaches `hostname login:` and cannot set bridge ageing. That work continues on `fix/bridge-hub-mode` and is not on this release.

@@ -1,6 +1,7 @@
 # Hub mode has to be set on the Proxmox node that owns vmbr10XX. The range
-# user running this playbook cannot sudo there. The Ludus API token can open
-# a root console on that node and write the bridge ageing time.
+# user cannot sudo, and the API token's console stops at a login prompt. The
+# token updates every Linux bridge so a network reload keeps live VM taps,
+# then sets ageing_time 0 on this range's bridge.
 
 - name: Load Proxmox API credentials for hub-mode
   ansible.builtin.set_fact:
