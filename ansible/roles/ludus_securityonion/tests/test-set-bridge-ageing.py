@@ -133,14 +133,22 @@ class FakeProxmox:
 
 
 def run(ageing: str) -> tuple[int | str, FakeProxmox]:
+    import subprocess
+
     server = FakeProxmox(ageing)
-    os.environ["LUDUS_SO_PVE_AUTH"] = "PVEAPIToken=root@pam!ludus-token=secret"
-    url = f"http://127.0.0.1:{server.port}"
-    try:
-        rc = hub.main(["--url", url, "--bridge", "vmbr1004", "--vm-name", "so"])
-        return rc, server
-    except SystemExit as exc:
-        return str(exc.code), server
+    script = Path(__file__).resolve().parents[1] / "files" / "set_bridge_ageing.py"
+    env = os.environ.copy()
+    env["LUDUS_SO_PVE_AUTH"] = "PVEAPIToken=root@pam!ludus-token=secret"
+    env["LUDUS_SO_PVE_URL"] = f"http://127.0.0.1:{server.port}"
+    env["LUDUS_SO_VMBR"] = "vmbr1004"
+    env["LUDUS_SO_VM_NAMES"] = "so"
+    env.pop("LUDUS_SO_PVE_NODE", None)
+    proc = subprocess.run([str(script)], env=env, capture_output=True, text=True)
+    if proc.returncode == 0:
+        print(proc.stdout, end="")
+        return 0, server
+    detail = (proc.stderr or proc.stdout or f"exit {proc.returncode}").strip()
+    return detail, server
 
 
 def main() -> int:
