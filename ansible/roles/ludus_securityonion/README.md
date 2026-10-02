@@ -90,6 +90,8 @@ succeeds only when that bridge reads `0`, every bridge still has the taps it
 had, and `vmbr` addresses are still present. Other ranges stay learning bridges.
 Hub mode floods VLAN 10 frames to the sniff NIC.
 
+Boot highstate is what marks the grid node Fault. This role creates the Fleet Server policy `FleetServer_<hostname>` (Elasticsearch output and the fleet_server integration) and installs `ludus-so-fleet-policy.service` so that exists before `so-boot-highstate` waits on port 8220. It also patches `so-elasticsearch-pipelines` to retry a busy Elasticsearch instead of failing the highstate when `logs-pfsense.log-1.25.4` is not acknowledged on the first tries.
+
 After `so-setup`, zeek/suricata listen on **`bond0`**. If the sniff NIC (`ens19`) is not
 enslaved, `bond0` stays NO-CARRIER and NSM sees no range traffic. This role runs
 `ensure-sniff-bond.yml` after setup and on redeploy (marker present) to enslave the

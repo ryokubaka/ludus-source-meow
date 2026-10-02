@@ -21,6 +21,8 @@ bump is not a patch. Do not invent a version heading on a feature branch.
 
 ## [Unreleased]
 
+- [Fix] **`ludus_securityonion` 1.2.8** — Keep a reboot from leaving the SOC grid in Fault. The boot highstate waits for Fleet Server on port 8220, and that process stays at 503 when Kibana has no `FleetServer_<hostname>` policy. The role creates that policy, with the Fleet Server integration on the Elasticsearch output, before the highstate wait. Ingest pipeline loads also keep the Elasticsearch response and retry `logs-pfsense.log-1.25.4` while the cluster is still busy, instead of failing the highstate after five hidden errors.
+
 ## [1.2.10] - 2026-10-02
 
 - [Fix] **`ludus_securityonion` 1.2.7** — Keep the sniff bond up across reboot when the virtio NIC is 1500 and `bond0` comes back at 9000. The boot helper no longer aborts when NetworkManager is stopped, lowers the bond to the NIC MTU before enslaving, and a timer re-asserts it after Salt.

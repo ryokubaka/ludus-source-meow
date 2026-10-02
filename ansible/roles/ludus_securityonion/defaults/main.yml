@@ -83,6 +83,8 @@ ludus_so_sanitize_docker_daemon: true
 # Redeploy heal: recreate bond0 + enslave sniff NIC; start missing/unhealthy containers.
 ludus_so_heal_sniff_bond: true
 ludus_so_heal_containers: true
+# FleetServer_<hostname> plus a longer ingest-pipeline retry, before boot highstate.
+ludus_so_heal_grid: true
 ludus_so_heal_containers_fail: true
 ludus_so_heal_container_retries: 12
 ludus_so_heal_container_delay: 20

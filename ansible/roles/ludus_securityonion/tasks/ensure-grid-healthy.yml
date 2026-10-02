@@ -1,0 +1,81 @@
+---
+# Boot highstate fails the SOC grid when Fleet Server stays on 503 or an ingest
+# pipeline PUT is dropped while Elasticsearch is still busy. The policy has to
+# exist before so-boot-highstate waits on :8220, and the loader has to retry.
+- name: Copy ingest pipeline retry helper
+  ansible.builtin.copy:
+    src: patch_so_elasticsearch_pipelines.py
+    dest: /usr/local/sbin/patch_so_elasticsearch_pipelines.py
+    mode: "0755"
+  become: true
+
+- name: Patch so-elasticsearch-pipelines for a busy boot cluster
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - /usr/local/sbin/patch_so_elasticsearch_pipelines.py
+      - /opt/so/saltstack/default/salt/elasticsearch/tools/sbin/so-elasticsearch-pipelines
+      - /usr/sbin/so-elasticsearch-pipelines
+  become: true
+  register: ludus_so_pipeline_patch
+  changed_when: "'patched ' in (ludus_so_pipeline_patch.stdout | default(''))"
+  failed_when: >
+    ludus_so_pipeline_patch.rc | default(1) != 0
+    or 'pattern-not-found' in (ludus_so_pipeline_patch.stdout | default(''))
+
+- name: Install Fleet Server policy helper
+  ansible.builtin.copy:
+    src: ludus-so-ensure-fleet-policy
+    dest: /usr/local/sbin/ludus-so-ensure-fleet-policy
+    mode: "0755"
+  become: true
+
+- name: Install Fleet Server policy boot unit
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/ludus-so-fleet-policy.service
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Ensure the Fleet Server policy exists before Security Onion boot highstate
+      After=docker.service
+      Before=so-boot-highstate.service
+      Wants=docker.service
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/sbin/ludus-so-ensure-fleet-policy --best-effort --require-healthy
+      RemainAfterExit=yes
+
+      [Install]
+      WantedBy=multi-user.target
+  become: true
+
+- name: Order boot highstate after the Fleet Server policy
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/so-boot-highstate.service.d/ludus-fleet-policy.conf
+    mode: "0644"
+    content: |
+      [Unit]
+      After=ludus-so-fleet-policy.service
+      Wants=ludus-so-fleet-policy.service
+  become: true
+
+- name: Enable Fleet Server policy boot unit
+  ansible.builtin.systemd:
+    name: ludus-so-fleet-policy.service
+    enabled: true
+    daemon_reload: true
+  become: true
+
+- name: Ensure Fleet Server policy for this hostname
+  ansible.builtin.command:
+    argv:
+      - /usr/local/sbin/ludus-so-ensure-fleet-policy
+      - --require-healthy
+  become: true
+  register: ludus_so_fleet_policy
+  changed_when: >
+    'policy=created' in (ludus_so_fleet_policy.stdout | default(''))
+    or 'policy=updated' in (ludus_so_fleet_policy.stdout | default(''))
+    or 'integration=created' in (ludus_so_fleet_policy.stdout | default(''))
+    or 'fleet=restarted' in (ludus_so_fleet_policy.stdout | default(''))

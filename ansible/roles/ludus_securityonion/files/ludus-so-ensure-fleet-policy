@@ -1,0 +1,324 @@
+#!/usr/bin/env python3
+"""Create the Fleet Server policy Security Onion looks up at boot.
+
+so-elastic-fleet is started with FLEET_SERVER_POLICY_ID=FleetServer_<hostname>.
+so-elastic-fleet-setup creates that policy once. A later hostname change leaves
+Kibana on the old policy, so https://localhost:8220/api/status stays 503 and
+so-boot-highstate fails. The SOC grid then stays Fault.
+"""
+
+from __future__ import annotations
+
+import argparse
+import base64
+import json
+import os
+import ssl
+import subprocess
+import time
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+
+def curl_user(path: Path) -> tuple[str, str]:
+    for line in path.read_text().splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("user"):
+            continue
+        value = stripped.split("=", 1)[-1].strip().strip('"').strip("'")
+        user, sep, password = value.partition(":")
+        if sep and user:
+            return user, password
+    raise ValueError(f"no user entry in {path}")
+
+
+def basic_header(user: str, password: str) -> str:
+    token = base64.b64encode(f"{user}:{password}".encode()).decode("ascii")
+    return f"Basic {token}"
+
+
+class Kibana:
+    def __init__(self, base: str, auth_header: str) -> None:
+        self.base = base.rstrip("/")
+        self.auth_header = auth_header
+
+    def call(self, method: str, path: str, body: dict | None = None) -> tuple[int, dict]:
+        data = None if body is None else json.dumps(body).encode()
+        request = urllib.request.Request(
+            self.base + path,
+            data=data,
+            headers={
+                "kbn-xsrf": "true",
+                "elastic-api-version": "2023-10-31",
+                "Authorization": self.auth_header,
+                "Content-Type": "application/json",
+            },
+            method=method,
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=40) as response:
+                raw = response.read()
+                return response.status, json.loads(raw) if raw else {}
+        except urllib.error.HTTPError as exc:
+            raw = exc.read().decode(errors="replace")
+            try:
+                parsed = json.loads(raw) if raw else {}
+            except json.JSONDecodeError:
+                parsed = {"message": raw[:500]}
+            return exc.code, parsed
+
+
+def kibana_up(base: str) -> bool:
+    request = urllib.request.Request(base.rstrip("/") + "/api/status", method="GET")
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            return 200 <= response.status < 300
+    except Exception:
+        return False
+
+
+def wait_for_kibana(base: str, seconds: int) -> bool:
+    deadline = time.time() + seconds
+    while True:
+        if kibana_up(base):
+            return True
+        if time.time() >= deadline:
+            return False
+        time.sleep(2)
+
+
+def elasticsearch_output(items: list[dict]) -> str:
+    for item in items:
+        if item.get("id") == "so-manager_elasticsearch" and item.get("type") == "elasticsearch":
+            return str(item["id"])
+    for item in items:
+        if item.get("type") == "elasticsearch":
+            return str(item["id"])
+    raise ValueError("no elasticsearch fleet output")
+
+
+def strip_server_fields(value: object) -> object:
+    if isinstance(value, dict):
+        return {
+            key: strip_server_fields(item)
+            for key, item in value.items()
+            if key not in ("compiled_input", "id")
+        }
+    if isinstance(value, list):
+        return [strip_server_fields(item) for item in value]
+    return value
+
+
+def policy_targets(item: dict, policy_id: str) -> bool:
+    if item.get("policy_id") == policy_id:
+        return True
+    ids = item.get("policy_ids") or []
+    return policy_id in ids
+
+
+def package_version(client: Kibana, items: list[dict]) -> str:
+    for item in items:
+        package = item.get("package") or {}
+        version = package.get("version") or ""
+        if package.get("name") == "fleet_server" and version:
+            return str(version)
+    code, data = client.call("GET", "/api/fleet/epm/packages/fleet_server")
+    if code == 200:
+        item = data.get("item") or data
+        version = item.get("version") or ""
+        if version:
+            return str(version)
+    raise ValueError("fleet_server package version is unknown")
+
+
+def integration_inputs(items: list[dict], template_path: Path) -> list:
+    for item in items:
+        inputs = item.get("inputs")
+        if inputs:
+            stripped = strip_server_fields(inputs)
+            if isinstance(stripped, list):
+                return stripped
+    if template_path.is_file():
+        template = json.loads(template_path.read_text())
+        stripped = strip_server_fields(template.get("inputs") or [])
+        if isinstance(stripped, list) and stripped:
+            return stripped
+    raise ValueError("no fleet_server integration inputs to clone")
+
+
+def ensure_policy(client: Kibana, policy_id: str, hostname: str, output_id: str) -> str:
+    code, data = client.call("GET", f"/api/fleet/agent_policies/{policy_id}")
+    payload = {
+        "name": policy_id,
+        "description": f"Fleet Server - {hostname}",
+        "namespace": "default",
+        "monitoring_enabled": ["logs"],
+        "inactivity_timeout": 120,
+        "has_fleet_server": True,
+        "data_output_id": output_id,
+        "monitoring_output_id": output_id,
+    }
+    if code == 404:
+        # Fleet Server cannot use a logstash output. Create the policy first,
+        # then point it at Elasticsearch before the integration is added.
+        created = {
+            "name": policy_id,
+            "id": policy_id,
+            "description": payload["description"],
+            "namespace": "default",
+            "monitoring_enabled": ["logs"],
+            "inactivity_timeout": 120,
+            "has_fleet_server": True,
+            "advanced_settings": {"agent_logging_level": "warning"},
+        }
+        status, result = client.call("POST", "/api/fleet/agent_policies", created)
+        if status not in (200, 201):
+            raise ValueError(f"create {policy_id} failed: {result.get('message', status)}")
+        status, result = client.call("PUT", f"/api/fleet/agent_policies/{policy_id}", payload)
+        if status != 200:
+            raise ValueError(f"update {policy_id} failed: {result.get('message', status)}")
+        return "created"
+    if code != 200:
+        raise ValueError(f"read {policy_id} failed: {data.get('message', code)}")
+    item = data.get("item") or {}
+    if item.get("data_output_id") == output_id:
+        return "present"
+    status, result = client.call("PUT", f"/api/fleet/agent_policies/{policy_id}", payload)
+    if status != 200:
+        raise ValueError(f"update {policy_id} failed: {result.get('message', status)}")
+    return "updated"
+
+
+def ensure_integration(
+    client: Kibana,
+    policy_id: str,
+    hostname: str,
+    template_path: Path,
+) -> str:
+    code, data = client.call(
+        "GET",
+        "/api/fleet/package_policies?perPage=100&kuery=ingest-package-policies.package.name:fleet_server",
+    )
+    if code != 200:
+        raise ValueError(f"list fleet_server integrations failed: {data.get('message', code)}")
+    items = data.get("items") or []
+    if any(policy_targets(item, policy_id) for item in items):
+        return "present"
+    version = package_version(client, items)
+    body = {
+        "name": f"fleet_server-{hostname}",
+        "namespace": "default",
+        "policy_id": policy_id,
+        "enabled": True,
+        "package": {"name": "fleet_server", "version": version},
+        "inputs": integration_inputs(items, template_path),
+    }
+    status, result = client.call("POST", "/api/fleet/package_policies", body)
+    if status in (200, 201):
+        return "created"
+    if status == 409:
+        return "present"
+    raise ValueError(f"create fleet_server integration failed: {result.get('message', status)}")
+
+
+def fleet_code(url: str) -> int | None:
+    context = ssl._create_unverified_context()
+    request = urllib.request.Request(url, method="GET")
+    try:
+        with urllib.request.urlopen(request, timeout=8, context=context) as response:
+            return response.status
+    except urllib.error.HTTPError as exc:
+        return exc.code
+    except Exception:
+        return None
+
+
+def restart_fleet(docker_bin: str) -> None:
+    subprocess.run([docker_bin, "restart", "so-elastic-fleet"], check=False, timeout=120)
+
+
+def wait_fleet(url: str, seconds: int) -> int | None:
+    deadline = time.time() + seconds
+    last: int | None = None
+    while True:
+        last = fleet_code(url)
+        if last == 200:
+            return last
+        if time.time() >= deadline:
+            return last
+        time.sleep(5)
+
+
+def hostname_from_env() -> str:
+    override = os.environ.get("LUDUS_SO_HOSTNAME", "").strip()
+    if override:
+        return override
+    host_file = Path("/etc/hostname")
+    if host_file.is_file():
+        name = host_file.read_text().strip()
+        if name:
+            return name
+    return os.uname().nodename
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--best-effort", action="store_true")
+    parser.add_argument("--require-healthy", action="store_true")
+    args = parser.parse_args()
+
+    kibana = os.environ.get("LUDUS_SO_KIBANA_URL", "http://127.0.0.1:5601")
+    status_url = os.environ.get("LUDUS_SO_FLEET_STATUS_URL", "https://127.0.0.1:8220/api/status")
+    curl_config = Path(os.environ.get("LUDUS_SO_CURL_CONFIG", "/opt/so/conf/elasticsearch/curl.config"))
+    template = Path(
+        os.environ.get(
+            "LUDUS_SO_FLEET_TEMPLATE",
+            "/opt/so/conf/elastic-fleet/integrations/fleet-server/fleet-server.json",
+        )
+    )
+    wait_seconds = int(os.environ.get("LUDUS_SO_KIBANA_WAIT", "120"))
+    fleet_wait = int(os.environ.get("LUDUS_SO_FLEET_WAIT", "90"))
+    docker_bin = os.environ.get("LUDUS_SO_DOCKER", "docker")
+    hostname = hostname_from_env()
+    policy_id = f"FleetServer_{hostname}"
+
+    def finish(code: int, message: str) -> int:
+        print(message)
+        if args.best_effort and code != 0:
+            return 0
+        return code
+
+    if not wait_for_kibana(kibana, wait_seconds):
+        return finish(1, f"fleet-policy={policy_id} kibana=down")
+    if not curl_config.is_file():
+        return finish(1, f"fleet-policy={policy_id} curl-config=missing")
+    try:
+        user, password = curl_user(curl_config)
+        client = Kibana(kibana, basic_header(user, password))
+        code, outputs = client.call("GET", "/api/fleet/outputs")
+        if code != 200:
+            raise ValueError(f"list outputs failed: {outputs.get('message', code)}")
+        output_id = elasticsearch_output(outputs.get("items") or [])
+        policy_state = ensure_policy(client, policy_id, hostname, output_id)
+        integration_state = ensure_integration(client, policy_id, hostname, template)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        return finish(1, f"fleet-policy={policy_id} error={exc}")
+
+    code = fleet_code(status_url)
+    fleet_state = "200" if code == 200 else "down"
+    if args.require_healthy and code != 200:
+        restart_fleet(docker_bin)
+        code = wait_fleet(status_url, fleet_wait)
+        fleet_state = "restarted" if code == 200 else "unhealthy"
+    line = (
+        f"fleet-policy={policy_id} policy={policy_state} "
+        f"integration={integration_state} fleet={fleet_state}"
+    )
+    if args.require_healthy and code != 200:
+        return finish(2, line)
+    return finish(0, line)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -188,3 +188,8 @@
 - name: Heal unhealthy Security Onion containers
   ansible.builtin.include_tasks: heal-containers.yml
   when: ludus_so_heal_containers | default(true) | bool
+
+# A failed so-boot-highstate leaves the SOC grid on Fault across reboots.
+- name: Keep boot highstate from failing the SOC grid
+  ansible.builtin.include_tasks: ensure-grid-healthy.yml
+  when: ludus_so_heal_grid | default(true) | bool
