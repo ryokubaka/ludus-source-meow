@@ -21,6 +21,8 @@ bump is not a patch. Do not invent a version heading on a feature branch.
 
 ## [Unreleased]
 
+## [1.2.6] - 2026-10-02
+
 - [Fix] **`ludus_securityonion` 1.2.1** — Set range-bridge hub mode (`ageing_time 0`) through the Proxmox root API console. The old task sudo'd on the controller, failed with "a password is required", and ignored the error, so a sniff NIC on the target VLAN still missed host-to-host traffic.
 
 ## [1.2.5] - 2026-10-02
