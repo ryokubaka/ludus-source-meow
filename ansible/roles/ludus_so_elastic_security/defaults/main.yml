@@ -53,6 +53,13 @@ ludus_so_elastic_security_force: false
 ludus_so_elastic_security_require_so_setup: true
 ludus_so_setup_marker: /etc/ludus-so-setup-complete
 
+# SOC login created by so-setup (WEBUSER). Gets the SOC superuser role plus an
+# Elasticsearch role that holds every Kibana privilege on this stack.
+ludus_so_elastic_security_grant_admin: true
+ludus_so_elastic_security_admin_user: "{{ ludus_so_web_user | default('onionadmin@ludus.local', true) }}"
+ludus_so_elastic_security_admin_role: ludus-all
+ludus_so_elastic_security_admin_role_file: /opt/so/saltstack/local/salt/elasticsearch/roles/ludus-all.json
+
 # Wait for ES API after so-setup (containers up ≠ API ready). retries × delay.
 ludus_so_elastic_security_es_wait_retries: 90
 ludus_so_elastic_security_es_wait_delay: 20

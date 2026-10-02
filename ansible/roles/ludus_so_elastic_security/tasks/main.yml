@@ -11,6 +11,25 @@
     - ludus_so_elastic_security_marker_stat.stat.exists
     - not (ludus_so_elastic_security_force | bool)
 
+# Runs even when the completion marker is present. The Security dashboards
+# check Kibana feature privileges that the stock analyst/superuser roles miss
+# on Elastic 9.
+- name: Grant the SOC account full privileges
+  when: ludus_so_elastic_security_grant_admin | bool
+  block:
+    - name: Check SO setup marker before granting privileges
+      ansible.builtin.stat:
+        path: "{{ ludus_so_setup_marker }}"
+      register: ludus_so_elastic_security_admin_so_marker
+
+    - name: Wait for Elasticsearch before granting privileges
+      ansible.builtin.include_tasks: wait-elasticsearch.yml
+      when: ludus_so_elastic_security_admin_so_marker.stat.exists
+
+    - name: Grant SOC superuser and every Kibana privilege
+      ansible.builtin.include_tasks: grant-admin.yml
+      when: ludus_so_elastic_security_admin_so_marker.stat.exists
+
 - name: Configure Elastic trial + detection rules
   when: >
     (ludus_so_elastic_security_force | bool)

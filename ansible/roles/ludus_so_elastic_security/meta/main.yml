@@ -7,7 +7,7 @@ galaxy_info:
     all prepackaged Elastic Security detection rules (GOAD-mod elk parity).
   license: AGPL-3.0-or-later
   min_ansible_version: "2.14"
-  version: "1.0.7"
+  version: "1.0.8"
   platforms:
     - name: EL
       versions:

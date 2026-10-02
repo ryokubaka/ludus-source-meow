@@ -1,0 +1,106 @@
+# Elastic 9.4 does not treat the reserved superuser role as every Kibana
+# sub-feature. The Security dashboards then show "Privileges required".
+# Build a role from the privileges this stack actually advertises, keep it in
+# the local salt tree so so-elasticsearch-roles-load restores it, and attach
+# it through so-user so the next SOC sync does not drop the mapping.
+
+- name: Grant SOC superuser and every Kibana privilege
+  ansible.builtin.shell: |
+    set -euo pipefail
+    CFG=/opt/so/conf/elasticsearch/curl.config
+    USER="{{ ludus_so_elastic_security_admin_user }}"
+    ROLE="{{ ludus_so_elastic_security_admin_role }}"
+    ROLE_FILE="{{ ludus_so_elastic_security_admin_role_file }}"
+    SALT_ROLES=/opt/so/saltstack/local/salt/elasticsearch/files/users_roles
+    CONF_ROLES=/opt/so/conf/elasticsearch/users_roles
+    BODY=/tmp/ludus-all-role.json
+
+    priv_json=$(curl -sS -k -K "$CFG" 'https://localhost:9200/_security/privilege/kibana-.kibana')
+    if ! jq -e '.["kibana-.kibana"] | type == "object"' >/dev/null <<<"$priv_json"; then
+      echo "Kibana privilege lookup failed: $(printf '%s' "$priv_json" | head -c 400)" >&2
+      exit 1
+    fi
+    jq -n --argjson privs "$(jq -c '.["kibana-.kibana"] | keys' <<<"$priv_json")" '{
+      cluster: ["all"],
+      indices: [{names: ["*"], privileges: ["all"]}],
+      applications: [{
+        application: "kibana-.kibana",
+        privileges: $privs,
+        resources: ["*"]
+      }],
+      run_as: []
+    }' > "$BODY"
+    npriv=$(jq '.applications[0].privileges | length' "$BODY")
+    echo "kibana_privileges=${npriv}"
+    if [[ "$npriv" -lt 1 ]]; then
+      echo "no Kibana privileges returned" >&2
+      exit 1
+    fi
+
+    mkdir -p "$(dirname "$ROLE_FILE")"
+    cp "$BODY" "$ROLE_FILE"
+    chmod 644 "$ROLE_FILE"
+
+    role_body=$(curl -sS -k -K "$CFG" -w '\n%{http_code}' \
+      -X PUT "https://localhost:9200/_security/role/${ROLE}" \
+      -H 'Content-Type: application/json' \
+      --data-binary @"$BODY")
+    role_code=$(tail -n1 <<<"$role_body")
+    if [[ "$role_code" != 200 && "$role_code" != 201 ]]; then
+      echo "creating ${ROLE} failed (http ${role_code}): $(printf '%s' "$role_body" | head -c 400)" >&2
+      exit 1
+    fi
+    echo "role=${ROLE} http=${role_code}"
+
+    grant() {
+      local role="$1"
+      local out rc=0
+      out=$(/usr/sbin/so-user addrole --email "$USER" --role "$role" 2>&1) || rc=$?
+      printf '%s\n' "$out"
+      if grep -q 'already has the role' <<<"$out"; then
+        echo "soc_${role}=present"
+        return 0
+      fi
+      if grep -q 'Successfully added role' <<<"$out"; then
+        echo "soc_${role}=added"
+        return 0
+      fi
+      echo "so-user addrole ${role} failed rc=${rc}" >&2
+      return 1
+    }
+    grant superuser
+    grant "$ROLE"
+
+    found=0
+    for _try in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30; do
+      if [[ -f "$SALT_ROLES" ]] && grep -q "^${ROLE}:" "$SALT_ROLES" && grep -qi "$USER" "$SALT_ROLES"; then
+        found=1
+        break
+      fi
+      sleep 1
+    done
+    if [[ "$found" != 1 ]]; then
+      echo "users_roles never listed ${ROLE} for ${USER}" >&2
+      exit 1
+    fi
+    echo "roles_file=present"
+
+    if [[ -f "$CONF_ROLES" ]] && ! grep -q "^${ROLE}:" "$CONF_ROLES"; then
+      cp "$SALT_ROLES" "$CONF_ROLES"
+      chown 930:939 "$CONF_ROLES" 2>/dev/null || true
+      chmod 660 "$CONF_ROLES" 2>/dev/null || true
+      echo "conf_roles=copied"
+    else
+      echo "conf_roles=present"
+    fi
+  args:
+    executable: /bin/bash
+  register: ludus_so_elastic_security_admin_grant
+  changed_when: >-
+    '=added' in (ludus_so_elastic_security_admin_grant.stdout | default(''))
+    or 'conf_roles=copied' in (ludus_so_elastic_security_admin_grant.stdout | default(''))
+  become: true
+
+- name: Report SOC privilege grant
+  ansible.builtin.debug:
+    msg: "{{ ludus_so_elastic_security_admin_grant.stdout_lines | default([]) | join(' | ') }}"
