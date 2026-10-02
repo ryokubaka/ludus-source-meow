@@ -3,11 +3,14 @@
 
 from __future__ import annotations
 
+import json
 import os
 import stat
 import subprocess
 import sys
 import tempfile
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parents[1] / "files" / "set_bridge_ageing.py"
@@ -176,6 +179,185 @@ def test_already_hub() -> int:
     return 0
 
 
+def _make_bridge(root: Path, name: str, ageing: str, ports: list[str]) -> None:
+    bridge = root / "class" / "net" / name
+    (bridge / "bridge").mkdir(parents=True)
+    ageing_file = bridge / "bridge" / "ageing_time"
+    ageing_file.write_text(ageing + "\n")
+    ageing_file.chmod(0o444)
+    brif = bridge / "brif"
+    brif.mkdir()
+    for port in ports:
+        (brif / port).write_text("")
+
+
+class _ApiState:
+    def __init__(self, root: Path, force_drop: bool) -> None:
+        self.root = root
+        self.force_drop = force_drop
+        self.updates: dict[str, dict] = {}
+        self.reloads = 0
+
+
+def _api_handler(state: _ApiState) -> type[BaseHTTPRequestHandler]:
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, fmt: str, *args: object) -> None:
+            return
+
+        def _json(self, code: int, payload: dict) -> None:
+            raw = json.dumps(payload).encode()
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+
+        def do_GET(self) -> None:  # noqa: N802
+            path = self.path.split("?", 1)[0].rstrip("/")
+            if path.endswith("/network"):
+                self._json(
+                    200,
+                    {
+                        "data": [
+                            {"iface": "vmbr1004", "type": "bridge"},
+                            {
+                                "iface": "vmbr0",
+                                "type": "bridge",
+                                "cidr": "10.9.9.1/24",
+                                "gateway": "10.9.9.254",
+                            },
+                            {"iface": "nic0", "type": "eth"},
+                        ]
+                    },
+                )
+                return
+            if "/tasks/" in path:
+                self._json(200, {"data": {"status": "stopped", "exitstatus": "OK"}})
+                return
+            self._json(404, {"errors": path})
+
+        def do_PUT(self) -> None:  # noqa: N802
+            length = int(self.headers.get("Content-Length") or 0)
+            body = json.loads(self.rfile.read(length) or b"{}")
+            path = self.path.split("?", 1)[0].rstrip("/")
+            if path.endswith("/network/vmbr1004") or path.endswith("/network/vmbr0"):
+                state.updates[path.rsplit("/", 1)[-1]] = body
+                self._json(200, {"data": None})
+                return
+            if path.endswith("/network"):
+                state.reloads += 1
+                self._apply()
+                self._json(200, {"data": "UPID:minipve:001:reload"})
+                return
+            self._json(404, {"errors": path})
+
+        def _apply(self) -> None:
+            expected = {
+                "vmbr1004": {"hub": True, "cidr": None},
+                "vmbr0": {"hub": False, "cidr": "10.9.9.1/24"},
+            }
+            for name, cfg in expected.items():
+                update = state.updates.get(name) or {}
+                ovs = str(update.get("ovs_options") or "")
+                safe = (
+                    not state.force_drop
+                    and "\n\tbridge-ports-condone-regex " in ovs
+                    and update.get("bridge_ports") in (None, "")
+                    and update.get("type") == "bridge"
+                    and ("\n\tbridge-ageing 0" in ovs) == cfg["hub"]
+                    and (cfg["cidr"] is None or update.get("cidr") == cfg["cidr"])
+                    and (cfg["cidr"] is None or update.get("gateway") == "10.9.9.254")
+                    and (cfg["cidr"] is None or "address" not in update)
+                )
+                brif = state.root / "class" / "net" / name / "brif"
+                ageing = state.root / "class" / "net" / name / "bridge" / "ageing_time"
+                if not safe:
+                    for child in list(brif.iterdir()):
+                        child.unlink()
+                    continue
+                if cfg["hub"]:
+                    ageing.chmod(0o644)
+                    ageing.write_text("0\n")
+
+    return Handler
+
+
+def _run_api(root: Path, force_drop: bool = False, condone: bool = True):
+    _make_bridge(root, "vmbr1004", "30000", ["tap101i0"])
+    _make_bridge(root, "vmbr0", "30000", ["fwpr1p0"])
+    bindir = root / "bin"
+    bindir.mkdir()
+    ifreload_log = root / "ifreload.log"
+    write_exec(bindir / "sudo", "#!/bin/bash\nexit 1\n")
+    write_exec(bindir / "ssh", "#!/bin/bash\nexit 255\n")
+    write_exec(bindir / "ifreload", f"#!/bin/bash\necho ifreload >> {ifreload_log}\nexit 0\n")
+    addon = root / "bridge.py"
+    addon.write_text("bridge-ports-condone-regex\n" if condone else "bridge ports only\n")
+    state = _ApiState(root, force_drop)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _api_handler(state))
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        port = server.server_address[1]
+        proc = run_script(
+            {
+                "PATH": f"{bindir}:{os.environ.get('PATH', '')}",
+                "LUDUS_SO_PVE_AUTH": "PVEAPIToken=token",
+                "LUDUS_SO_PVE_URL": f"http://10.1.1.1:{port}",
+                "LUDUS_SO_VMBR": "vmbr1004",
+                "LUDUS_SO_PVE_NODE": "minipve",
+                "LUDUS_SO_SYSFS_ROOT": str(root),
+                "LUDUS_SO_HTTP_TIMEOUT": "5",
+                "LUDUS_SO_IFUPDOWN_BRIDGE": str(addon),
+            }
+        )
+        return proc, state, ifreload_log
+    finally:
+        server.shutdown()
+
+
+def test_api_keeps_other_bridges() -> int:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        proc, state, ifreload_log = _run_api(root)
+        if proc.returncode != 0:
+            return fail(proc.stderr or proc.stdout)
+        if "method=api" not in proc.stdout or "ageing=0" not in proc.stdout:
+            return fail(proc.stdout)
+        ageing = (root / "class" / "net" / "vmbr1004" / "bridge" / "ageing_time").read_text().strip()
+        other = (root / "class" / "net" / "vmbr0" / "bridge" / "ageing_time").read_text().strip()
+        ports = {
+            "vmbr1004": sorted(path.name for path in (root / "class/net/vmbr1004/brif").iterdir()),
+            "vmbr0": sorted(path.name for path in (root / "class/net/vmbr0/brif").iterdir()),
+        }
+        if ageing != "0" or other != "30000":
+            return fail(f"ageing target={ageing} other={other}")
+        if ports != {"vmbr1004": ["tap101i0"], "vmbr0": ["fwpr1p0"]}:
+            return fail(f"ports {ports}")
+        if set(state.updates) != {"vmbr1004", "vmbr0"} or state.reloads != 1:
+            return fail(f"updates={state.updates} reloads={state.reloads}")
+        if ifreload_log.exists():
+            return fail("local ifreload ran; the reload has to go through the API")
+        if "nic0" in state.updates:
+            return fail("updated a non-bridge")
+    print("PASS: API reload hubs one bridge and keeps the other bridge's tap and address")
+    return 0
+
+
+def test_api_drop_fails() -> int:
+    with tempfile.TemporaryDirectory() as tmp:
+        proc, state, _log = _run_api(Path(tmp), force_drop=True)
+        text = (proc.stdout or "") + (proc.stderr or "")
+        if proc.returncode == 0 or "ageing=0" in (proc.stdout or ""):
+            return fail(f"dropped ports were reported as hub mode: {text}")
+        if "Bridge ports removed" not in text or "tap101i0" not in text:
+            return fail(text)
+        if state.reloads != 1:
+            return fail("expected the reload so the port check can fail closed")
+    print("PASS: a reload that removes bridge ports fails closed")
+    return 0
+
+
 def test_no_ifreload() -> int:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -195,6 +377,8 @@ def test_no_ifreload() -> int:
             f"echo ifreload >> {log}\n"
             "exit 0\n",
         )
+        addon = root / "bridge.py"
+        addon.write_text("no condone option\n")
         proc = run_script(
             {
                 "PATH": f"{bindir}:{os.environ.get('PATH', '')}",
@@ -203,6 +387,7 @@ def test_no_ifreload() -> int:
                 "LUDUS_SO_VMBR": "vmbr1004",
                 "LUDUS_SO_PVE_NODE": "minipve",
                 "LUDUS_SO_SYSFS_ROOT": str(root),
+                "LUDUS_SO_IFUPDOWN_BRIDGE": str(addon),
             }
         )
         text = (proc.stdout or "") + (proc.stderr or "")
@@ -212,9 +397,9 @@ def test_no_ifreload() -> int:
             return fail("ifreload ran; that detaches VM taps on other ranges")
         if ageing.read_text().strip() != "30000":
             return fail(f"sysfs changed to {ageing.read_text()!r}")
-        if "not reloaded" not in text:
+        if "bridge-ports-condone-regex" not in text or "not reloaded" not in text:
             return fail(text)
-    print("PASS: hub mode does not reload networking when it cannot write sysfs")
+    print("PASS: networking stays up when ifupdown2 cannot keep VM taps")
     return 0
 
 
@@ -225,6 +410,8 @@ def main() -> int:
         test_ssh,
         test_all_fail,
         test_already_hub,
+        test_api_keeps_other_bridges,
+        test_api_drop_fails,
         test_no_ifreload,
     ):
         rc = test()
