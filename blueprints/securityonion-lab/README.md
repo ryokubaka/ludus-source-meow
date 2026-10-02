@@ -71,7 +71,7 @@ Adaptix: on Kali run `adaptixclient`, connect to `https://127.0.0.1:4321/endpoin
 During deploy, `ryokubaka.ludus_securityonion`:
 
 1. Adds SO `net1` on Proxmox (tagged VLAN 10, no IP) via Ludus Proxmox API
-2. Sets `bridge-ageing 0` on `vmbr10XX` when the Ludus host can reach the bridge (local or SSH)
+2. Sets `bridge-ageing 0` on `vmbr10XX` through the Proxmox API, so the sniff NIC receives every frame on VLAN 10
 3. Waits for the guest to see the second NIC, then runs `so-setup iso standalone-net`
 
 [Ludus UX](https://github.com/ryokubaka/ludus-ux) can enable hub-mode during deploy and attach `net1` only after Ludus finishes IP config (earlier attach breaks Ludus MAC→iface lookup when mgmt and sniff share a VLAN tag).

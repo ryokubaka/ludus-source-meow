@@ -1,0 +1,111 @@
+# Hub mode has to be set on the Proxmox node that owns vmbr10XX. The range
+# user running this playbook cannot sudo there. The Ludus API token can open
+# a root console on that node and write the bridge ageing time.
+
+- name: Load Proxmox API credentials for hub-mode
+  ansible.builtin.set_fact:
+    ludus_so_proxmox_url: >-
+      {{
+        ludus_so_proxmox_api_url
+        | default(lookup('env', 'PROXMOX_URL'), true)
+        | default('', true)
+        | regex_replace('/+$', '')
+      }}
+    ludus_so_proxmox_user: >-
+      {{
+        ludus_so_proxmox_api_user
+        | default(lookup('env', 'PROXMOX_USERNAME'), true)
+        | default('', true)
+      }}
+    ludus_so_proxmox_token: >-
+      {{
+        ludus_so_proxmox_api_token
+        | default(lookup('env', 'PROXMOX_TOKEN'), true)
+        | default('', true)
+      }}
+    ludus_so_proxmox_secret: >-
+      {{
+        ludus_so_proxmox_api_secret
+        | default(lookup('env', 'PROXMOX_SECRET'), true)
+        | default('', true)
+      }}
+  no_log: true
+
+- name: Fail when Proxmox API credentials are missing for hub-mode
+  ansible.builtin.fail:
+    msg: >
+      Cannot set range-bridge hub mode. Proxmox API credentials are missing
+      (PROXMOX_URL / PROXMOX_USERNAME / PROXMOX_TOKEN / PROXMOX_SECRET).
+  when: >
+    ludus_so_proxmox_url | length == 0
+    or ludus_so_proxmox_user | length == 0
+    or ludus_so_proxmox_token | length == 0
+    or ludus_so_proxmox_secret | length == 0
+
+- name: Build Proxmox API Authorization header for hub-mode
+  ansible.builtin.set_fact:
+    ludus_so_pve_auth: >-
+      {{
+        ('PVEAPIToken=' ~ ludus_so_proxmox_token ~ '=' ~ ludus_so_proxmox_secret)
+        if ('!' in ludus_so_proxmox_token)
+        else ('PVEAPIToken=' ~ ludus_so_proxmox_user ~ '!' ~ ludus_so_proxmox_token ~ '=' ~ ludus_so_proxmox_secret)
+      }}
+  no_log: true
+
+- name: Resolve the range number for hub-mode
+  ansible.builtin.set_fact:
+    ludus_so_range_number_resolved: >-
+      {{
+        range_second_octet
+        | default(lookup('env', 'LUDUS_RANGE_NUMBER'), true)
+        | default(ludus_so_range_number_override, true)
+      }}
+  when: ludus_so_vmbr | default('') | length == 0
+
+- name: Fail when the range bridge cannot be named
+  ansible.builtin.fail:
+    msg: >
+      Cannot set hub mode without the range bridge. Need range_second_octet
+      or LUDUS_RANGE_NUMBER.
+  when:
+    - ludus_so_vmbr | default('') | length == 0
+    - ludus_so_range_number_resolved | default('') | string | length == 0
+
+- name: Name the range bridge for hub-mode
+  ansible.builtin.set_fact:
+    ludus_so_vmbr: "vmbr{{ 1000 + (ludus_so_range_number_resolved | int) }}"
+  when: ludus_so_vmbr | default('') | length == 0
+
+- name: Collect Proxmox VM name candidates for hub-mode
+  ansible.builtin.set_fact:
+    ludus_so_pve_name_candidates: >-
+      {{
+        [
+          ludus_so_proxmox_vm_name | default('', true),
+          inventory_hostname,
+          ansible_hostname | default('', true),
+          ansible_nodename | default('', true),
+        ]
+        | select('string')
+        | reject('equalto', '')
+        | unique
+        | list
+      }}
+
+- name: Set range bridge hub-mode on the Proxmox node
+  ansible.builtin.script: set_bridge_ageing.py
+  environment:
+    LUDUS_SO_PVE_AUTH: "{{ ludus_so_pve_auth }}"
+    LUDUS_SO_PVE_URL: "{{ ludus_so_proxmox_url }}"
+    LUDUS_SO_VMBR: "{{ ludus_so_vmbr }}"
+    LUDUS_SO_PVE_NODE: "{{ ludus_so_pve_node | default('') }}"
+    LUDUS_SO_VM_NAMES: "{{ ludus_so_pve_name_candidates | join(',') }}"
+  delegate_to: localhost
+  connection: local
+  vars:
+    ansible_connection: local
+    ansible_remote_tmp: "{{ lookup('env', 'HOME') }}/.goad/ansible-remote"
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  become: false
+  register: ludus_so_bridge_ageing
+  changed_when: "'changed=yes' in (ludus_so_bridge_ageing.stdout | default(''))"

@@ -98,28 +98,7 @@
   when: ludus_so_enslave_now.rc | default(1) != 0
 
 - name: Re-assert Proxmox range bridge hub-mode (ageing 0)
-  ansible.builtin.shell: |
-    set -euo pipefail
-    BR="{{ ludus_so_vmbr | default('') }}"
-    if [[ -z "$BR" ]]; then
-      RN="{{ range_second_octet | default(ludus_so_range_number_override | default('', true), true) }}"
-      [[ -n "$RN" ]] || exit 0
-      BR="vmbr$((1000 + RN))"
-    fi
-    [[ -d /sys/class/net/$BR/bridge ]] || exit 0
-    echo 0 > /sys/class/net/$BR/bridge/ageing_time
-    echo "bridge-ageing 0 on $BR"
-  args:
-    executable: /bin/bash
-  delegate_to: localhost
-  connection: local
-  vars:
-    ansible_connection: local
-    ansible_remote_tmp: "{{ lookup('env', 'HOME') }}/.goad/ansible-remote"
-    ansible_python_interpreter: "{{ ansible_playbook_python }}"
-  become: true
-  changed_when: false
-  failed_when: false
+  ansible.builtin.include_tasks: set-bridge-hub.yml
 
 # Boot highstate creates so-zeek and so-suricata. so-*-restart queues behind
 # that Salt call. A 5 minute async cap failed the deploy while Zeek was still
