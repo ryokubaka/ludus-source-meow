@@ -1,177 +1,159 @@
 #!/usr/bin/env python3
-"""Drive set_bridge_ageing against a local fake Proxmox console."""
+"""Run the hub-mode script the way Ansible does: as an executable shebang."""
 
 from __future__ import annotations
 
-import json
 import os
-import socket
+import stat
+import subprocess
 import sys
-import threading
+import tempfile
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "files"))
-import set_bridge_ageing as hub  # noqa: E402
+SCRIPT = Path(__file__).resolve().parents[1] / "files" / "set_bridge_ageing.py"
 
 
-def server_frame(payload: bytes) -> bytes:
-    length = len(payload)
-    header = bytearray([0x81])
-    if length < 126:
-        header.append(length)
-    else:
-        header.append(126)
-        header.extend(length.to_bytes(2, "big"))
-    return bytes(header) + payload
+def fail(msg: str) -> int:
+    print(f"FAIL: {msg}", file=sys.stderr)
+    return 1
 
 
-class FakeProxmox:
-    def __init__(self, ageing: str) -> None:
-        self.ageing = ageing
-        self.command = ""
-        self.sock = socket.socket()
-        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.sock.bind(("127.0.0.1", 0))
-        self.sock.listen(8)
-        self.sock.settimeout(0.2)
-        self.port = self.sock.getsockname()[1]
-        self.stop = False
-        self.thread = threading.Thread(target=self.serve, daemon=True)
-        self.thread.start()
+def write_exec(path: Path, body: str) -> None:
+    path.write_text(body)
+    path.chmod(path.stat().st_mode | stat.S_IEXEC)
 
-    def close(self) -> None:
-        self.stop = True
-        self.thread.join(timeout=2)
-        self.sock.close()
 
-    def serve(self) -> None:
-        while not self.stop:
-            try:
-                conn, _ = self.sock.accept()
-            except socket.timeout:
-                continue
-            try:
-                self.handle(conn)
-            finally:
-                conn.close()
+def run_script(env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+    merged = os.environ.copy()
+    merged.update(env)
+    return subprocess.run([str(SCRIPT)], env=merged, capture_output=True, text=True)
 
-    def handle(self, conn: socket.socket) -> None:
-        data = b""
-        while b"\r\n\r\n" not in data:
-            chunk = conn.recv(4096)
-            if not chunk:
-                return
-            data += chunk
-        head, rest = data.split(b"\r\n\r\n", 1)
-        request = head.decode(errors="replace")
-        line = request.split("\r\n", 1)[0]
-        if line.startswith("POST ") and "/termproxy" in line:
-            body = json.dumps(
-                {"data": {"user": "root@pam", "ticket": "TICKET", "port": 5900, "upid": "UPID"}}
-            ).encode()
-            conn.sendall(
-                b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: "
-                + str(len(body)).encode()
-                + b"\r\nConnection: close\r\n\r\n"
-                + body
-            )
-            return
-        if line.startswith("GET ") and "/cluster/resources" in line:
-            body = json.dumps(
-                {"data": [{"type": "qemu", "name": "lab-so", "node": "pve", "vmid": 101}]}
-            ).encode()
-            conn.sendall(
-                b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: "
-                + str(len(body)).encode()
-                + b"\r\nConnection: close\r\n\r\n"
-                + body
-            )
-            return
-        if "Upgrade: websocket" not in request and b"Upgrade: websocket" not in head:
-            conn.sendall(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n")
-            return
-        conn.sendall(
-            b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
-            b"Sec-WebSocket-Accept: test\r\n\r\n"
+
+def test_shebang() -> int:
+    raw = SCRIPT.read_bytes()
+    if b"\r" in raw:
+        return fail("set_bridge_ageing.py contains CR; the kernel would execute python3\\r")
+    if not raw.startswith(b"#!/usr/bin/env python3\n"):
+        return fail(f"shebang is {raw.splitlines()[0]!r}")
+    proc = subprocess.run([str(SCRIPT)], capture_output=True, text=True)
+    if proc.returncode == 127 or "python3\r" in (proc.stderr or ""):
+        return fail(proc.stderr or "shebang failed")
+    if "Need Proxmox URL" not in (proc.stderr or ""):
+        return fail(f"missing-args run said {proc.stderr!r} / {proc.stdout!r}")
+    print("PASS: shebang executes python3")
+    return 0
+
+
+def test_sudo() -> int:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        path = root / "class" / "net" / "vmbr1004" / "bridge"
+        path.mkdir(parents=True)
+        ageing = path / "ageing_time"
+        ageing.write_text("30000\n")
+        ageing.chmod(0o444)
+        bindir = root / "bin"
+        bindir.mkdir()
+        write_exec(
+            bindir / "sudo",
+            "#!/bin/bash\n"
+            "test \"$1\" = -n || exit 1\n"
+            "shift\n"
+            "test \"$1\" = tee || exit 1\n"
+            "chmod u+w \"$2\"\n"
+            "cat > \"$2\"\n",
         )
-        pending = bytearray(rest)
-        conn.settimeout(5)
-        saw_ticket = False
-        while True:
-            if len(pending) < 2:
-                chunk = conn.recv(4096)
-                if not chunk:
-                    return
-                pending.extend(chunk)
-                continue
-            try:
-                opcode, payload, consumed = hub.ws_decode(bytes(pending))
-            except ValueError:
-                chunk = conn.recv(4096)
-                if not chunk:
-                    return
-                pending.extend(chunk)
-                continue
-            if len(pending) < consumed:
-                chunk = conn.recv(4096)
-                if not chunk:
-                    return
-                pending.extend(chunk)
-                continue
-            del pending[:consumed]
-            if opcode == 0x8:
-                return
-            text = payload.decode(errors="replace")
-            if not saw_ticket:
-                saw_ticket = True
-                conn.sendall(server_frame(b"root@pve:~# "))
-                continue
-            if "echo 0 >" in text:
-                self.command = text
-                reply = f"LUDUS_AGEING_BEFORE=30000\r\nLUDUS_AGEING={self.ageing}\r\n".encode()
-                conn.sendall(server_frame(reply))
+        write_exec(bindir / "ssh", "#!/bin/bash\necho ssh-should-not-run >&2\nexit 255\n")
+        proc = run_script(
+            {
+                "PATH": f"{bindir}:{os.environ.get('PATH', '')}",
+                "LUDUS_SO_PVE_AUTH": "token",
+                "LUDUS_SO_PVE_URL": "https://minipve:8006",
+                "LUDUS_SO_VMBR": "vmbr1004",
+                "LUDUS_SO_SYSFS_ROOT": str(root),
+            }
+        )
+        if proc.returncode != 0:
+            return fail(proc.stderr or proc.stdout)
+        if "method=sudo" not in proc.stdout or "ageing=0" not in proc.stdout:
+            return fail(proc.stdout)
+        if ageing.read_text().strip() != "0":
+            return fail(f"sysfs is {ageing.read_text()!r}")
+        if "ssh-should-not-run" in (proc.stderr or ""):
+            return fail("ssh ran even though sudo -n worked")
+    print("PASS: sudo -n sets ageing without SSH")
+    return 0
 
 
-def run(ageing: str) -> tuple[int | str, FakeProxmox]:
-    import subprocess
+def test_ssh() -> int:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        bindir = root / "bin"
+        bindir.mkdir()
+        log = root / "ssh.log"
+        write_exec(
+            bindir / "ssh",
+            "#!/bin/bash\n"
+            f"printf '%s\\n' \"$*\" >> {log}\n"
+            "case \"$*\" in\n"
+            "  *root@127.0.0.1*) echo LUDUS_AGEING_BEFORE=30000; echo LUDUS_AGEING=0; exit 0;;\n"
+            "  *) exit 255;;\n"
+            "esac\n",
+        )
+        proc = run_script(
+            {
+                "PATH": f"{bindir}:{os.environ.get('PATH', '')}",
+                "LUDUS_SO_PVE_AUTH": "token",
+                "LUDUS_SO_PVE_URL": "https://10.1.1.1:8006",
+                "LUDUS_SO_VMBR": "vmbr1004",
+                "LUDUS_SO_PVE_NODE": "minipve",
+                "LUDUS_SO_SYSFS_ROOT": str(root / "missing"),
+            }
+        )
+        if proc.returncode != 0:
+            return fail(proc.stderr or proc.stdout)
+        if "method=ssh:127.0.0.1" not in proc.stdout:
+            return fail(proc.stdout)
+        logged = log.read_text()
+        if "root@127.0.0.1" not in logged or "vmbr1004" not in logged or "echo 0 >" not in logged:
+            return fail(logged)
+        if "termproxy" in logged or "vncwebsocket" in logged:
+            return fail("still using the login console")
+    print("PASS: root SSH sets ageing when the console would only show a login prompt")
+    return 0
 
-    server = FakeProxmox(ageing)
-    script = Path(__file__).resolve().parents[1] / "files" / "set_bridge_ageing.py"
-    env = os.environ.copy()
-    env["LUDUS_SO_PVE_AUTH"] = "PVEAPIToken=root@pam!ludus-token=secret"
-    env["LUDUS_SO_PVE_URL"] = f"http://127.0.0.1:{server.port}"
-    env["LUDUS_SO_VMBR"] = "vmbr1004"
-    env["LUDUS_SO_VM_NAMES"] = "so"
-    env.pop("LUDUS_SO_PVE_NODE", None)
-    proc = subprocess.run([str(script)], env=env, capture_output=True, text=True)
-    if proc.returncode == 0:
-        print(proc.stdout, end="")
-        return 0, server
-    detail = (proc.stderr or proc.stdout or f"exit {proc.returncode}").strip()
-    return detail, server
+
+def test_all_fail() -> int:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        bindir = root / "bin"
+        bindir.mkdir()
+        write_exec(bindir / "ssh", "#!/bin/bash\nexit 255\n")
+        write_exec(bindir / "sudo", "#!/bin/bash\nexit 1\n")
+        proc = run_script(
+            {
+                "PATH": f"{bindir}:{os.environ.get('PATH', '')}",
+                "LUDUS_SO_PVE_AUTH": "token",
+                "LUDUS_SO_PVE_URL": "https://minipve:8006",
+                "LUDUS_SO_VMBR": "vmbr1004",
+                "LUDUS_SO_PVE_NODE": "minipve",
+                "LUDUS_SO_SYSFS_ROOT": str(root / "missing"),
+            }
+        )
+        text = (proc.stderr or "") + (proc.stdout or "")
+        if proc.returncode == 0 or "ageing=0" in proc.stdout:
+            return fail(f"failure was reported as success: {text}")
+        if "login prompt" not in text or "root SSH failed" not in text:
+            return fail(text)
+    print("PASS: missing root access fails instead of pretending the bridge is a hub")
+    return 0
 
 
 def main() -> int:
-    ok, server = run("0")
-    try:
-        if ok != 0:
-            print(f"FAIL: expected success, got {ok}", file=sys.stderr)
-            return 1
-        if "echo 0 > /sys/class/net/vmbr1004/bridge/ageing_time" not in server.command:
-            print(f"FAIL: console command was {server.command!r}", file=sys.stderr)
-            return 1
-    finally:
-        server.close()
-    print("PASS: hub mode set through the Proxmox console")
-
-    bad, server = run("30000")
-    try:
-        if not isinstance(bad, str) or "30000" not in bad:
-            print(f"FAIL: non-zero ageing should fail, got {bad!r}", file=sys.stderr)
-            return 1
-    finally:
-        server.close()
-    print("PASS: non-zero ageing fails the task")
+    for test in (test_shebang, test_sudo, test_ssh, test_all_fail):
+        rc = test()
+        if rc:
+            return rc
     return 0
 
 

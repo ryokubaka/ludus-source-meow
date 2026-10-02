@@ -80,9 +80,12 @@ virtio NICs cannot exceed the bridge MTU, so **`mtu=9000` on net1 will fail** in
 SO may create `bond0` at jumbo MTU — this role passes **`MTU=1500`** to `so-setup`
 for virtio labs. A failed/partial install can leave **`bond0`** behind; the role removes
 it before `so-setup` so the TESTING profile selects **`ens18`** (mgmt) not **`bond0`**.
-Bridge `ageing_time 0` is set on the Proxmox node that owns `vmbr10XX`, through the
-Ludus root API token. That floods VLAN 10 frames to the sniff NIC. A learning
-bridge would only deliver frames addressed to Security Onion.
+Bridge `ageing_time 0` is set on the Proxmox node that owns `vmbr10XX` by writing
+the bridge sysfs file (directly, with `sudo -n`, or `ssh root@` the node). The
+API console stops at a login prompt, so it is not used. Hub mode floods VLAN 10
+frames to the sniff NIC. A learning bridge only delivers frames addressed to
+Security Onion. The range user needs passwordless sudo on that node, or root
+SSH from the Ansible controller (`BatchMode`).
 
 After `so-setup`, zeek/suricata listen on **`bond0`**. If the sniff NIC (`ens19`) is not
 enslaved, `bond0` stays NO-CARRIER and NSM sees no range traffic. This role runs
