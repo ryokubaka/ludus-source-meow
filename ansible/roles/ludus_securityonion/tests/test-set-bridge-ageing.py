@@ -149,8 +149,84 @@ def test_all_fail() -> int:
     return 0
 
 
+def test_already_hub() -> int:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        path = root / "class" / "net" / "vmbr1004" / "bridge"
+        path.mkdir(parents=True)
+        ageing = path / "ageing_time"
+        ageing.write_text("0\n")
+        bindir = root / "bin"
+        bindir.mkdir()
+        write_exec(bindir / "ssh", "#!/bin/bash\necho ssh-should-not-run >&2\nexit 255\n")
+        proc = run_script(
+            {
+                "PATH": f"{bindir}:{os.environ.get('PATH', '')}",
+                "LUDUS_SO_PVE_AUTH": "token",
+                "LUDUS_SO_PVE_URL": "https://minipve:8006",
+                "LUDUS_SO_VMBR": "vmbr1004",
+                "LUDUS_SO_SYSFS_ROOT": str(root),
+            }
+        )
+        if proc.returncode != 0 or "method=present" not in proc.stdout or "changed=no" not in proc.stdout:
+            return fail(proc.stdout + proc.stderr)
+        if "ssh-should-not-run" in (proc.stderr or ""):
+            return fail("already-hub bridge still tried SSH")
+    print("PASS: ageing 0 is left alone")
+    return 0
+
+
+def test_no_ifreload() -> int:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        path = root / "class" / "net" / "vmbr1004" / "bridge"
+        path.mkdir(parents=True)
+        ageing = path / "ageing_time"
+        ageing.write_text("30000\n")
+        ageing.chmod(0o444)
+        bindir = root / "bin"
+        bindir.mkdir()
+        log = root / "ifreload.log"
+        write_exec(bindir / "sudo", "#!/bin/bash\nexit 1\n")
+        write_exec(bindir / "ssh", "#!/bin/bash\nexit 255\n")
+        write_exec(
+            bindir / "ifreload",
+            "#!/bin/bash\n"
+            f"echo ifreload >> {log}\n"
+            "exit 0\n",
+        )
+        proc = run_script(
+            {
+                "PATH": f"{bindir}:{os.environ.get('PATH', '')}",
+                "LUDUS_SO_PVE_AUTH": "token",
+                "LUDUS_SO_PVE_URL": "https://minipve:8006",
+                "LUDUS_SO_VMBR": "vmbr1004",
+                "LUDUS_SO_PVE_NODE": "minipve",
+                "LUDUS_SO_SYSFS_ROOT": str(root),
+            }
+        )
+        text = (proc.stdout or "") + (proc.stderr or "")
+        if proc.returncode == 0 or "ageing=0" in (proc.stdout or ""):
+            return fail(f"unwritable sysfs was reported as hub mode: {text}")
+        if log.exists():
+            return fail("ifreload ran; that detaches VM taps on other ranges")
+        if ageing.read_text().strip() != "30000":
+            return fail(f"sysfs changed to {ageing.read_text()!r}")
+        if "not reloaded" not in text:
+            return fail(text)
+    print("PASS: hub mode does not reload networking when it cannot write sysfs")
+    return 0
+
+
 def main() -> int:
-    for test in (test_shebang, test_sudo, test_ssh, test_all_fail):
+    for test in (
+        test_shebang,
+        test_sudo,
+        test_ssh,
+        test_all_fail,
+        test_already_hub,
+        test_no_ifreload,
+    ):
         rc = test()
         if rc:
             return rc

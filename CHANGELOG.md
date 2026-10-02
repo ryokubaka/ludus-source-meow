@@ -21,7 +21,7 @@ bump is not a patch. Do not invent a version heading on a feature branch.
 
 ## [Unreleased]
 
-- [Fix] **`ludus_securityonion` 1.2.4** — Set range-bridge hub mode with passwordless sudo or root SSH. The API console on this Proxmox host stops at `hostname login:` and cannot run the ageing command.
+- [Fix] **`ludus_securityonion` 1.2.5** — Set range-bridge hub mode by writing sysfs directly, with passwordless sudo, or with root SSH, and fail when none of those work. The API console stops at `hostname login:`. Do not `ifreload`: on ifupdown2 that reload detaches live VM taps from every other `bridge-ports none` bridge, and the Proxmox API cannot store the option that would keep them.
 
 ## [1.2.7] - 2026-10-02
 

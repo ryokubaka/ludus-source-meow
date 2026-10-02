@@ -2,8 +2,11 @@
 """Set a Proxmox range bridge to hub mode (ageing_time 0).
 
 The Proxmox API token can open a node console, but that console stops at
-"hostname login:" and never becomes a root shell. Hub mode is set by writing
-the bridge sysfs file directly, with sudo -n, or over SSH to root on the node.
+"hostname login:" and never becomes a root shell. Hub mode is a sysfs write:
+direct, sudo -n, or SSH to root on the node. Networking is not reloaded.
+ifreload -a reconciles every bridge, and a Ludus range bridge is
+"bridge-ports none" while QEMU taps are attached live, so a reload detaches
+those taps. The API cannot store the ifupdown2 option that would keep them.
 """
 
 from __future__ import annotations
@@ -13,6 +16,7 @@ import json
 import os
 import re
 import shutil
+import ssl
 import subprocess
 import sys
 import urllib.error
@@ -33,13 +37,20 @@ def api_base(url: str) -> str:
 def http_json(url: str, auth: str) -> dict:
     req = urllib.request.Request(url, method="GET")
     req.add_header("Authorization", auth)
+    ctx = ssl._create_unverified_context()
+    timeout = float(os.environ.get("LUDUS_SO_HTTP_TIMEOUT", "20"))
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            return json.loads(resp.read().decode())
+        with urllib.request.urlopen(req, timeout=timeout, context=ctx) as resp:
+            raw = resp.read().decode()
+            return json.loads(raw) if raw else {}
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode(errors="replace")[:400]
         raise SystemExit(
             f"Proxmox API GET {urllib.parse.urlparse(url).path} failed: HTTP {exc.code} {detail}"
+        ) from exc
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        raise SystemExit(
+            f"Proxmox API GET {urllib.parse.urlparse(url).path} failed: {exc}"
         ) from exc
 
 
@@ -145,6 +156,9 @@ def set_ageing(url: str, auth: str, node: str, bridge: str, vm_names: list[str])
     sysfs_root = os.environ.get("LUDUS_SO_SYSFS_ROOT", "/sys")
     path = ageing_path(bridge, sysfs_root)
     before = read_ageing(path)
+    if before == 0:
+        print(f"bridge={bridge} node={node or 'local'} ageing=0 changed=no method=present")
+        return 0
     method = write_local(path)
     if method is None:
         if not node:
@@ -160,6 +174,7 @@ def set_ageing(url: str, auth: str, node: str, bridge: str, vm_names: list[str])
                 f"Could not set {bridge} ageing_time to 0. "
                 "The Proxmox API console stops at a login prompt, so it cannot run the command. "
                 f"Passwordless sudo was not available, and root SSH failed for: {', '.join(tried) or '(none)'}. "
+                "Networking was not reloaded, because ifreload detaches live VM taps on other ranges. "
                 f"On the Proxmox node run: echo 0 > /sys/class/net/{bridge}/bridge/ageing_time"
             )
     if method in ("local", "sudo"):

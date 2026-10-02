@@ -82,10 +82,14 @@ for virtio labs. A failed/partial install can leave **`bond0`** behind; the role
 it before `so-setup` so the TESTING profile selects **`ens18`** (mgmt) not **`bond0`**.
 Bridge `ageing_time 0` is set on the Proxmox node that owns `vmbr10XX` by writing
 the bridge sysfs file (directly, with `sudo -n`, or `ssh root@` the node). The
-API console stops at a login prompt, so it is not used. Hub mode floods VLAN 10
-frames to the sniff NIC. A learning bridge only delivers frames addressed to
-Security Onion. The range user needs passwordless sudo on that node, or root
-SSH from the Ansible controller (`BatchMode`).
+API console stops at a login prompt, so it is not used. The role does not reload
+Proxmox networking. `ifreload -a` reconciles every bridge, and a Ludus range
+bridge is `bridge-ports none` while QEMU taps are attached live, so a reload
+detaches those taps on every range. The Proxmox API cannot store the ifupdown2
+option that would keep them. Hub mode floods VLAN 10 frames to the sniff NIC.
+A learning bridge only delivers frames addressed to Security Onion. The range
+user needs passwordless sudo on that node, or root SSH from the Ansible
+controller (`BatchMode`).
 
 After `so-setup`, zeek/suricata listen on **`bond0`**. If the sniff NIC (`ens19`) is not
 enslaved, `bond0` stays NO-CARRIER and NSM sees no range traffic. This role runs
