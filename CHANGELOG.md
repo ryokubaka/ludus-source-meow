@@ -21,7 +21,7 @@ bump is not a patch. Do not invent a version heading on a feature branch.
 
 ## [Unreleased]
 
-<!-- release: minor -->
+## [1.2.0] - 2026-10-01
 
 - [Fix] **`ludus_securityonion` 1.1.8** — Proxmox API tasks delegated to localhost use the local connection. GOAD pins `ansible_connection=ssh` on the guest, and Ansible was reusing that to SSH to the controller, so "List Proxmox VMs in cluster" died unreachable.
 - [Fix] **`ludus_so_elastic_security` 1.0.7** — Enable rules the way GOAD elk does: collect the disabled ids, then one bulk POST per chunk. The run that enabled 1972 rules had been rejected by the detection-engine bulk API and fell back to one HTTP call per rule. Chunk size is 1000, so a full prebuilt set is two calls.
