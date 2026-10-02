@@ -21,6 +21,8 @@ bump is not a patch. Do not invent a version heading on a feature branch.
 
 ## [Unreleased]
 
+## [1.2.5] - 2026-10-02
+
 - [Fix] **`ludus_so_elastic_security` 1.0.8** — Grant the SOC account (`onionadmin@ludus.local`) the SOC `superuser` role and every Kibana privilege. Elastic 9.4 shows "Privileges required" on the Security dashboards when the account only has the stock analyst/`feature_siem.read` set.
 
 ## [1.2.4] - 2026-10-02
