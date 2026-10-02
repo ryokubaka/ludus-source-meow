@@ -7,7 +7,7 @@ galaxy_info:
     Security Onion endpoints-initial already collects Microsoft-Windows-Sysmon/Operational.
   license: AGPL-3.0-or-later
   min_ansible_version: "2.14"
-  version: "1.0.1"
+  version: "1.0.2"
   platforms:
     - name: Windows
       versions:

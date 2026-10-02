@@ -104,7 +104,7 @@
   connection: local
   vars:
     ansible_connection: local
-    ansible_remote_tmp: /tmp/.ansible-ludus-so
+    ansible_remote_tmp: "{{ lookup('env', 'HOME') }}/.goad/ansible-remote"
     ansible_python_interpreter: "{{ ansible_playbook_python }}"
   become: false
   register: ludus_so_pve_resources
@@ -191,7 +191,7 @@
   connection: local
   vars:
     ansible_connection: local
-    ansible_remote_tmp: /tmp/.ansible-ludus-so
+    ansible_remote_tmp: "{{ lookup('env', 'HOME') }}/.goad/ansible-remote"
     ansible_python_interpreter: "{{ ansible_playbook_python }}"
   become: false
   register: ludus_so_pve_config
@@ -253,7 +253,7 @@
   connection: local
   vars:
     ansible_connection: local
-    ansible_remote_tmp: /tmp/.ansible-ludus-so
+    ansible_remote_tmp: "{{ lookup('env', 'HOME') }}/.goad/ansible-remote"
     ansible_python_interpreter: "{{ ansible_playbook_python }}"
   become: false
   register: ludus_so_net1_add
@@ -274,7 +274,7 @@
   connection: local
   vars:
     ansible_connection: local
-    ansible_remote_tmp: /tmp/.ansible-ludus-so
+    ansible_remote_tmp: "{{ lookup('env', 'HOME') }}/.goad/ansible-remote"
     ansible_python_interpreter: "{{ ansible_playbook_python }}"
   become: false
   register: ludus_so_net1_mtu_fix
@@ -295,7 +295,7 @@
   connection: local
   vars:
     ansible_connection: local
-    ansible_remote_tmp: /tmp/.ansible-ludus-so
+    ansible_remote_tmp: "{{ lookup('env', 'HOME') }}/.goad/ansible-remote"
     ansible_python_interpreter: "{{ ansible_playbook_python }}"
   become: false
   register: ludus_so_net1_spec_update
@@ -343,7 +343,7 @@
   connection: local
   vars:
     ansible_connection: local
-    ansible_remote_tmp: /tmp/.ansible-ludus-so
+    ansible_remote_tmp: "{{ lookup('env', 'HOME') }}/.goad/ansible-remote"
     ansible_python_interpreter: "{{ ansible_playbook_python }}"
   become: true
   register: ludus_so_bridge_ageing

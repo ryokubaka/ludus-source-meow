@@ -30,7 +30,7 @@
       become: false
       vars:
         ansible_connection: local
-        ansible_remote_tmp: /tmp/.ansible-ludus-so
+        ansible_remote_tmp: "{{ lookup('env', 'HOME') }}/.goad/ansible-remote"
         ansible_shell_type: sh
 
     - name: Stat cached Sysmon zip
@@ -42,7 +42,7 @@
       become: false
       vars:
         ansible_connection: local
-        ansible_remote_tmp: /tmp/.ansible-ludus-so
+        ansible_remote_tmp: "{{ lookup('env', 'HOME') }}/.goad/ansible-remote"
         ansible_shell_type: sh
 
     - name: Download Sysmon zip on controller
@@ -56,7 +56,7 @@
       become: false
       vars:
         ansible_connection: local
-        ansible_remote_tmp: /tmp/.ansible-ludus-so
+        ansible_remote_tmp: "{{ lookup('env', 'HOME') }}/.goad/ansible-remote"
         ansible_shell_type: sh
       retries: 3
       delay: 10
@@ -73,7 +73,7 @@
       become: false
       vars:
         ansible_connection: local
-        ansible_remote_tmp: /tmp/.ansible-ludus-so
+        ansible_remote_tmp: "{{ lookup('env', 'HOME') }}/.goad/ansible-remote"
         ansible_shell_type: sh
 
     - name: Extract Sysmon zip on controller
@@ -86,7 +86,7 @@
       become: false
       vars:
         ansible_connection: local
-        ansible_remote_tmp: /tmp/.ansible-ludus-so
+        ansible_remote_tmp: "{{ lookup('env', 'HOME') }}/.goad/ansible-remote"
         ansible_shell_type: sh
       when: >
         (ludus_sysmon_refresh_installer | bool)
@@ -101,7 +101,7 @@
       become: false
       vars:
         ansible_connection: local
-        ansible_remote_tmp: /tmp/.ansible-ludus-so
+        ansible_remote_tmp: "{{ lookup('env', 'HOME') }}/.goad/ansible-remote"
         ansible_shell_type: sh
 
     - name: Fail when Sysmon64.exe was not extracted

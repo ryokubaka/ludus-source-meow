@@ -115,7 +115,7 @@
   connection: local
   vars:
     ansible_connection: local
-    ansible_remote_tmp: /tmp/.ansible-ludus-so
+    ansible_remote_tmp: "{{ lookup('env', 'HOME') }}/.goad/ansible-remote"
     ansible_python_interpreter: "{{ ansible_playbook_python }}"
   become: true
   changed_when: false

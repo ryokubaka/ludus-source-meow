@@ -178,7 +178,7 @@
   no_log: true
   vars:
     ansible_connection: local
-    ansible_remote_tmp: /tmp/.ansible-ludus-so
+    ansible_remote_tmp: "{{ lookup('env', 'HOME') }}/.goad/ansible-remote"
     ansible_shell_type: sh
     ansible_become: false
 
@@ -190,7 +190,7 @@
   delegate_facts: true
   vars:
     ansible_connection: local
-    ansible_remote_tmp: /tmp/.ansible-ludus-so
+    ansible_remote_tmp: "{{ lookup('env', 'HOME') }}/.goad/ansible-remote"
     ansible_shell_type: sh
     ansible_become: false
 
@@ -247,7 +247,7 @@
   no_log: true
   vars:
     ansible_connection: local
-    ansible_remote_tmp: /tmp/.ansible-ludus-so
+    ansible_remote_tmp: "{{ lookup('env', 'HOME') }}/.goad/ansible-remote"
     ansible_shell_type: sh
     ansible_become: false
 
@@ -271,5 +271,5 @@
   become: false
   vars:
     ansible_connection: local
-    ansible_remote_tmp: /tmp/.ansible-ludus-so
+    ansible_remote_tmp: "{{ lookup('env', 'HOME') }}/.goad/ansible-remote"
     ansible_shell_type: sh
