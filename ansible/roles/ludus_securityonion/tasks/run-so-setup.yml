@@ -244,9 +244,11 @@
   args:
     executable: /bin/bash
   delegate_to: localhost
+  connection: local
   become: false
   vars:
     ansible_connection: local
+    ansible_remote_tmp: /tmp/.ansible-ludus-so
     ansible_become: false
   register: ludus_so_setup_wait
   until: ludus_so_setup_wait.rc | int == 0

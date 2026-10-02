@@ -21,6 +21,7 @@ bump is not a patch. Do not invent a version heading on a feature branch.
 
 ## [Unreleased]
 
+- [Fix] **`ludus_securityonion` 1.1.9** — Controller tasks (`delegate_to: localhost`) use `/tmp/.ansible-ludus-so` for module files. Ansible was creating that directory as the guest user, which is not writable on the Ludus host, so the Proxmox API call was unreachable. `ludus_so_elastic_agent` 1.0.7 and `ludus_sysmon` 1.0.1 use the same directory.
 - [Fix] **`ludus_securityonion` 1.1.8** — Proxmox API tasks delegated to localhost use the local connection. GOAD pins `ansible_connection=ssh` on the guest, and Ansible was reusing that to SSH to the controller, so "List Proxmox VMs in cluster" died unreachable.
 
 ## [1.2.0] - 2026-10-01

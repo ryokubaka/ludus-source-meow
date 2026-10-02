@@ -26,9 +26,11 @@
         state: directory
         mode: "0755"
       delegate_to: localhost
+      connection: local
       become: false
       vars:
         ansible_connection: local
+        ansible_remote_tmp: /tmp/.ansible-ludus-so
         ansible_shell_type: sh
 
     - name: Stat cached Sysmon zip
@@ -36,9 +38,11 @@
         path: "{{ ludus_sysmon_cache_dir }}/Sysmon.zip"
       register: ludus_sysmon_zip_stat
       delegate_to: localhost
+      connection: local
       become: false
       vars:
         ansible_connection: local
+        ansible_remote_tmp: /tmp/.ansible-ludus-so
         ansible_shell_type: sh
 
     - name: Download Sysmon zip on controller
@@ -48,9 +52,11 @@
         mode: "0644"
         force: "{{ ludus_sysmon_refresh_installer | bool }}"
       delegate_to: localhost
+      connection: local
       become: false
       vars:
         ansible_connection: local
+        ansible_remote_tmp: /tmp/.ansible-ludus-so
         ansible_shell_type: sh
       retries: 3
       delay: 10
@@ -63,9 +69,11 @@
         path: "{{ ludus_sysmon_cache_dir }}/Sysmon64.exe"
       register: ludus_sysmon_exe_stat
       delegate_to: localhost
+      connection: local
       become: false
       vars:
         ansible_connection: local
+        ansible_remote_tmp: /tmp/.ansible-ludus-so
         ansible_shell_type: sh
 
     - name: Extract Sysmon zip on controller
@@ -74,9 +82,11 @@
         dest: "{{ ludus_sysmon_cache_dir }}"
         remote_src: true
       delegate_to: localhost
+      connection: local
       become: false
       vars:
         ansible_connection: local
+        ansible_remote_tmp: /tmp/.ansible-ludus-so
         ansible_shell_type: sh
       when: >
         (ludus_sysmon_refresh_installer | bool)
@@ -87,9 +97,11 @@
         path: "{{ ludus_sysmon_cache_dir }}/Sysmon64.exe"
       register: ludus_sysmon_exe_ready
       delegate_to: localhost
+      connection: local
       become: false
       vars:
         ansible_connection: local
+        ansible_remote_tmp: /tmp/.ansible-ludus-so
         ansible_shell_type: sh
 
     - name: Fail when Sysmon64.exe was not extracted

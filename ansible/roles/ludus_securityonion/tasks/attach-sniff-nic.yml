@@ -101,8 +101,10 @@
     status_code: [200]
     validate_certs: false
   delegate_to: localhost
+  connection: local
   vars:
     ansible_connection: local
+    ansible_remote_tmp: /tmp/.ansible-ludus-so
     ansible_python_interpreter: "{{ ansible_playbook_python }}"
   become: false
   register: ludus_so_pve_resources
@@ -186,8 +188,10 @@
     status_code: [200]
     validate_certs: false
   delegate_to: localhost
+  connection: local
   vars:
     ansible_connection: local
+    ansible_remote_tmp: /tmp/.ansible-ludus-so
     ansible_python_interpreter: "{{ ansible_playbook_python }}"
   become: false
   register: ludus_so_pve_config
@@ -246,8 +250,10 @@
     status_code: [200]
     validate_certs: false
   delegate_to: localhost
+  connection: local
   vars:
     ansible_connection: local
+    ansible_remote_tmp: /tmp/.ansible-ludus-so
     ansible_python_interpreter: "{{ ansible_playbook_python }}"
   become: false
   register: ludus_so_net1_add
@@ -265,8 +271,10 @@
     status_code: [200]
     validate_certs: false
   delegate_to: localhost
+  connection: local
   vars:
     ansible_connection: local
+    ansible_remote_tmp: /tmp/.ansible-ludus-so
     ansible_python_interpreter: "{{ ansible_playbook_python }}"
   become: false
   register: ludus_so_net1_mtu_fix
@@ -284,8 +292,10 @@
     status_code: [200]
     validate_certs: false
   delegate_to: localhost
+  connection: local
   vars:
     ansible_connection: local
+    ansible_remote_tmp: /tmp/.ansible-ludus-so
     ansible_python_interpreter: "{{ ansible_playbook_python }}"
   become: false
   register: ludus_so_net1_spec_update
@@ -330,8 +340,10 @@
   args:
     executable: /bin/bash
   delegate_to: localhost
+  connection: local
   vars:
     ansible_connection: local
+    ansible_remote_tmp: /tmp/.ansible-ludus-so
     ansible_python_interpreter: "{{ ansible_playbook_python }}"
   become: true
   register: ludus_so_bridge_ageing

@@ -83,8 +83,10 @@
         validate_certs: false
       register: ludus_so_mem_pve_resources
       delegate_to: localhost
+      connection: local
       vars:
         ansible_connection: local
+        ansible_remote_tmp: /tmp/.ansible-ludus-so
         ansible_python_interpreter: "{{ ansible_playbook_python }}"
       become: false
       no_log: true
@@ -136,8 +138,10 @@
         status_code: [200]
         validate_certs: false
       delegate_to: localhost
+      connection: local
       vars:
         ansible_connection: local
+        ansible_remote_tmp: /tmp/.ansible-ludus-so
         ansible_python_interpreter: "{{ ansible_playbook_python }}"
       become: false
       no_log: true
@@ -171,8 +175,10 @@
         status_code: [200]
         validate_certs: false
       delegate_to: localhost
+      connection: local
       vars:
         ansible_connection: local
+        ansible_remote_tmp: /tmp/.ansible-ludus-so
         ansible_python_interpreter: "{{ ansible_playbook_python }}"
       become: false
       when: (ludus_so_mem_total_kib | int) < (ludus_so_mem_min_kib | int)
@@ -190,8 +196,10 @@
       retries: 24
       delay: 5
       delegate_to: localhost
+      connection: local
       vars:
         ansible_connection: local
+        ansible_remote_tmp: /tmp/.ansible-ludus-so
         ansible_python_interpreter: "{{ ansible_playbook_python }}"
       become: false
       when: (ludus_so_mem_total_kib | int) < (ludus_so_mem_min_kib | int)
@@ -205,8 +213,10 @@
         status_code: [200]
         validate_certs: false
       delegate_to: localhost
+      connection: local
       vars:
         ansible_connection: local
+        ansible_remote_tmp: /tmp/.ansible-ludus-so
         ansible_python_interpreter: "{{ ansible_playbook_python }}"
       become: false
       when: (ludus_so_mem_total_kib | int) < (ludus_so_mem_min_kib | int)
@@ -218,8 +228,10 @@
         delay: 15
         timeout: 300
       delegate_to: localhost
+      connection: local
       vars:
         ansible_connection: local
+        ansible_remote_tmp: /tmp/.ansible-ludus-so
         ansible_python_interpreter: "{{ ansible_playbook_python }}"
       when: (ludus_so_mem_total_kib | int) < (ludus_so_mem_min_kib | int)
 

@@ -5,9 +5,11 @@
     path: "{{ ludus_so_agent_cache_dir }}/{{ ludus_so_agent_installer_name }}"
   register: ludus_so_agent_cache_stat
   delegate_to: localhost
+  connection: local
   become: false
   vars:
     ansible_connection: local
+    ansible_remote_tmp: /tmp/.ansible-ludus-so
     ansible_shell_type: sh
 
 - name: Fetch installer from SO manager to controller

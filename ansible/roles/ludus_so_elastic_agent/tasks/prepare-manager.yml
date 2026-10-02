@@ -173,10 +173,12 @@
         else (ludus_so_agent_token_cmd.stdout_lines | default([]) | first | default('') | trim)
       }}
   delegate_to: localhost
+  connection: local
   delegate_facts: true
   no_log: true
   vars:
     ansible_connection: local
+    ansible_remote_tmp: /tmp/.ansible-ludus-so
     ansible_shell_type: sh
     ansible_become: false
 
@@ -184,9 +186,11 @@
   ansible.builtin.set_fact:
     ludus_so_agent_manager_id_shared: "{{ ludus_so_agent_manager_id_cmd.stdout | trim }}"
   delegate_to: localhost
+  connection: local
   delegate_facts: true
   vars:
     ansible_connection: local
+    ansible_remote_tmp: /tmp/.ansible-ludus-so
     ansible_shell_type: sh
     ansible_become: false
 
@@ -238,10 +242,12 @@
   ansible.builtin.set_fact:
     ludus_so_agent_uninstall_token_shared: "{{ ludus_so_agent_uninstall_token_cmd.stdout | default('') | trim }}"
   delegate_to: localhost
+  connection: local
   delegate_facts: true
   no_log: true
   vars:
     ansible_connection: local
+    ansible_remote_tmp: /tmp/.ansible-ludus-so
     ansible_shell_type: sh
     ansible_become: false
 
@@ -261,7 +267,9 @@
     state: directory
     mode: "0755"
   delegate_to: localhost
+  connection: local
   become: false
   vars:
     ansible_connection: local
+    ansible_remote_tmp: /tmp/.ansible-ludus-so
     ansible_shell_type: sh
