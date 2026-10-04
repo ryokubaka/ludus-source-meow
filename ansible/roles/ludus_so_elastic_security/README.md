@@ -31,7 +31,7 @@ Rules enabled by this role live in **Kibana Security → Rules**, not the SOC �
 - SOC UI (`https://<so>/`) → Sigma / ElastAlert style detections (different system)
 - Kibana rules: `https://<so>/kibana/app/security/rules`
 
-Use an analyst account that can open Kibana. Clear filters; prebuilt rules show under the Installed / Elastic rules list (**1832** after a successful run).
+Use an analyst account that can open Kibana. Clear filters; prebuilt rules show under the Installed / Elastic rules list (about **1900** after a successful run, every rule the stack offers).
 
 ## Blueprint usage
 
@@ -78,7 +78,7 @@ roles:
 
 ## Notes
 
-- The Rules UI installs prebuilt rules by adding Fleet package `security_detection_engine` to `endpoints-initial`. Enable sends `elastic-api-version: 2023-10-31` (required on Kibana 9.4) and uses one bulk call per batch. Elastic 9.4 also requires the `securitySolutionRules` enable/disable privilege, which the `so_elastic` superuser does not have; the role grants `ludus_so_detection_rules` and, if detection-engine enable is still denied, uses `POST /api/alerting/rules/_bulk_enable`. Rules Kibana rejects, usually ML rules when the manager has no ML node, stay disabled and are reported as `unenableable`. The role fails if none were enabled, or if disabled rules remain that Kibana did not reject.
+- The Rules page keeps the Elastic catalog in Fleet package `security_detection_engine`. That package alone does not install the rules, and the single Elastic Defend rule must not be treated as a finished install. The role then calls the same action as **Add Elastic rules** (`installation/_perform` with `ALL_RULES`) and enables every installed rule. This still runs when an earlier completion marker exists. Enable sends `elastic-api-version: 2023-10-31` (required on Kibana 9.4) and uses one bulk call per batch. Elastic 9.4 also requires the `securitySolutionRules` enable/disable privilege, which the `so_elastic` superuser does not have; the role grants `ludus_so_detection_rules` and, if detection-engine enable is still denied, uses `POST /api/alerting/rules/_bulk_enable`. Rules Kibana rejects, usually ML rules when the manager has no ML node, stay disabled and are reported as `unenableable`. The role fails if none were enabled, or if disabled rules remain that Kibana did not reject.
 - Marker: `/etc/ludus-so-elastic-security-complete`.
 - The SOC account is granted the SOC `superuser` role and an Elasticsearch role (`ludus-all`). That role holds every Kibana feature `.all` privilege this stack advertises, including Security Alerts and Rules, plus cluster `all` and index `all` on `*` with restricted indices allowed. It does not also grant Kibana's base `all` privilege, which causes Kibana to ignore the feature privileges. The default space is left with no disabled features, because that space otherwise hides Detection & Response, the rule list, and cases. Log out and back in after the role runs so Kibana reloads the session.
 - Trial is time-limited (~30 days).

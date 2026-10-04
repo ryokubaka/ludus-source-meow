@@ -65,10 +65,6 @@
       ansible.builtin.include_tasks: configure-windows-logs.yml
       when: ludus_so_elastic_security_configure_windows_logs | bool
 
-    - name: Install and enable prepackaged detection rules
-      ansible.builtin.include_tasks: enable-rules.yml
-      when: ludus_so_elastic_security_enable_rules | bool
-
     - name: Write completion marker
       ansible.builtin.copy:
         dest: "{{ ludus_so_elastic_security_marker }}"
@@ -82,3 +78,16 @@
           completed={{ ansible_date_time.iso8601 | default(lookup('pipe', 'date -Iseconds')) }}
         mode: "0644"
       become: true
+
+# Runs even when the completion marker exists. An earlier run can record
+# rules=true after the Fleet package is present while the Elastic rules
+# themselves were never installed. This step installs every prebuilt rule
+# and enables the ones Kibana accepts.
+- name: Install and enable prepackaged detection rules
+  when: ludus_so_elastic_security_enable_rules | bool
+  block:
+    - name: Wait for Elasticsearch before installing detection rules
+      ansible.builtin.include_tasks: wait-elasticsearch.yml
+
+    - name: Install and enable prepackaged detection rules
+      ansible.builtin.include_tasks: enable-rules.yml

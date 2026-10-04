@@ -1,9 +1,12 @@
 ---
-# Kibana 9.4 installs Elastic prebuilt rules as the Fleet package
-# security_detection_engine (the Rules UI POST /api/fleet/package_policies).
-# PUT /api/detection_engine/rules/prepackaged does not show up as that install.
-# Bulk enable still uses elastic-api-version 2023-10-31. Without that header
-# every enable is a 400, curl still exits 0, and the same disabled page is counted forever.
+# Kibana 9.4 keeps the Elastic rules catalog in Fleet package
+# security_detection_engine. Installing that package does not put the rules
+# on the Rules page. The page's "Add Elastic rules" action is
+# POST /internal/detection_engine/prebuilt_rules/installation/_perform
+# with mode ALL_RULES. A manager that already has the Elastic Defend rule
+# must not be treated as finished. Bulk enable still uses
+# elastic-api-version 2023-10-31. Without that header every enable is a 400,
+# curl still exits 0, and the same disabled page is counted forever.
 - name: Install the Elastic prebuilt rules Fleet package
   ansible.builtin.shell: |
     set -euo pipefail
@@ -58,30 +61,52 @@
       echo "installed $(jq -r '"\(.item.id) \(.item.name) \(.item.package.version)"' <<<"$resp")"
     fi
 
-    limit={{ ludus_so_elastic_security_prepackaged_pause | int }}
-    waited=0
-    total=0
-    while (( waited <= limit )); do
-      found=$(curl -sS --max-time 30 -K "$CFG" "${H[@]}" \
-        -H 'elastic-api-version: {{ ludus_so_elastic_security_api_version }}' \
-        'http://localhost:5601/api/detection_engine/rules/_find?per_page=1&page=1')
-      total=$(jq -r '.total // 0' <<<"$found")
-      echo "rules_visible=${total}"
-      if [[ "$total" != 0 && "$total" != null ]]; then
-        break
-      fi
-      sleep 5
-      waited=$((waited + 5))
-    done
-    if [[ "$total" == 0 || "$total" == null ]]; then
-      echo "${PKG} did not make any detection rules visible within ${limit}s" >&2
+    raw=$(curl -sS --max-time 900 -K "$CFG" "${H[@]}" \
+      -H 'elastic-api-version: 1' \
+      -H 'x-elastic-internal-origin: Kibana' \
+      -X POST 'http://localhost:5601/internal/detection_engine/prebuilt_rules/installation/_perform' \
+      -d '{"mode":"ALL_RULES"}' -w '\n%{http_code}')
+    code=$(tail -n1 <<<"$raw")
+    resp=$(sed '$d' <<<"$raw")
+    if [[ "$code" != 200 ]]; then
+      echo "installing prebuilt rules failed (http ${code}): $(printf '%s' "$resp" | head -c 500)" >&2
+      exit 1
+    fi
+    if ! jq -e '.summary.succeeded | type == "number"' >/dev/null <<<"$resp"; then
+      echo "install response missing summary: $(printf '%s' "$resp" | head -c 400)" >&2
+      exit 1
+    fi
+    installed_n=$(jq -r '.summary.succeeded' <<<"$resp")
+    failed_n=$(jq -r '.summary.failed' <<<"$resp")
+    echo "prebuilt_installed=${installed_n} prebuilt_failed=${failed_n}"
+    if [[ "$failed_n" != 0 ]]; then
+      echo "prebuilt install failed for ${failed_n} rules: $(jq -c '.errors[:1]' <<<"$resp" | head -c 400)" >&2
+      exit 1
+    fi
+    status=$(curl -sS --max-time 60 -K "$CFG" "${H[@]}" \
+      -H 'elastic-api-version: 1' \
+      -H 'x-elastic-internal-origin: Kibana' \
+      'http://localhost:5601/internal/detection_engine/prebuilt_rules/status')
+    if ! jq -e '.stats.num_prebuilt_rules_to_install | type == "number"' >/dev/null <<<"$status"; then
+      echo "prebuilt status failed: $(printf '%s' "$status" | head -c 400)" >&2
+      exit 1
+    fi
+    echo "prebuilt_status $(jq -c .stats <<<"$status")"
+    left=$(jq -r '.stats.num_prebuilt_rules_to_install' <<<"$status")
+    if [[ "$left" != 0 ]]; then
+      echo "${left} Elastic rules are still not installed" >&2
       exit 1
     fi
   args:
     executable: /bin/bash
   register: ludus_so_elastic_security_prepackaged
   become: true
-  changed_when: "'installed ' in (ludus_so_elastic_security_prepackaged.stdout | default(''))"
+  changed_when: >-
+    'installed ' in (ludus_so_elastic_security_prepackaged.stdout | default(''))
+    or (
+      'prebuilt_installed=' in (ludus_so_elastic_security_prepackaged.stdout | default(''))
+      and 'prebuilt_installed=0' not in (ludus_so_elastic_security_prepackaged.stdout | default(''))
+    )
 
 - name: Report prebuilt rules package
   ansible.builtin.debug:

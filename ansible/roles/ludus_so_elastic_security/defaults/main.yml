@@ -20,8 +20,9 @@ ludus_so_elastic_security_defend_user_notify: true
 ludus_so_elastic_security_configure_windows_logs: true
 ludus_so_elastic_security_windows_policy_name: windows-endpoints
 
-# Install Elastic prebuilt rules via the Fleet package the Rules UI uses,
-# then enable disabled rules. Empty version means the latest package Fleet knows.
+# Install the Fleet package that holds the Elastic rules catalog, then install
+# every prebuilt rule (the Rules page "Add Elastic rules" action) and enable
+# the ones Kibana accepts. Empty version means the latest package Fleet knows.
 ludus_so_elastic_security_enable_rules: true
 ludus_so_elastic_security_detection_engine_package: security_detection_engine
 ludus_so_elastic_security_detection_engine_version: ""
