@@ -54,8 +54,9 @@ ludus_so_elastic_security_require_so_setup: true
 ludus_so_setup_marker: /etc/ludus-so-setup-complete
 
 # SOC login created by so-setup (WEBUSER). Gets the SOC superuser role plus an
-# Elasticsearch role with every Kibana .all privilege, including Alerts and
-# Rules, and index all on restricted indices.
+# Elasticsearch role with every Kibana feature .all privilege, including
+# Alerts and Rules, index all on restricted indices, and the default space
+# left with no features disabled.
 ludus_so_elastic_security_grant_admin: true
 ludus_so_elastic_security_admin_user: "{{ ludus_so_web_user | default('onionadmin@ludus.local', true) }}"
 ludus_so_elastic_security_admin_role: ludus-all

@@ -1,8 +1,9 @@
-# Elastic 9.4 does not treat Security "all" or the reserved superuser role as
-# the Alerts and Rules features. Detection & Response, the rule list, and
-# cases then show "Privileges required". The alerts index is also restricted,
-# so a "*" index privilege does not cover it unless restricted indices are
-# allowed. Build that role from the .all privileges this stack advertises.
+# Elastic 9.4 keeps Detection & Response, the rule list, and cases behind the
+# Alerts, Rules, and Cases features. Two things hide them from the SOC account:
+# a Kibana role that also has the base "all" privilege (Kibana then ignores the
+# feature privileges), and the default space, which ships with those features
+# disabled. Grant every feature .all privilege without the base privilege, allow
+# the restricted alerts index, and leave the default space with nothing disabled.
 
 - name: Grant SOC superuser and every Kibana privilege
   ansible.builtin.shell: |
@@ -20,14 +21,12 @@
       echo "Kibana privilege lookup failed: $(printf '%s' "$priv_json" | head -c 400)" >&2
       exit 1
     fi
-    # Elastic 9.4 split Security into Rules and Alerts. A parent Security
-    # privilege does not open Detection & Response, the rule list, or cases.
-    # Keep only full (.all) feature privileges so a .read entry cannot win.
+    # Feature privileges only. The base "all" privilege makes Kibana ignore
+    # them, and a .read entry can hide the matching .all entry.
     privs=$(jq -c '
       .["kibana-.kibana"]
       | keys
-      | map(select(. == "all" or endswith(".all")))
-      | map(select(startswith("reserved") | not))
+      | map(select(endswith(".all") and (startswith("reserved") | not)))
     ' <<<"$priv_json")
     echo "security_solution_all=$(jq -r '[.[] | select(test("securitySolution"))] | join(",")' <<<"$privs")"
     if ! jq -e 'map(select(test("securitySolutionAlerts"))) | length > 0' >/dev/null <<<"$privs"; then
@@ -117,12 +116,39 @@
     else
       echo "conf_roles=present"
     fi
+
+    space_json=$(curl -sS -k -K "$CFG" \
+      -H 'kbn-xsrf: true' \
+      -H 'elastic-api-version: 2023-10-31' \
+      http://127.0.0.1:5601/api/spaces/space/default)
+    if ! jq -e '.id == "default"' >/dev/null <<<"$space_json"; then
+      echo "Kibana space lookup failed: $(printf '%s' "$space_json" | head -c 400)" >&2
+      exit 1
+    fi
+    disabled_n=$(jq '.disabledFeatures | length' <<<"$space_json")
+    if [[ "$disabled_n" != "0" ]]; then
+      space_put=$(curl -sS -k -K "$CFG" -w '\n%{http_code}' \
+        -X PUT http://127.0.0.1:5601/api/spaces/space/default \
+        -H 'kbn-xsrf: true' \
+        -H 'elastic-api-version: 2023-10-31' \
+        -H 'Content-Type: application/json' \
+        --data-binary "$(jq 'del(._reserved) | .disabledFeatures = []' <<<"$space_json")")
+      space_code=$(tail -n1 <<<"$space_put")
+      if [[ "$space_code" != "200" ]]; then
+        echo "opening the default Kibana space failed (http ${space_code}): $(printf '%s' "$space_put" | head -c 400)" >&2
+        exit 1
+      fi
+      echo "space_features=opened"
+    else
+      echo "space_features=open"
+    fi
   args:
     executable: /bin/bash
   register: ludus_so_elastic_security_admin_grant
   changed_when: >-
     '=added' in (ludus_so_elastic_security_admin_grant.stdout | default(''))
     or 'conf_roles=copied' in (ludus_so_elastic_security_admin_grant.stdout | default(''))
+    or 'space_features=opened' in (ludus_so_elastic_security_admin_grant.stdout | default(''))
   become: true
 
 - name: Report SOC privilege grant

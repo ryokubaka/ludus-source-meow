@@ -21,6 +21,8 @@ bump is not a patch. Do not invent a version heading on a feature branch.
 
 ## [Unreleased]
 
+- [Fix] **`ludus_so_elastic_security` 1.0.10** — Open Detection & Response, the rule list, and cases for `onionadmin@ludus.local`. The default Kibana space was hiding those features, and a role that also had Kibana's base `all` privilege never received them.
+
 ## [1.2.13] - 2026-10-04
 
 - [Fix] **`ludus_so_elastic_security` 1.0.9** — Give `onionadmin@ludus.local` every Kibana `.all` privilege, including Security Alerts and Rules, and read access to restricted indices. Elastic 9.4 otherwise shows "Privileges required" on Detection & Response, the rule list, and cases.
