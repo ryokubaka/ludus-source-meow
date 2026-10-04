@@ -21,6 +21,8 @@ bump is not a patch. Do not invent a version heading on a feature branch.
 
 ## [Unreleased]
 
+## [1.2.15] - 2026-10-04
+
 - [Fix] **`ludus_so_elastic_security` 1.0.11** — Install and enable every Elastic detection rule. Adding the Fleet package left only the Elastic Defend rule on the Rules page; the role now runs the same "Add Elastic rules" install and still does it when an earlier completion marker exists.
 
 ## [1.2.14] - 2026-10-04
