@@ -1,8 +1,8 @@
-# Elastic 9.4 does not treat the reserved superuser role as every Kibana
-# sub-feature. The Security dashboards then show "Privileges required".
-# Build a role from the privileges this stack actually advertises, keep it in
-# the local salt tree so so-elasticsearch-roles-load restores it, and attach
-# it through so-user so the next SOC sync does not drop the mapping.
+# Elastic 9.4 does not treat Security "all" or the reserved superuser role as
+# the Alerts and Rules features. Detection & Response, the rule list, and
+# cases then show "Privileges required". The alerts index is also restricted,
+# so a "*" index privilege does not cover it unless restricted indices are
+# allowed. Build that role from the .all privileges this stack advertises.
 
 - name: Grant SOC superuser and every Kibana privilege
   ansible.builtin.shell: |
@@ -20,9 +20,33 @@
       echo "Kibana privilege lookup failed: $(printf '%s' "$priv_json" | head -c 400)" >&2
       exit 1
     fi
-    jq -n --argjson privs "$(jq -c '.["kibana-.kibana"] | keys' <<<"$priv_json")" '{
+    # Elastic 9.4 split Security into Rules and Alerts. A parent Security
+    # privilege does not open Detection & Response, the rule list, or cases.
+    # Keep only full (.all) feature privileges so a .read entry cannot win.
+    privs=$(jq -c '
+      .["kibana-.kibana"]
+      | keys
+      | map(select(. == "all" or endswith(".all")))
+      | map(select(startswith("reserved") | not))
+    ' <<<"$priv_json")
+    echo "security_solution_all=$(jq -r '[.[] | select(test("securitySolution"))] | join(",")' <<<"$privs")"
+    if ! jq -e 'map(select(test("securitySolutionAlerts"))) | length > 0' >/dev/null <<<"$privs"; then
+      echo "this stack did not advertise a Security Alerts .all privilege" >&2
+      jq -r '.["kibana-.kibana"] | keys[] | select(test("securitySolution"))' <<<"$priv_json" >&2
+      exit 1
+    fi
+    if ! jq -e 'map(select(test("securitySolutionRules"))) | length > 0' >/dev/null <<<"$privs"; then
+      echo "this stack did not advertise a Security Rules .all privilege" >&2
+      jq -r '.["kibana-.kibana"] | keys[] | select(test("securitySolution"))' <<<"$priv_json" >&2
+      exit 1
+    fi
+    jq -n --argjson privs "$privs" '{
       cluster: ["all"],
-      indices: [{names: ["*"], privileges: ["all"]}],
+      indices: [{
+        names: ["*"],
+        privileges: ["all"],
+        allow_restricted_indices: true
+      }],
       applications: [{
         application: "kibana-.kibana",
         privileges: $privs,

@@ -73,13 +73,13 @@ roles:
 | `ludus_so_elastic_security_api_version` | `2023-10-31` | `elastic-api-version` for Kibana 9 detection-engine routes |
 | `ludus_so_elastic_security_prepackaged_pause` | `120` | Seconds to wait for rules to appear after the Fleet package POST |
 | `ludus_so_elastic_security_force` | `false` | Re-run when marker exists |
-| `ludus_so_elastic_security_grant_admin` | `true` | Give the SOC account SOC `superuser` and every Kibana privilege |
+| `ludus_so_elastic_security_grant_admin` | `true` | Give the SOC account SOC `superuser` and every Kibana `.all` privilege, including Security Alerts and Rules |
 | `ludus_so_elastic_security_admin_user` | `onionadmin@ludus.local` | Account to grant. Follows `ludus_so_web_user` when that is set |
 
 ## Notes
 
 - The Rules UI installs prebuilt rules by adding Fleet package `security_detection_engine` to `endpoints-initial`. Enable sends `elastic-api-version: 2023-10-31` (required on Kibana 9.4) and uses one bulk call per batch. Elastic 9.4 also requires the `securitySolutionRules` enable/disable privilege, which the `so_elastic` superuser does not have; the role grants `ludus_so_detection_rules` and, if detection-engine enable is still denied, uses `POST /api/alerting/rules/_bulk_enable`. Rules Kibana rejects, usually ML rules when the manager has no ML node, stay disabled and are reported as `unenableable`. The role fails if none were enabled, or if disabled rules remain that Kibana did not reject.
 - Marker: `/etc/ludus-so-elastic-security-complete`.
-- The SOC account is granted the SOC `superuser` role and an Elasticsearch role (`ludus-all`) that holds every Kibana privilege this stack advertises, plus cluster and index `all`. Elastic 9.4 otherwise shows "Privileges required" on the Security dashboards. Log out and back in after the role runs so Kibana reloads the session.
+- The SOC account is granted the SOC `superuser` role and an Elasticsearch role (`ludus-all`). That role holds every Kibana `.all` privilege this stack advertises, including Security Alerts and Rules, plus cluster `all` and index `all` on `*` with restricted indices allowed. Elastic 9.4 otherwise shows "Privileges required" on Detection & Response, the rule list, and cases. Log out and back in after the role runs so Kibana reloads the session.
 - Trial is time-limited (~30 days).
 - After Defend policy change, agents pick up policy on next check-in (usually ≤ a few minutes).
