@@ -22,6 +22,7 @@ bump is not a patch. Do not invent a version heading on a feature branch.
 ## [Unreleased]
 
 - [Fix] **`ludus_securityonion` 1.2.14** — Controller tasks (`delegate_to: localhost`) pick a temp directory this process can create, and run that helper with `bash`. The Ludus service has `ProtectHome=read-only`, and role install leaves the helper mode `644`, so a direct exec was permission denied and the Proxmox API call never ran. A range user running outside that service still uses their own home. `ludus_so_elastic_agent` 1.0.11 and `ludus_sysmon` 1.0.5 use the same helper.
+- [Fix] **`ludus_securityonion` 1.2.15** — Attach the sniff NIC to the same bridge as the management NIC. On an SDN range that bridge is `rN`, not `vmbr10xx`, and hotplug onto the missing `vmbr` failed. A sniff NIC left on the old bridge is moved. Hub mode accepts an `rN` vnet and does not reload every bridge when it cannot write `ageing_time`.
 
 ## [1.2.17] - 2026-10-28
 

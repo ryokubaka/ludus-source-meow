@@ -28,7 +28,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-BRIDGE_RE = re.compile(r"^vmbr[0-9]+$")
+BRIDGE_RE = re.compile(r"^(?:vmbr[0-9]+|r[0-9]+)$")
 HOST_RE = re.compile(r"^[A-Za-z0-9._:-]+$")
 IFACE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,30}$")
 CONDONE_LINE = "bridge-ports-condone-regex ^(tap|fwpr|fwln|veth)"
@@ -335,6 +335,20 @@ def set_ageing(url: str, auth: str, node: str, bridge: str, vm_names: list[str])
         print(f"bridge={bridge} node={node or 'local'} ageing=0 changed=no method=present")
         return 0
     method = write_local(path)
+    if method is None and re.fullmatch(r"r[0-9]+", bridge):
+        # SDN vnets are not classic ifupdown bridges. Reloading every
+        # bridge through the node network API drops live taps.
+        print(
+            f"bridge={bridge} node={node or 'local'} "
+            f"ageing={before if before is not None else 'unknown'} "
+            "changed=no method=skipped"
+        )
+        print(
+            f"Could not set hub mode on SDN vnet {bridge}. "
+            f"On the Proxmox node run: echo 0 > /sys/class/net/{bridge}/bridge/ageing_time",
+            file=sys.stderr,
+        )
+        return 0
     if method is None:
         if not node:
             node = find_node(api_base(url), auth, vm_names)
