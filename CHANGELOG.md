@@ -21,6 +21,8 @@ bump is not a patch. Do not invent a version heading on a feature branch.
 
 ## [Unreleased]
 
+## [1.2.16] - 2026-10-28
+
 - [Fix] **`ludus_securityonion` 1.2.10** — Create `/etc/systemd/system/so-boot-highstate.service.d` before writing the Fleet policy drop-in. A fresh install has no drop-in directory, and the copy task failed the deploy.
 
 ## [1.2.15] - 2026-10-04
