@@ -21,7 +21,7 @@ bump is not a patch. Do not invent a version heading on a feature branch.
 
 ## [Unreleased]
 
-- [Fix] **`ludus_securityonion` 1.2.13** — Controller tasks (`delegate_to: localhost`) pick a temp directory this process can create. The Ludus service has `ProtectHome=read-only`, so module files under the service user's home made the Proxmox API call unreachable. A range user running outside that service still uses their own home. `ludus_so_elastic_agent` 1.0.10 and `ludus_sysmon` 1.0.4 use the same directory.
+- [Fix] **`ludus_securityonion` 1.2.14** — Controller tasks (`delegate_to: localhost`) pick a temp directory this process can create, and run that helper with `bash`. The Ludus service has `ProtectHome=read-only`, and role install leaves the helper mode `644`, so a direct exec was permission denied and the Proxmox API call never ran. A range user running outside that service still uses their own home. `ludus_so_elastic_agent` 1.0.11 and `ludus_sysmon` 1.0.5 use the same helper.
 
 ## [1.2.17] - 2026-10-28
 

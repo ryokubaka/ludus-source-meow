@@ -4,7 +4,8 @@ ludus_so_agent_manager: "{{ range_id }}-so"
 
 # Module files for delegate_to: localhost. The Ludus service has
 # ProtectHome=read-only, and a range user cannot write /opt/ludus/ansible/tmp.
-ludus_controller_remote_tmp: "{{ lookup('ansible.builtin.pipe', role_path + '/files/controller-remote-tmp.sh') | trim }}"
+# bash, not a direct exec: role install leaves this file mode 644.
+ludus_controller_remote_tmp: "{{ lookup('ansible.builtin.pipe', 'bash ' ~ ((role_path + '/files/controller-remote-tmp.sh') | quote)) | trim }}"
 
 # Override manager IP when inventory ansible_host is wrong/missing
 ludus_so_agent_manager_ip: ""
