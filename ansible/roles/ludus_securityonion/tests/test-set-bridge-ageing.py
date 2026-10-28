@@ -137,18 +137,147 @@ def test_all_fail() -> int:
             {
                 "PATH": f"{bindir}:{os.environ.get('PATH', '')}",
                 "LUDUS_SO_PVE_AUTH": "token",
-                "LUDUS_SO_PVE_URL": "https://minipve:8006",
+                "LUDUS_SO_PVE_URL": "https://127.0.0.1:9",
                 "LUDUS_SO_VMBR": "vmbr1004",
                 "LUDUS_SO_PVE_NODE": "minipve",
                 "LUDUS_SO_SYSFS_ROOT": str(root / "missing"),
+                "LUDUS_SO_IFUPDOWN_BRIDGE": str(root / "missing-bridge.py"),
+                "LUDUS_SO_HTTP_TIMEOUT": "1",
             }
         )
         text = (proc.stderr or "") + (proc.stdout or "")
         if proc.returncode == 0 or "ageing=0" in proc.stdout:
             return fail(f"failure was reported as success: {text}")
-        if "login prompt" not in text or "root SSH failed" not in text:
+        if "login prompt" not in text or "root SSH failed" not in text or "not reloaded" not in text:
             return fail(text)
     print("PASS: missing root access fails instead of pretending the bridge is a hub")
+    return 0
+
+
+def test_api_without_local_sysfs() -> int:
+    """The Ludus host often cannot see the Proxmox bridge. The API still sets hub mode."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        seen: list[str] = []
+
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self, fmt: str, *args: object) -> None:
+                return
+
+            def _json(self, code: int, payload: dict) -> None:
+                raw = json.dumps(payload).encode()
+                self.send_response(code)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(raw)))
+                self.end_headers()
+                self.wfile.write(raw)
+
+            def do_GET(self) -> None:  # noqa: N802
+                path = self.path.split("?", 1)[0].rstrip("/")
+                seen.append("GET " + path)
+                if path.endswith("/version"):
+                    self._json(200, {"data": {"version": "8.4.1"}})
+                    return
+                if path.endswith("/network"):
+                    self._json(200, {"data": [{"iface": "vmbr1004", "type": "bridge"}]})
+                    return
+                if "/tasks/" in path:
+                    self._json(200, {"data": {"status": "stopped", "exitstatus": "OK"}})
+                    return
+                self._json(404, {"errors": path})
+
+            def do_PUT(self) -> None:  # noqa: N802
+                length = int(self.headers.get("Content-Length") or 0)
+                self.rfile.read(length)
+                path = self.path.split("?", 1)[0].rstrip("/")
+                seen.append("PUT " + path)
+                if path.endswith("/network"):
+                    self._json(200, {"data": "UPID:rocky:001:reload"})
+                    return
+                self._json(200, {"data": None})
+
+        bindir = root / "bin"
+        bindir.mkdir()
+        write_exec(bindir / "ssh", "#!/bin/bash\nexit 255\n")
+        write_exec(bindir / "sudo", "#!/bin/bash\nexit 1\n")
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            port = server.server_address[1]
+            proc = run_script(
+                {
+                    "PATH": f"{bindir}:{os.environ.get('PATH', '')}",
+                    "LUDUS_SO_PVE_AUTH": "PVEAPIToken=token",
+                    "LUDUS_SO_PVE_URL": f"http://127.0.0.1:{port}",
+                    "LUDUS_SO_VMBR": "vmbr1004",
+                    "LUDUS_SO_PVE_NODE": "rocky",
+                    "LUDUS_SO_SYSFS_ROOT": str(root / "missing"),
+                    "LUDUS_SO_IFUPDOWN_BRIDGE": str(root / "missing-bridge.py"),
+                    "LUDUS_SO_HTTP_TIMEOUT": "5",
+                }
+            )
+        finally:
+            server.shutdown()
+        text = (proc.stdout or "") + (proc.stderr or "")
+        if proc.returncode != 0 or "method=api" not in (proc.stdout or "") or "reload=OK" not in (proc.stdout or ""):
+            return fail(text)
+        if not any(item.startswith("PUT ") and item.endswith("/network/vmbr1004") for item in seen):
+            return fail(f"API did not update the bridge: {seen}")
+    print("PASS: a controller that cannot see the bridge sets hub mode through the API")
+    return 0
+
+
+def test_old_pve_does_not_reload() -> int:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        reloads = {"n": 0}
+
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self, fmt: str, *args: object) -> None:
+                return
+
+            def _json(self, payload: dict) -> None:
+                raw = json.dumps(payload).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(raw)))
+                self.end_headers()
+                self.wfile.write(raw)
+
+            def do_GET(self) -> None:  # noqa: N802
+                self._json({"data": {"version": "6.1.0"}})
+
+            def do_PUT(self) -> None:  # noqa: N802
+                reloads["n"] += 1
+                self._json({"data": None})
+
+        bindir = root / "bin"
+        bindir.mkdir()
+        write_exec(bindir / "ssh", "#!/bin/bash\nexit 255\n")
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            port = server.server_address[1]
+            proc = run_script(
+                {
+                    "PATH": f"{bindir}:{os.environ.get('PATH', '')}",
+                    "LUDUS_SO_PVE_AUTH": "PVEAPIToken=token",
+                    "LUDUS_SO_PVE_URL": f"http://127.0.0.1:{port}",
+                    "LUDUS_SO_VMBR": "vmbr1004",
+                    "LUDUS_SO_PVE_NODE": "rocky",
+                    "LUDUS_SO_SYSFS_ROOT": str(root / "missing"),
+                    "LUDUS_SO_IFUPDOWN_BRIDGE": str(root / "missing-bridge.py"),
+                    "LUDUS_SO_HTTP_TIMEOUT": "5",
+                }
+            )
+        finally:
+            server.shutdown()
+        text = (proc.stdout or "") + (proc.stderr or "")
+        if proc.returncode == 0 or reloads["n"] != 0 or "not reloaded" not in text:
+            return fail(f"reloads={reloads['n']} {text}")
+    print("PASS: an old Proxmox node is not reloaded when tap-keep cannot be confirmed")
     return 0
 
 
@@ -409,6 +538,8 @@ def main() -> int:
         test_sudo,
         test_ssh,
         test_all_fail,
+        test_api_without_local_sysfs,
+        test_old_pve_does_not_reload,
         test_already_hub,
         test_api_keeps_other_bridges,
         test_api_drop_fails,

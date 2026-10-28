@@ -21,6 +21,8 @@ bump is not a patch. Do not invent a version heading on a feature branch.
 
 ## [Unreleased]
 
+- [Fix] **`ludus_securityonion` 1.2.11** — Set range-bridge hub mode through the Proxmox API when the Ludus host cannot see the bridge. The task was failing the deploy after sudo and root SSH were unavailable, before the API token was used. A node older than Proxmox 7 is left alone because that reload can drop VM taps.
+
 ## [1.2.16] - 2026-10-28
 
 - [Fix] **`ludus_securityonion` 1.2.10** — Create `/etc/systemd/system/so-boot-highstate.service.d` before writing the Fleet policy drop-in. A fresh install has no drop-in directory, and the copy task failed the deploy.

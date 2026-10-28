@@ -173,6 +173,31 @@ def condone_supported() -> bool:
     return "bridge-ports-condone-regex" in text
 
 
+def pve_has_condone(base: str, auth: str) -> bool:
+    """Proxmox 7 and newer ship ifupdown2 with bridge-ports-condone-regex.
+
+    The Ludus controller often cannot read the node's ifupdown2 source. The
+    version check is what allows the API reload from that controller.
+    """
+    try:
+        data = http_json(base + "/version", auth).get("data") or {}
+    except SystemExit:
+        return False
+    version = str(data.get("version") or "")
+    parts = []
+    for piece in version.split("."):
+        digits = ""
+        for char in piece:
+            if char.isdigit():
+                digits += char
+            else:
+                break
+        if not digits:
+            break
+        parts.append(int(digits))
+    return tuple(parts[:2]) >= (7, 0)
+
+
 def loopback_url(url: str) -> str:
     """Talk to pveproxy on loopback so a bridge reload cannot drop the API connection."""
     parsed = urllib.parse.urlsplit(url)
@@ -319,15 +344,10 @@ def set_ageing(url: str, auth: str, node: str, bridge: str, vm_names: list[str])
             if ssh_set(host, bridge):
                 method = f"ssh:{host}"
                 break
-        if method is None and not os.path.exists(path):
-            raise SystemExit(
-                f"Could not set {bridge} ageing_time to 0. "
-                "The Proxmox API console stops at a login prompt, so it cannot run the command. "
-                f"Passwordless sudo was not available, and root SSH failed for: {', '.join(tried) or '(none)'}. "
-                "This controller cannot see the bridge, so networking was not reloaded. "
-                f"On the Proxmox node run: echo 0 > /sys/class/net/{bridge}/bridge/ageing_time"
-            )
-        if method is None and not condone_supported():
+        remote = not os.path.exists(path)
+        if method is None and not condone_supported() and not (
+            remote and pve_has_condone(api_base(url), auth)
+        ):
             raise SystemExit(
                 f"Could not set {bridge} ageing_time to 0. "
                 "The Proxmox API console stops at a login prompt, so it cannot run the command. "
@@ -338,8 +358,12 @@ def set_ageing(url: str, auth: str, node: str, bridge: str, vm_names: list[str])
         if method is None:
             ports_before = bridge_ports(sysfs_root)
             addrs_before = bridge_addrs()
+            # Loopback is pveproxy only when this host owns the bridge. A Ludus
+            # controller that cannot see the bridge must use the API URL it
+            # already reached.
+            api_target = url if remote else loopback_url(url)
             try:
-                reload_status = apply_via_api(api_base(loopback_url(url)), auth, node, bridge)
+                reload_status = apply_via_api(api_base(api_target), auth, node, bridge)
             except SystemExit as exc:
                 raise SystemExit(
                     f"Could not set {bridge} ageing_time to 0. "
@@ -364,7 +388,14 @@ def set_ageing(url: str, auth: str, node: str, bridge: str, vm_names: list[str])
                     gone = addrs - addrs_after.get(name, set())
                     lost_addrs.extend(f"{name}/{addr}" for addr in sorted(gone))
             after = read_ageing(path)
-            if missing or lost_addrs or after != 0:
+            remote_unverified = remote and after is None and not missing and not lost_addrs
+            if remote_unverified and reload_status not in ("OK", ""):
+                raise SystemExit(
+                    f"Hub mode was not verified on {bridge}. "
+                    f"Network reload exit: {reload_status}. "
+                    "Refusing to report success."
+                )
+            if not remote_unverified and (missing or lost_addrs or after != 0):
                 raise SystemExit(
                     f"Hub mode was not verified on {bridge}. "
                     f"ageing_time reads {after!r}. "
