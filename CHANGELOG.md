@@ -21,6 +21,8 @@ bump is not a patch. Do not invent a version heading on a feature branch.
 
 ## [Unreleased]
 
+- [Fix] **`ludus_securityonion` 1.2.12** — Controller tasks take the Ansible user's home from the passwd entry for the current uid. Ludus runs the range deploy as that user while leaving `HOME=/root`, so module files were written under `/root/.goad/ansible-remote`, the range user could not create that directory, and the Proxmox API call was unreachable. `ludus_so_elastic_agent` 1.0.9 and `ludus_sysmon` 1.0.3 use the same directory.
+
 ## [1.2.17] - 2026-10-28
 
 - [Fix] **`ludus_securityonion` 1.2.11** — Set range-bridge hub mode through the Proxmox API when the Ludus host cannot see the bridge. The task was failing the deploy after sudo and root SSH were unavailable, before the API token was used. A node older than Proxmox 7 is left alone because that reload can drop VM taps.

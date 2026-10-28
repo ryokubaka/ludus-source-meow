@@ -2,6 +2,10 @@
 # Install directory on the Windows guest. Sysmon copies itself to System32 on -i.
 ludus_sysmon_install_dir: 'C:\ProgramData\ludus\Sysmon'
 
+# Module files for delegate_to: localhost. The process uid is the range user.
+# Ludus leaves HOME=/root from the service, so env HOME is not this user's home.
+ludus_controller_remote_tmp: "{{ (lookup('ansible.builtin.pipe', 'getent passwd $(id -u) | cut -d: -f6') | trim) }}/.goad/ansible-remote"
+
 # Live Sysinternals zip. Downloaded on the Ansible controller — range guests
 # have testing.block_internet and cannot fetch this themselves.
 ludus_sysmon_url: https://download.sysinternals.com/files/Sysmon.zip

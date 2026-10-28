@@ -2,6 +2,10 @@
 # Install type passed to so-setup test_profile: standalone (default) or eval
 ludus_so_install_type: standalone
 
+# Module files for delegate_to: localhost. The process uid is the range user.
+# Ludus leaves HOME=/root from the service, so env HOME is not this user's home.
+ludus_controller_remote_tmp: "{{ (lookup('ansible.builtin.pipe', 'getent passwd $(id -u) | cut -d: -f6') | trim) }}/.goad/ansible-remote"
+
 # When set, refuse to run unless the ISO tree VERSION starts with this release
 # (for example "3.3" matches 3.3.0). Empty skips the check so 2.4 and 3.2 labs
 # keep using this role.

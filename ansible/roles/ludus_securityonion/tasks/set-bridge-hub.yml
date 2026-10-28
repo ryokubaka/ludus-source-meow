@@ -105,7 +105,7 @@
   connection: local
   vars:
     ansible_connection: local
-    ansible_remote_tmp: "{{ lookup('env', 'HOME') }}/.goad/ansible-remote"
+    ansible_remote_tmp: "{{ ludus_controller_remote_tmp }}"
     ansible_python_interpreter: "{{ ansible_playbook_python }}"
   become: false
   register: ludus_so_bridge_ageing
