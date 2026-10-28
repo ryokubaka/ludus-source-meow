@@ -83,6 +83,47 @@ def find_node(base: str, auth: str, names: list[str]) -> str:
     return node
 
 
+def nic_bridge(base: str, auth: str, node: str, names: list[str]) -> str:
+    """Bridge on the VM's sniff NIC, or its management NIC if sniff is absent."""
+    try:
+        data = http_json(base + "/cluster/resources?type=vm", auth).get("data") or []
+    except SystemExit:
+        return ""
+    if not isinstance(data, list):
+        return ""
+    wanted = {name for name in names if name}
+    matches = [
+        vm
+        for vm in data
+        if vm.get("type") == "qemu"
+        and vm.get("name") in wanted
+        and (not node or vm.get("node") == node)
+    ]
+    if not matches:
+        matches = [
+            vm
+            for vm in data
+            if vm.get("type") == "qemu"
+            and str(vm.get("name") or "").endswith("-so")
+            and (not node or vm.get("node") == node)
+        ]
+    if not matches:
+        return ""
+    vm = matches[0]
+    try:
+        cfg = http_json(
+            f"{base}/nodes/{urllib.parse.quote(str(vm.get('node') or node))}/qemu/{vm.get('vmid')}/config",
+            auth,
+        ).get("data") or {}
+    except SystemExit:
+        return ""
+    for key in ("net1", "net0"):
+        for part in str(cfg.get(key) or "").split(","):
+            if part.startswith("bridge=") and BRIDGE_RE.match(part[7:]):
+                return part[7:]
+    return ""
+
+
 def ageing_path(bridge: str, sysfs_root: str) -> str:
     return os.path.join(sysfs_root, "class", "net", bridge, "bridge", "ageing_time")
 
@@ -343,15 +384,21 @@ def set_ageing(url: str, auth: str, node: str, bridge: str, vm_names: list[str])
             f"ageing={before if before is not None else 'unknown'} "
             "changed=no method=skipped"
         )
-        print(
-            f"Could not set hub mode on SDN vnet {bridge}. "
-            f"On the Proxmox node run: echo 0 > /sys/class/net/{bridge}/bridge/ageing_time",
-            file=sys.stderr,
-        )
         return 0
+    if method is None and not node:
+        node = find_node(api_base(url), auth, vm_names)
+    if method is None and not os.path.exists(path):
+        alt = nic_bridge(api_base(url), auth, node, vm_names)
+        if alt and alt != bridge:
+            bridge = alt
+            path = ageing_path(bridge, sysfs_root)
+            if re.fullmatch(r"r[0-9]+", bridge):
+                print(
+                    f"bridge={bridge} node={node or 'local'} "
+                    "ageing=unknown changed=no method=skipped"
+                )
+                return 0
     if method is None:
-        if not node:
-            node = find_node(api_base(url), auth, vm_names)
         tried = []
         for host in ssh_targets(url, node):
             tried.append(host)

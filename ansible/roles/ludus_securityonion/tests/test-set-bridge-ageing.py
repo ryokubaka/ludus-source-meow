@@ -228,6 +228,74 @@ def test_api_without_local_sysfs() -> int:
     return 0
 
 
+def test_missing_vmbr_uses_vm_bridge() -> int:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        reloads = {"n": 0}
+
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self, fmt: str, *args: object) -> None:
+                return
+
+            def _json(self, payload: dict) -> None:
+                raw = json.dumps(payload).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(raw)))
+                self.end_headers()
+                self.wfile.write(raw)
+
+            def do_GET(self) -> None:  # noqa: N802
+                path = self.path.split("?", 1)[0]
+                if path.startswith("/api2/json/cluster/resources"):
+                    self._json({"data": [{"type": "qemu", "name": "seconion33-so", "node": "rocky", "vmid": 120}]})
+                    return
+                if path.endswith("/qemu/120/config"):
+                    self._json({"data": {"net0": "virtio=AA:BB:CC:DD:EE:FF,bridge=r4,firewall=1", "net1": "virtio=AA:BB:CC:DD:EE:F0,bridge=r4,tag=10,firewall=0"}})
+                    return
+                if path.endswith("/network"):
+                    self._json({"data": [{"iface": "r4", "type": "vnet"}]})
+                    return
+                self._json({"data": {"version": "8.4.1"}})
+
+            def do_PUT(self) -> None:  # noqa: N802
+                reloads["n"] += 1
+                length = int(self.headers.get("Content-Length") or 0)
+                self.rfile.read(length)
+                self._json({"data": None})
+
+        bindir = root / "bin"
+        bindir.mkdir()
+        write_exec(bindir / "ssh", "#!/bin/bash\nexit 255\n")
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            port = server.server_address[1]
+            proc = run_script(
+                {
+                    "PATH": f"{bindir}:{os.environ.get('PATH', '')}",
+                    "LUDUS_SO_PVE_AUTH": "PVEAPIToken=token",
+                    "LUDUS_SO_PVE_URL": f"http://127.0.0.1:{port}",
+                    "LUDUS_SO_VMBR": "vmbr1004",
+                    "LUDUS_SO_PVE_NODE": "rocky",
+                    "LUDUS_SO_VM_NAMES": "seconion33-so",
+                    "LUDUS_SO_SYSFS_ROOT": str(root / "missing"),
+                    "LUDUS_SO_IFUPDOWN_BRIDGE": str(root / "missing-bridge.py"),
+                    "LUDUS_SO_HTTP_TIMEOUT": "5",
+                }
+            )
+        finally:
+            server.shutdown()
+        text = (proc.stdout or "") + (proc.stderr or "")
+        if proc.returncode != 0 or "bridge=r4" not in (proc.stdout or "") or "method=skipped" not in (proc.stdout or ""):
+            return fail(text)
+        if reloads["n"] != 0:
+            return fail(f"SDN vnet was reloaded: {text}")
+    print("PASS: a missing vmbr follows the VM bridge and does not reload an SDN vnet")
+    return 0
+
+
 def test_old_pve_does_not_reload() -> int:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -539,6 +607,7 @@ def main() -> int:
         test_ssh,
         test_all_fail,
         test_api_without_local_sysfs,
+        test_missing_vmbr_uses_vm_bridge,
         test_old_pve_does_not_reload,
         test_already_hub,
         test_api_keeps_other_bridges,
