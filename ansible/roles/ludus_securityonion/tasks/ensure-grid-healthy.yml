@@ -51,6 +51,13 @@
       WantedBy=multi-user.target
   become: true
 
+- name: Create the boot highstate drop-in directory
+  ansible.builtin.file:
+    path: /etc/systemd/system/so-boot-highstate.service.d
+    state: directory
+    mode: "0755"
+  become: true
+
 - name: Order boot highstate after the Fleet Server policy
   ansible.builtin.copy:
     dest: /etc/systemd/system/so-boot-highstate.service.d/ludus-fleet-policy.conf
