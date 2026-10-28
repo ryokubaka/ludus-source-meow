@@ -2,9 +2,9 @@
 # Security Onion manager inventory hostname (Ludus VM name)
 ludus_so_agent_manager: "{{ range_id }}-so"
 
-# Module files for delegate_to: localhost. The process uid is the range user.
-# Ludus leaves HOME=/root from the service, so env HOME is not this user's home.
-ludus_controller_remote_tmp: "{{ (lookup('ansible.builtin.pipe', 'getent passwd $(id -u) | cut -d: -f6') | trim) }}/.goad/ansible-remote"
+# Module files for delegate_to: localhost. The Ludus service has
+# ProtectHome=read-only, and a range user cannot write /opt/ludus/ansible/tmp.
+ludus_controller_remote_tmp: "{{ lookup('ansible.builtin.pipe', role_path + '/files/controller-remote-tmp.sh') | trim }}"
 
 # Override manager IP when inventory ansible_host is wrong/missing
 ludus_so_agent_manager_ip: ""

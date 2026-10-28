@@ -21,7 +21,7 @@ bump is not a patch. Do not invent a version heading on a feature branch.
 
 ## [Unreleased]
 
-- [Fix] **`ludus_securityonion` 1.2.12** — Controller tasks take the Ansible user's home from the passwd entry for the current uid. Ludus runs the range deploy as that user while leaving `HOME=/root`, so module files were written under `/root/.goad/ansible-remote`, the range user could not create that directory, and the Proxmox API call was unreachable. `ludus_so_elastic_agent` 1.0.9 and `ludus_sysmon` 1.0.3 use the same directory.
+- [Fix] **`ludus_securityonion` 1.2.13** — Controller tasks (`delegate_to: localhost`) pick a temp directory this process can create. The Ludus service has `ProtectHome=read-only`, so module files under the service user's home made the Proxmox API call unreachable. A range user running outside that service still uses their own home. `ludus_so_elastic_agent` 1.0.10 and `ludus_sysmon` 1.0.4 use the same directory.
 
 ## [1.2.17] - 2026-10-28
 
