@@ -56,8 +56,9 @@ class Kibana:
             },
             method=method,
         )
+        context = ssl._create_unverified_context()
         try:
-            with urllib.request.urlopen(request, timeout=40) as response:
+            with urllib.request.urlopen(request, timeout=40, context=context) as response:
                 raw = response.read()
                 return response.status, json.loads(raw) if raw else {}
         except urllib.error.HTTPError as exc:
@@ -69,23 +70,36 @@ class Kibana:
             return exc.code, parsed
 
 
-def kibana_up(base: str) -> bool:
-    request = urllib.request.Request(base.rstrip("/") + "/api/status", method="GET")
+def probe_status(url: str, auth_header: str | None) -> tuple[int | None, str]:
+    headers = {}
+    if auth_header:
+        headers["Authorization"] = auth_header
+    request = urllib.request.Request(url, headers=headers, method="GET")
+    context = ssl._create_unverified_context()
     try:
-        with urllib.request.urlopen(request, timeout=5) as response:
-            return 200 <= response.status < 300
-    except Exception:
-        return False
+        with urllib.request.urlopen(request, timeout=8, context=context) as response:
+            return response.status, ""
+    except urllib.error.HTTPError as exc:
+        return exc.code, ""
+    except Exception as exc:
+        return None, type(exc).__name__
 
 
-def wait_for_kibana(base: str, seconds: int) -> bool:
+def wait_for_kibana(
+    candidates: list[str], seconds: int, auth_header: str | None
+) -> tuple[str | None, str]:
+    """Return the first base URL whose /api/status is 2xx, and the last failure."""
     deadline = time.time() + seconds
+    last = "connection"
     while True:
-        if kibana_up(base):
-            return True
+        for base in candidates:
+            code, err = probe_status(base.rstrip("/") + "/api/status", auth_header)
+            if code is not None and 200 <= code < 300:
+                return base.rstrip("/"), "200"
+            last = str(code) if code is not None else (err or "connection")
         if time.time() >= deadline:
-            return False
-        time.sleep(2)
+            return None, last
+        time.sleep(min(5, max(0.0, deadline - time.time())))
 
 
 def elasticsearch_output(items: list[dict]) -> str:
@@ -268,7 +282,13 @@ def main() -> int:
     parser.add_argument("--require-healthy", action="store_true")
     args = parser.parse_args()
 
-    kibana = os.environ.get("LUDUS_SO_KIBANA_URL", "http://127.0.0.1:5601")
+    configured = os.environ.get("LUDUS_SO_KIBANA_URL", "").strip()
+    # Security Onion 3 publishes 5601 and its own salt wait uses TLS without
+    # verifying the certificate. Plain HTTP is the older listener.
+    candidates = [configured] if configured else [
+        "https://127.0.0.1:5601",
+        "http://127.0.0.1:5601",
+    ]
     status_url = os.environ.get("LUDUS_SO_FLEET_STATUS_URL", "https://127.0.0.1:8220/api/status")
     curl_config = Path(os.environ.get("LUDUS_SO_CURL_CONFIG", "/opt/so/conf/elasticsearch/curl.config"))
     template = Path(
@@ -277,7 +297,9 @@ def main() -> int:
             "/opt/so/conf/elastic-fleet/integrations/fleet-server/fleet-server.json",
         )
     )
-    wait_seconds = int(os.environ.get("LUDUS_SO_KIBANA_WAIT", "120"))
+    # so-kibana's salt state waits 600s. Two minutes is not enough after the
+    # kernel reboot this role performs before the grid heal.
+    wait_seconds = int(os.environ.get("LUDUS_SO_KIBANA_WAIT", "600"))
     fleet_wait = int(os.environ.get("LUDUS_SO_FLEET_WAIT", "90"))
     docker_bin = os.environ.get("LUDUS_SO_DOCKER", "docker")
     hostname = hostname_from_env()
@@ -289,13 +311,20 @@ def main() -> int:
             return 0
         return code
 
-    if not wait_for_kibana(kibana, wait_seconds):
-        return finish(1, f"fleet-policy={policy_id} kibana=down")
+    auth_header = None
+    if curl_config.is_file():
+        try:
+            user, password = curl_user(curl_config)
+        except ValueError as exc:
+            return finish(1, f"fleet-policy={policy_id} error={exc}")
+        auth_header = basic_header(user, password)
+    kibana, last = wait_for_kibana(candidates, wait_seconds, auth_header)
+    if kibana is None:
+        return finish(1, f"fleet-policy={policy_id} kibana=down last={last}")
     if not curl_config.is_file():
         return finish(1, f"fleet-policy={policy_id} curl-config=missing")
     try:
-        user, password = curl_user(curl_config)
-        client = Kibana(kibana, basic_header(user, password))
+        client = Kibana(kibana, auth_header or "")
         code, outputs = client.call("GET", "/api/fleet/outputs")
         if code != 200:
             raise ValueError(f"list outputs failed: {outputs.get('message', code)}")
