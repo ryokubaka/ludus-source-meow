@@ -1,104 +1,20 @@
 ---
 # Kibana 9.4 keeps the Elastic rules catalog in Fleet package
 # security_detection_engine. Installing that package does not put the rules
-# on the Rules page. The page's "Add Elastic rules" action is
-# POST /internal/detection_engine/prebuilt_rules/installation/_perform
-# with mode ALL_RULES. A manager that already has the Elastic Defend rule
-# must not be treated as finished. Bulk enable still uses
+# on the Rules page. The page's "Add Elastic rules" action installs the
+# current review page. One request for every rule gets an empty reply from
+# Kibana on a standalone manager, so the helper installs a chunk at a time
+# and retries when the connection drops. Bulk enable still uses
 # elastic-api-version 2023-10-31. Without that header every enable is a 400,
 # curl still exits 0, and the same disabled page is counted forever.
 - name: Install the Elastic prebuilt rules Fleet package
-  ansible.builtin.shell: |
-    set -euo pipefail
-    CFG=/opt/so/conf/elasticsearch/curl.config
-    POL='{{ ludus_so_elastic_security_agent_policy_id }}'
-    PKG='{{ ludus_so_elastic_security_detection_engine_package }}'
-    VER='{{ ludus_so_elastic_security_detection_engine_version }}'
-    H=(-H 'kbn-xsrf: true' -H 'Content-Type: application/json')
-    api() {
-      curl -sS --max-time 120 -K "$CFG" "${H[@]}" "$@"
-    }
-
-    LIST=$(api "http://localhost:5601/api/fleet/package_policies?perPage=200")
-    if ! jq -e '.items' >/dev/null <<<"$LIST"; then
-      echo "package policy list failed: $(printf '%s' "$LIST" | head -c 400)" >&2
-      exit 1
-    fi
-    existing=$(jq -r --arg pkg "$PKG" '
-      [.items[]? | select(.package.name == $pkg)]
-      | .[0]
-      | if . == null then "" else "\(.id) \(.name) \(.package.version)" end
-    ' <<<"$LIST")
-    if [[ -n "$existing" ]]; then
-      echo "already_installed ${existing}"
-    else
-      if [[ -z "$VER" ]]; then
-        info=$(api "http://localhost:5601/api/fleet/epm/packages/${PKG}")
-        VER=$(jq -r '.item.latestVersion // .item.version // .version // empty' <<<"$info")
-      fi
-      if [[ -z "$VER" || "$VER" == null ]]; then
-        echo "could not resolve ${PKG} version: $(printf '%s' "${info:-}" | head -c 400)" >&2
-        exit 1
-      fi
-      name="${PKG}-1"
-      body=$(jq -nc --arg ver "$VER" --arg pol "$POL" --arg name "$name" --arg pkg "$PKG" '{
-        policy_ids: [$pol],
-        package: {name: $pkg, version: $ver},
-        name: $name,
-        description: "",
-        namespace: "",
-        inputs: {}
-      }')
-      raw=$(curl -sS --max-time 600 -K "$CFG" "${H[@]}" \
-        -X POST 'http://localhost:5601/api/fleet/package_policies' \
-        -d "$body" -w '\n%{http_code}')
-      code=$(tail -n1 <<<"$raw")
-      resp=$(sed '$d' <<<"$raw")
-      if [[ "$code" != 200 && "$code" != 201 ]]; then
-        echo "install ${PKG} ${VER} failed (http ${code}): $(printf '%s' "$resp" | head -c 500)" >&2
-        exit 1
-      fi
-      echo "installed $(jq -r '"\(.item.id) \(.item.name) \(.item.package.version)"' <<<"$resp")"
-    fi
-
-    raw=$(curl -sS --max-time 900 -K "$CFG" "${H[@]}" \
-      -H 'elastic-api-version: 1' \
-      -H 'x-elastic-internal-origin: Kibana' \
-      -X POST 'http://localhost:5601/internal/detection_engine/prebuilt_rules/installation/_perform' \
-      -d '{"mode":"ALL_RULES"}' -w '\n%{http_code}')
-    code=$(tail -n1 <<<"$raw")
-    resp=$(sed '$d' <<<"$raw")
-    if [[ "$code" != 200 ]]; then
-      echo "installing prebuilt rules failed (http ${code}): $(printf '%s' "$resp" | head -c 500)" >&2
-      exit 1
-    fi
-    if ! jq -e '.summary.succeeded | type == "number"' >/dev/null <<<"$resp"; then
-      echo "install response missing summary: $(printf '%s' "$resp" | head -c 400)" >&2
-      exit 1
-    fi
-    installed_n=$(jq -r '.summary.succeeded' <<<"$resp")
-    failed_n=$(jq -r '.summary.failed' <<<"$resp")
-    echo "prebuilt_installed=${installed_n} prebuilt_failed=${failed_n}"
-    if [[ "$failed_n" != 0 ]]; then
-      echo "prebuilt install failed for ${failed_n} rules: $(jq -c '.errors[:1]' <<<"$resp" | head -c 400)" >&2
-      exit 1
-    fi
-    status=$(curl -sS --max-time 60 -K "$CFG" "${H[@]}" \
-      -H 'elastic-api-version: 1' \
-      -H 'x-elastic-internal-origin: Kibana' \
-      'http://localhost:5601/internal/detection_engine/prebuilt_rules/status')
-    if ! jq -e '.stats.num_prebuilt_rules_to_install | type == "number"' >/dev/null <<<"$status"; then
-      echo "prebuilt status failed: $(printf '%s' "$status" | head -c 400)" >&2
-      exit 1
-    fi
-    echo "prebuilt_status $(jq -c .stats <<<"$status")"
-    left=$(jq -r '.stats.num_prebuilt_rules_to_install' <<<"$status")
-    if [[ "$left" != 0 ]]; then
-      echo "${left} Elastic rules are still not installed" >&2
-      exit 1
-    fi
-  args:
-    executable: /bin/bash
+  ansible.builtin.script: install-prebuilt-rules.sh
+  environment:
+    LUDUS_SO_CURL_CONFIG: /opt/so/conf/elasticsearch/curl.config
+    LUDUS_SO_AGENT_POLICY: "{{ ludus_so_elastic_security_agent_policy_id }}"
+    LUDUS_SO_DETECTION_PACKAGE: "{{ ludus_so_elastic_security_detection_engine_package }}"
+    LUDUS_SO_DETECTION_VERSION: "{{ ludus_so_elastic_security_detection_engine_version }}"
+    LUDUS_SO_RULE_CHUNK: "100"
   register: ludus_so_elastic_security_prepackaged
   become: true
   changed_when: >-
