@@ -1,0 +1,5 @@
+---
+# Adaptix v1.2 client links Qt6 Svg and Qml. The upstream role does not install them.
+ludus_adaptix_deps_packages:
+  - qt6-svg-dev
+  - qt6-declarative-dev

@@ -21,6 +21,14 @@ bump is not a patch. Do not invent a version heading on a feature branch.
 
 ## [Unreleased]
 
+- [Fix] **`ludus_adaptix_deps` 1.0.0** — Install `qt6-svg-dev` and `qt6-declarative-dev` before the Adaptix client build, and pin Adaptix to `v1.2`. The role default commit is gone from AdaptixC2, so checkout failed and was ignored, then `make client` died on the missing Qt6 Svg component.
+- [Fix] **`ludus_so_elastic_security` 1.0.12** — Install Elastic prebuilt rules a chunk at a time, and retry when Kibana closes the connection. The all-at-once install returned `curl: (52) Empty reply from server` right after the `security_detection_engine` package was added, so the Rules page stayed empty.
+- [Fix] **`ludus_securityonion` 1.2.18** — The Fleet policy task waits for Kibana the way Security Onion does. It tries `https://127.0.0.1:5601` and `http://127.0.0.1:5601` with the elastic user, and waits up to 10 minutes. The old check used plain HTTP for 2 minutes, so a guest that had just rebooted failed with `kibana=down` before `FleetServer_<hostname>` could be created.
+- [Fix] **`ludus_securityonion` 1.2.17** — Hub mode uses the bridge on the VM's sniff NIC. After setup, the role was still guessing `vmbr1004`, and the Proxmox node has no such bridge on an SDN range. An `rN` vnet is not reloaded, because that reload drops live VM taps.
+- [Fix] **`ludus_securityonion` 1.2.14** — Controller tasks (`delegate_to: localhost`) pick a temp directory this process can create, and run that helper with `bash`. The Ludus service has `ProtectHome=read-only`, and role install leaves the helper mode `644`, so a direct exec was permission denied and the Proxmox API call never ran. A range user running outside that service still uses their own home. `ludus_so_elastic_agent` 1.0.11 and `ludus_sysmon` 1.0.5 use the same helper.
+- [Fix] **`ludus_securityonion` 1.2.15** — Attach the sniff NIC to the same bridge as the management NIC. On an SDN range that bridge is `rN`, not `vmbr10xx`, and hotplug onto the missing `vmbr` failed. A sniff NIC left on the old bridge is moved. Hub mode accepts an `rN` vnet and does not reload every bridge when it cannot write `ageing_time`.
+- [Fix] **`ludus_securityonion` 1.2.16** — Do not restart Docker while sanitizing `daemon.json` if the docker unit is not installed yet. The SO template ships a broken `daemon.json` before `so-setup` installs Docker.
+
 ## [1.2.17] - 2026-10-28
 
 - [Fix] **`ludus_securityonion` 1.2.11** — Set range-bridge hub mode through the Proxmox API when the Ludus host cannot see the bridge. The task was failing the deploy after sudo and root SSH were unavailable, before the API token was used. A node older than Proxmox 7 is left alone because that reload can drop VM taps.

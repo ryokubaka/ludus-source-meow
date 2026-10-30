@@ -129,7 +129,9 @@ ludus:
       snapshot: false
       block_internet: true
     roles:
+      - name: ryokubaka.ludus_adaptix_deps
       - name: badsectorlabs.ludus_adaptix_c2
     role_vars:
       ludus_adaptix_c2_install_server: true
       ludus_adaptix_c2_install_client: true
+      ludus_adaptix_c2_version: v1.2

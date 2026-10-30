@@ -53,6 +53,97 @@
       }}
   no_log: true
 
+- name: List Proxmox VMs when hub-mode does not yet know the bridge
+  ansible.builtin.uri:
+    url: "{{ ludus_so_proxmox_url }}/api2/json/cluster/resources?type=vm"
+    method: GET
+    headers:
+      Authorization: "{{ ludus_so_pve_auth }}"
+    return_content: true
+    status_code: [200]
+    validate_certs: false
+  delegate_to: localhost
+  connection: local
+  vars:
+    ansible_connection: local
+    ansible_remote_tmp: "{{ ludus_controller_remote_tmp }}"
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  become: false
+  register: ludus_so_hub_resources
+  no_log: true
+  when: ludus_so_vmbr | default('') | length == 0
+
+- name: Collect Proxmox VM name candidates for hub-mode
+  ansible.builtin.set_fact:
+    ludus_so_pve_name_candidates: >-
+      {{
+        [
+          ludus_so_proxmox_vm_name | default('', true),
+          inventory_hostname,
+          ansible_hostname | default('', true),
+          ansible_nodename | default('', true),
+        ]
+        | select('string')
+        | reject('equalto', '')
+        | unique
+        | list
+      }}
+
+- name: Select the Security Onion VM for hub-mode
+  ansible.builtin.set_fact:
+    ludus_so_hub_vm: >-
+      {% set found = ludus_so_hub_resources.json.data
+         | selectattr('type', 'equalto', 'qemu')
+         | selectattr('name', 'defined')
+         | selectattr('name', 'in', ludus_so_pve_name_candidates | default([inventory_hostname]))
+         | list %}
+      {{ found[0] if (found | length > 0) else {} }}
+  when: ludus_so_vmbr | default('') | length == 0
+
+- name: Read the Security Onion VM NICs for hub-mode
+  ansible.builtin.uri:
+    url: "{{ ludus_so_proxmox_url }}/api2/json/nodes/{{ ludus_so_hub_vm.node }}/qemu/{{ ludus_so_hub_vm.vmid }}/config"
+    method: GET
+    headers:
+      Authorization: "{{ ludus_so_pve_auth }}"
+    return_content: true
+    status_code: [200]
+    validate_certs: false
+  delegate_to: localhost
+  connection: local
+  vars:
+    ansible_connection: local
+    ansible_remote_tmp: "{{ ludus_controller_remote_tmp }}"
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  become: false
+  register: ludus_so_hub_config
+  no_log: true
+  when:
+    - ludus_so_vmbr | default('') | length == 0
+    - ludus_so_hub_vm.node | default('') | length > 0
+
+- name: Use the sniff NIC bridge for hub-mode
+  ansible.builtin.set_fact:
+    ludus_so_pve_node: "{{ ludus_so_hub_vm.node }}"
+    ludus_so_vmbr: >-
+      {{
+        (
+          [ludus_so_hub_config.json.data.net1 | default(''), ludus_so_hub_config.json.data.net0 | default('')]
+          | map('split', ',')
+          | flatten
+          | select('match', '^bridge=')
+          | map('regex_replace', '^bridge=', '')
+          | reject('equalto', '')
+          | list
+          | first
+        )
+        | default('', true)
+      }}
+  when:
+    - ludus_so_vmbr | default('') | length == 0
+    - ludus_so_hub_config is defined
+    - not (ludus_so_hub_config.skipped | default(false))
+
 - name: Resolve the range number for hub-mode
   ansible.builtin.set_fact:
     ludus_so_range_number_resolved: >-
@@ -77,22 +168,6 @@
     ludus_so_vmbr: "vmbr{{ 1000 + (ludus_so_range_number_resolved | int) }}"
   when: ludus_so_vmbr | default('') | length == 0
 
-- name: Collect Proxmox VM name candidates for hub-mode
-  ansible.builtin.set_fact:
-    ludus_so_pve_name_candidates: >-
-      {{
-        [
-          ludus_so_proxmox_vm_name | default('', true),
-          inventory_hostname,
-          ansible_hostname | default('', true),
-          ansible_nodename | default('', true),
-        ]
-        | select('string')
-        | reject('equalto', '')
-        | unique
-        | list
-      }}
-
 - name: Set range bridge hub-mode on the Proxmox node
   ansible.builtin.script: set_bridge_ageing.py
   environment:
@@ -105,7 +180,7 @@
   connection: local
   vars:
     ansible_connection: local
-    ansible_remote_tmp: "{{ lookup('env', 'HOME') }}/.goad/ansible-remote"
+    ansible_remote_tmp: "{{ ludus_controller_remote_tmp }}"
     ansible_python_interpreter: "{{ ansible_playbook_python }}"
   become: false
   register: ludus_so_bridge_ageing

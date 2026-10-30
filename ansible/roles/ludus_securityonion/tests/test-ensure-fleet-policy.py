@@ -61,7 +61,14 @@ def handler_for(state: FleetState):
         def do_GET(self) -> None:
             path = self.path.split("?", 1)[0]
             if path == "/api/status":
+                required = getattr(state, "require_basic", None)
+                if required and self.headers.get("Authorization") != required:
+                    self._json(401, {"message": "unauthorized"})
+                    return
                 self._json(200, {"status": {"overall": {"level": "available"}}, "name": "fleet-server", "status": "HEALTHY"})
+                return
+            if path == "/fleet-ok":
+                self._json(200, {"name": "fleet-server", "status": "HEALTHY"})
                 return
             if path == "/api/fleet/outputs":
                 self._json(200, {"items": [
@@ -111,22 +118,28 @@ def handler_for(state: FleetState):
     return Handler
 
 
-def serve(state: FleetState) -> tuple[ThreadingHTTPServer, str]:
+def serve(state: FleetState, context: object | None = None) -> tuple[ThreadingHTTPServer, str]:
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler_for(state))
+    scheme = "http"
+    if context is not None:
+        server.socket = context.wrap_socket(server.socket, server_side=True)
+        scheme = "https"
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     host, port = server.server_address
-    return server, f"http://{host}:{port}"
+    return server, f"{scheme}://{host}:{port}"
 
 
-def run(url: str, config: Path, extra: list[str]) -> subprocess.CompletedProcess[str]:
+def run(url: str, config: Path, extra: list[str], fleet_status: str | None = None) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env.update({
         "LUDUS_SO_KIBANA_URL": url,
-        "LUDUS_SO_FLEET_STATUS_URL": url + "/api/status",
+        "LUDUS_SO_FLEET_STATUS_URL": fleet_status or (url + "/api/status"),
         "LUDUS_SO_CURL_CONFIG": str(config),
         "LUDUS_SO_HOSTNAME": HOST,
         "LUDUS_SO_KIBANA_WAIT": "2",
+        "LUDUS_SO_FLEET_WAIT": "1",
+        "LUDUS_SO_DOCKER": "/bin/true",
         "LUDUS_SO_FLEET_TEMPLATE": "/no/such/fleet-server.json",
     })
     return subprocess.run([str(SCRIPT), *extra], env=env, capture_output=True, text=True)
@@ -168,6 +181,42 @@ def test_create_and_idempotent(tmp: Path) -> int:
     return 0
 
 
+def test_https_status_needs_auth(tmp: Path) -> int:
+    import base64
+    import ssl as ssl_mod
+
+    config = tmp / "curl.config"
+    config.write_text('user = "elastic:secret"\n')
+    cert = tmp / "cert.pem"
+    key = tmp / "key.pem"
+    made = subprocess.run(
+        [
+            "openssl", "req", "-x509", "-newkey", "rsa:2048",
+            "-keyout", str(key), "-out", str(cert),
+            "-days", "1", "-nodes", "-subj", "/CN=localhost",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if made.returncode != 0:
+        return fail(f"openssl {made.stderr}")
+    context = ssl_mod.SSLContext(ssl_mod.PROTOCOL_TLS_SERVER)
+    context.load_cert_chain(cert, key)
+    state = FleetState()
+    state.require_basic = "Basic " + base64.b64encode(b"elastic:secret").decode()
+    server, url = serve(state, context)
+    try:
+        proc = run(url, config, ["--require-healthy"], fleet_status=url + "/fleet-ok")
+        if proc.returncode != 0 or "policy=created" not in proc.stdout:
+            return fail(f"https {proc.returncode} {proc.stdout!r} {proc.stderr!r}")
+        if not url.startswith("https://"):
+            return fail(f"url {url}")
+    finally:
+        server.shutdown()
+    print("PASS: Kibana on HTTPS accepts the elastic user")
+    return 0
+
+
 def test_best_effort_when_kibana_is_down(tmp: Path) -> int:
     config = tmp / "curl.config"
     config.write_text('user = "elastic:secret"\n')
@@ -178,6 +227,8 @@ def test_best_effort_when_kibana_is_down(tmp: Path) -> int:
         "LUDUS_SO_CURL_CONFIG": str(config),
         "LUDUS_SO_HOSTNAME": HOST,
         "LUDUS_SO_KIBANA_WAIT": "0",
+        "LUDUS_SO_FLEET_WAIT": "1",
+        "LUDUS_SO_DOCKER": "/bin/true",
     })
     proc = subprocess.run([str(SCRIPT), "--best-effort"], env=env, capture_output=True, text=True)
     if proc.returncode != 0 or "kibana=down" not in proc.stdout:
@@ -199,6 +250,9 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         rc = test_create_and_idempotent(root)
+        if rc:
+            return rc
+        rc = test_https_status_needs_auth(root)
         if rc:
             return rc
         return test_best_effort_when_kibana_is_down(root)
