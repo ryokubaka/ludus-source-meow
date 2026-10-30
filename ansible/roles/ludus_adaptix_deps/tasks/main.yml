@@ -1,0 +1,7 @@
+---
+- name: Install Qt modules required to build the Adaptix client
+  ansible.builtin.apt:
+    name: "{{ ludus_adaptix_deps_packages }}"
+    state: present
+    update_cache: true
+  become: true
