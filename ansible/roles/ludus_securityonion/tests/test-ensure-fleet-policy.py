@@ -8,6 +8,7 @@ import os
 import stat
 import subprocess
 import sys
+import tempfile
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -37,6 +38,7 @@ class FleetState:
         ]
         self.posts: list[str] = []
         self.puts: list[str] = []
+        self.status_http = 200
 
 
 def handler_for(state: FleetState):
@@ -65,7 +67,8 @@ def handler_for(state: FleetState):
                 if required and self.headers.get("Authorization") != required:
                     self._json(401, {"message": "unauthorized"})
                     return
-                self._json(200, {"status": {"overall": {"level": "available"}}, "name": "fleet-server", "status": "HEALTHY"})
+                level = "available" if state.status_http == 200 else "unavailable"
+                self._json(state.status_http, {"status": {"overall": {"level": level}}})
                 return
             if path == "/fleet-ok":
                 self._json(200, {"name": "fleet-server", "status": "HEALTHY"})
@@ -217,6 +220,22 @@ def test_https_status_needs_auth(tmp: Path) -> int:
     return 0
 
 
+def test_status_503_still_uses_fleet_api(tmp: Path) -> int:
+    config = tmp / "curl.config"
+    config.write_text('user = "elastic:secret"\n')
+    state = FleetState()
+    state.status_http = 503
+    server, url = serve(state)
+    try:
+        proc = run(url, config, ["--require-healthy"], fleet_status=url + "/fleet-ok")
+        if proc.returncode != 0 or "policy=created" not in proc.stdout:
+            return fail(f"503 {proc.returncode} {proc.stdout!r} {proc.stderr!r}")
+    finally:
+        server.shutdown()
+    print("PASS: Fleet API is enough when Kibana status stays 503")
+    return 0
+
+
 def test_best_effort_when_kibana_is_down(tmp: Path) -> int:
     config = tmp / "curl.config"
     config.write_text('user = "elastic:secret"\n')
@@ -246,13 +265,15 @@ def main() -> int:
     rc = test_shebang()
     if rc:
         return rc
-    import tempfile
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         rc = test_create_and_idempotent(root)
         if rc:
             return rc
         rc = test_https_status_needs_auth(root)
+        if rc:
+            return rc
+        rc = test_status_503_still_uses_fleet_api(root)
         if rc:
             return rc
         return test_best_effort_when_kibana_is_down(root)

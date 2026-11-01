@@ -80,23 +80,76 @@ def probe_status(url: str, auth_header: str | None) -> tuple[int | None, str]:
         with urllib.request.urlopen(request, timeout=8, context=context) as response:
             return response.status, ""
     except urllib.error.HTTPError as exc:
+        exc.read()
         return exc.code, ""
     except Exception as exc:
         return None, type(exc).__name__
 
 
+def fleet_api_ready(base: str, auth_header: str | None) -> bool:
+    """Kibana /api/status stays 503 while a plugin is degraded. Fleet can still answer."""
+    headers = {
+        "kbn-xsrf": "true",
+        "elastic-api-version": "2023-10-31",
+    }
+    if auth_header:
+        headers["Authorization"] = auth_header
+    request = urllib.request.Request(
+        base.rstrip("/") + "/api/fleet/outputs",
+        headers=headers,
+        method="GET",
+    )
+    context = ssl._create_unverified_context()
+    try:
+        with urllib.request.urlopen(request, timeout=8, context=context) as response:
+            if response.status != 200:
+                return False
+            payload = json.loads(response.read() or b"{}")
+    except urllib.error.HTTPError:
+        return False
+    except Exception:
+        return False
+    return isinstance(payload, dict) and isinstance(payload.get("items"), list)
+
+
+def restart_kibana(docker_bin: str) -> None:
+    subprocess.run([docker_bin, "restart", "so-kibana"], check=False, timeout=180)
+
+
 def wait_for_kibana(
-    candidates: list[str], seconds: int, auth_header: str | None
+    candidates: list[str],
+    seconds: int,
+    auth_header: str | None,
+    docker_bin: str,
 ) -> tuple[str | None, str]:
-    """Return the first base URL whose /api/status is 2xx, and the last failure."""
+    """Return a Kibana base URL once status or the Fleet API is usable."""
     deadline = time.time() + seconds
+    started = time.time()
+    restart_after = int(os.environ.get("LUDUS_SO_KIBANA_RESTART_AFTER", "120"))
+    restarted = False
     last = "connection"
     while True:
+        saw_503 = False
         for base in candidates:
-            code, err = probe_status(base.rstrip("/") + "/api/status", auth_header)
+            root = base.rstrip("/")
+            code, err = probe_status(root + "/api/status", auth_header)
             if code is not None and 200 <= code < 300:
-                return base.rstrip("/"), "200"
-            last = str(code) if code is not None else (err or "connection")
+                return root, "200"
+            if code is not None and fleet_api_ready(root, auth_header):
+                return root, "fleet-api"
+            if code == 503:
+                saw_503 = True
+                last = "503"
+            elif not saw_503:
+                last = str(code) if code is not None else (err or "connection")
+        if (
+            saw_503
+            and not restarted
+            and restart_after >= 0
+            and time.time() - started >= restart_after
+        ):
+            restarted = True
+            restart_kibana(docker_bin)
         if time.time() >= deadline:
             return None, last
         time.sleep(min(5, max(0.0, deadline - time.time())))
@@ -318,7 +371,7 @@ def main() -> int:
         except ValueError as exc:
             return finish(1, f"fleet-policy={policy_id} error={exc}")
         auth_header = basic_header(user, password)
-    kibana, last = wait_for_kibana(candidates, wait_seconds, auth_header)
+    kibana, last = wait_for_kibana(candidates, wait_seconds, auth_header, docker_bin)
     if kibana is None:
         return finish(1, f"fleet-policy={policy_id} kibana=down last={last}")
     if not curl_config.is_file():
