@@ -21,6 +21,7 @@ bump is not a patch. Do not invent a version heading on a feature branch.
 
 ## [Unreleased]
 
+- [Docs] Document every Meow role (purpose, task flow, variables) in role READMEs; expand the root and `ansible/` catalogs; update SO lab blueprints with the Adaptix v1.2 role stack.
 - [Fix] **`ludus_adaptix_deps` 1.0.1** — Also install `qt6-base-private-dev` and symlink Debian/Kali's versioned `QtGui/<ver>/QtGui/private` tree to `QtGui/private` so KDDockWidgets can include `qtx11extras_p.h`.
 - [Fix] **`ludus_adaptix_c2_fix` 1.0.0** — After `badsectorlabs.ludus_adaptix_c2`, write an Adaptix **v1.2** YAML profile (token TTLs + renamed extender paths) and a systemd unit without `MemoryDenyWriteExecute` so the Go teamserver stays up. Blueprints pin `ludus_adaptix_c2_go_version: "1.25.4"`.
 - [Fix] **`ludus_so_elastic_agent` 1.0.12** — When the SO Windows MSI QuietExec custom action fails with `ERROR_INVALID_FUNCTION` while msiexec still exits 0, run `so-elastic-agent_windows_amd64.exe -token … -fleet …` directly and treat `.installed` / the Elastic Agent service as success. Looking only for `elastic-agent.exe` after msiexec left the agent unenrolled. Retries the bootstrapper when Windows returns a transient I/O device error while copying agent components.
