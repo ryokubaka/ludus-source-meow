@@ -21,6 +21,8 @@ bump is not a patch. Do not invent a version heading on a feature branch.
 
 ## [Unreleased]
 
+## [1.2.19] - 2026-11-02
+
 - [Fix] **`ludus_so_elastic_security` 1.0.14** — After granting SOC roles, run `FORCE_SYNC=1 so-user sync` so the SOC email lands in the Elasticsearch file realm. Hand-editing `users_roles` (1.0.13) never created the `users` entry, so Hunt/Alerts failed with HTTP 500 (`so_elastic` unauthorized to `run_as` the SOC user).
 - [Improve] **`ludus_securityonion` 1.2.21** — Default SOC login is `onion@ludus.local` (was `onionadmin@ludus.local`). Blueprints and elastic_security defaults follow. Existing ranges keep the account created at setup until rebuilt.
 
