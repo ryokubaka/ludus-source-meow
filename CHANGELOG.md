@@ -21,6 +21,8 @@ bump is not a patch. Do not invent a version heading on a feature branch.
 
 ## [Unreleased]
 
+## [1.2.18] - 2026-11-02
+
 - [Docs] Document every Meow role (purpose, task flow, variables) in role READMEs; expand the root and `ansible/` catalogs; update SO lab blueprints with the Adaptix v1.2 role stack.
 - [Fix] **`ludus_adaptix_deps` 1.0.2** — Before `badsectorlabs.ludus_adaptix_c2` clones Extension-Kit, mark `/opt/adaptix` and `/opt/adaptix/Extension-Kit` as git `safe.directory` and chown Extension-Kit to `ansible_user`. After the Adaptix server step chowns the tree to `adaptix`, redeploy otherwise fails with “dubious ownership” on Extension-Kit.
 - [Fix] **`ludus_adaptix_deps` 1.0.1** — Also install `qt6-base-private-dev` and symlink Debian/Kali's versioned `QtGui/<ver>/QtGui/private` tree to `QtGui/private` so KDDockWidgets can include `qtx11extras_p.h`.
