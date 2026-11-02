@@ -1,4 +1,4 @@
-# ludus_so_elastic_agent (1.0.12)
+# ludus_so_elastic_agent (1.0.13)
 
 Deploys the Security Onion Elastic Agent to Ludus range endpoints so they enroll in Fleet policy `endpoints-initial`.
 
@@ -22,7 +22,7 @@ This role packages that sequence and, by default, **uninstalls then re-enrolls**
 5. Optionally uninstall any existing agent (Linux `elastic-agent uninstall`, Windows service/MSI + Defend uninstall token when present)
 6. Install:
    - **Linux** — `so-elastic-agent_linux_amd64` with `-token` / `-fleet`
-   - **Windows** — MSI first; if msiexec reports success but no agent/service/marker, run `so-elastic-agent_windows_amd64.exe -token … -fleet …` directly and retry on transient I/O copy errors
+   - **Windows** — MSI first; if msiexec reports success but no agent/service/marker, run `so-elastic-agent_windows_amd64.exe -token … -fleet … -force`. The bootstrapper often exits non-zero right after “Installation initiated…” while a child install keeps going — poll up to ~3 minutes for `.installed`, a non-empty `elastic-agent.exe` (root or under `data\`), or the Elastic Agent service. A 0-byte root stub alone is not success.
 7. Write a marker that records the manager identity (setup-marker hash + enrollment key id)
 
 Skips the SO manager itself (`ludus_so_agent_skip_manager`). Apply on every endpoint that should enroll.

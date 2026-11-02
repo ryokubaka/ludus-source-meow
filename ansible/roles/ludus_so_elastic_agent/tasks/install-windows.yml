@@ -3,6 +3,11 @@
 # The MSI QuietExec custom action often returns ERROR_INVALID_FUNCTION while
 # msiexec still exits 0. When that happens, run the SO bootstrapper directly
 # with -token/-fleet (same args the custom action would have used).
+#
+# The bootstrapper prints "Installation initiated..." and can exit non-zero
+# (or 1) while a child install keeps running. Wait/poll for .installed, a
+# non-empty elastic-agent.exe, data\*\elastic-agent.exe, or the service —
+# do not trust bootstrap_rc alone. A 0-byte elastic-agent.exe stub is not success.
 - name: Select Windows amd64 MSI
   ansible.builtin.set_fact:
     ludus_so_agent_installer_name: so-elastic-agent_windows_amd64_msi
@@ -61,24 +66,48 @@
 - name: Detect Windows Elastic Agent after msiexec
   ansible.windows.win_shell: |
     $root = '{{ ludus_so_agent_install_path_windows }}'
-    $link = Join-Path $root 'elastic-agent.exe'
-    $marker = Join-Path $root '.installed'
+    function Test-LudusSoAgentPresent {
+      param([string]$Root)
+      $marker = Join-Path $Root '.installed'
+      if (Test-Path -LiteralPath $marker) { return $true }
+      $link = Join-Path $Root 'elastic-agent.exe'
+      if ((Test-Path -LiteralPath $link) -and ((Get-Item -LiteralPath $link).Length -gt 0)) { return $true }
+      $nested = Get-ChildItem -Path (Join-Path $Root 'data') -Filter 'elastic-agent.exe' -Recurse -ErrorAction SilentlyContinue |
+        Where-Object { $_.Length -gt 0 } |
+        Select-Object -First 1
+      if ($nested) { return $true }
+      $svc = Get-Service -Name 'Elastic Agent' -ErrorAction SilentlyContinue
+      if ($svc) { return $true }
+      return $false
+    }
+    $ok = Test-LudusSoAgentPresent -Root $root
     $svc = Get-Service -Name 'Elastic Agent' -ErrorAction SilentlyContinue
-    $ok = $false
-    if (Test-Path -LiteralPath $marker) { $ok = $true }
-    if (Test-Path -LiteralPath $link) { $ok = $true }
-    if ($svc) { $ok = $true }
     Write-Output ("agent_present=" + ($(if ($ok) { 'true' } else { 'false' })))
     if ($svc) { Write-Output ("service_status=" + $svc.Status) }
+    $link = Join-Path $root 'elastic-agent.exe'
+    if (Test-Path -LiteralPath $link) { Write-Output ("exe_bytes=" + (Get-Item -LiteralPath $link).Length) }
   register: ludus_so_agent_detect_after
   changed_when: false
 
 # msiexec 0 with a failed QuietExec custom action leaves only the bootstrapper.
-# The bootstrapper can also fail once with a Windows "I/O device error" while
-# copying components; retry a few times before giving up.
+# Bootstrapper often exits before the child install finishes; poll for presence.
 - name: Enroll with the SO Windows bootstrapper when msiexec left no agent
   ansible.windows.win_shell: |
     $boot = '{{ ludus_so_agent_windows_bootstrapper }}'
+    $root = '{{ ludus_so_agent_install_path_windows }}'
+    function Test-LudusSoAgentPresent {
+      param([string]$Root)
+      $marker = Join-Path $Root '.installed'
+      if (Test-Path -LiteralPath $marker) { return $true }
+      $link = Join-Path $Root 'elastic-agent.exe'
+      if ((Test-Path -LiteralPath $link) -and ((Get-Item -LiteralPath $link).Length -gt 0)) { return $true }
+      $nested = Get-ChildItem -Path (Join-Path $Root 'data') -Filter 'elastic-agent.exe' -Recurse -ErrorAction SilentlyContinue |
+        Where-Object { $_.Length -gt 0 } |
+        Select-Object -First 1
+      if ($nested) { return $true }
+      if (Get-Service -Name 'Elastic Agent' -ErrorAction SilentlyContinue) { return $true }
+      return $false
+    }
     if (-not (Test-Path -LiteralPath $boot)) {
       Write-Output "bootstrapper_missing=$boot"
       exit 2
@@ -88,10 +117,16 @@
     $argList = @(
       '-token', '{{ ludus_so_agent_token }}',
       '-timeout', '{{ ludus_so_agent_install_timeout }}',
-      '-fleet', '{{ ludus_so_agent_fleet_url_resolved }}'
+      '-fleet', '{{ ludus_so_agent_fleet_url_resolved }}',
+      '-force'
     )
     $rc = 1
     foreach ($try in 1..5) {
+      if (Test-LudusSoAgentPresent -Root $root) {
+        Write-Output 'agent_present=true'
+        Write-Output ("bootstrap_try_skipped_already_present=" + $try)
+        exit 0
+      }
       Remove-Item $out, $err -ErrorAction SilentlyContinue
       Write-Output ("bootstrap_try=" + $try)
       $p = Start-Process -FilePath $boot -ArgumentList $argList -Wait -PassThru -NoNewWindow `
@@ -100,13 +135,17 @@
       Write-Output ("bootstrap_rc=" + $rc)
       if (Test-Path -LiteralPath $out) { Get-Content -LiteralPath $out -Tail 40 }
       if (Test-Path -LiteralPath $err) { Get-Content -LiteralPath $err -Tail 40 }
-      $marker = Join-Path '{{ ludus_so_agent_install_path_windows }}' '.installed'
-      $link = Join-Path '{{ ludus_so_agent_install_path_windows }}' 'elastic-agent.exe'
-      if (($rc -eq 0) -or (Test-Path -LiteralPath $marker) -or (Test-Path -LiteralPath $link)) {
-        exit 0
+      # Child install may still be running after the wrapper exits.
+      foreach ($wait in 1..36) {
+        if (Test-LudusSoAgentPresent -Root $root) {
+          Write-Output ("agent_present=true wait_s=" + ($wait * 5))
+          exit 0
+        }
+        Start-Sleep -Seconds 5
       }
-      Start-Sleep -Seconds 10
+      Start-Sleep -Seconds 5
     }
+    Write-Output 'agent_present=false'
     exit $rc
   register: ludus_so_agent_bootstrap
   no_log: true
@@ -116,13 +155,21 @@
 - name: Detect Windows Elastic Agent after bootstrapper
   ansible.windows.win_shell: |
     $root = '{{ ludus_so_agent_install_path_windows }}'
-    $link = Join-Path $root 'elastic-agent.exe'
-    $marker = Join-Path $root '.installed'
+    function Test-LudusSoAgentPresent {
+      param([string]$Root)
+      $marker = Join-Path $Root '.installed'
+      if (Test-Path -LiteralPath $marker) { return $true }
+      $link = Join-Path $Root 'elastic-agent.exe'
+      if ((Test-Path -LiteralPath $link) -and ((Get-Item -LiteralPath $link).Length -gt 0)) { return $true }
+      $nested = Get-ChildItem -Path (Join-Path $Root 'data') -Filter 'elastic-agent.exe' -Recurse -ErrorAction SilentlyContinue |
+        Where-Object { $_.Length -gt 0 } |
+        Select-Object -First 1
+      if ($nested) { return $true }
+      if (Get-Service -Name 'Elastic Agent' -ErrorAction SilentlyContinue) { return $true }
+      return $false
+    }
+    $ok = Test-LudusSoAgentPresent -Root $root
     $svc = Get-Service -Name 'Elastic Agent' -ErrorAction SilentlyContinue
-    $ok = $false
-    if (Test-Path -LiteralPath $marker) { $ok = $true }
-    if (Test-Path -LiteralPath $link) { $ok = $true }
-    if ($svc) { $ok = $true }
     if ($svc -and $svc.Status -ne 'Running') {
       try { Start-Service -Name 'Elastic Agent' -ErrorAction Stop } catch {}
       Start-Sleep -Seconds 3
@@ -130,6 +177,8 @@
     }
     Write-Output ("agent_present=" + ($(if ($ok) { 'true' } else { 'false' })))
     if ($svc) { Write-Output ("service_status=" + $svc.Status) }
+    $link = Join-Path $root 'elastic-agent.exe'
+    if (Test-Path -LiteralPath $link) { Write-Output ("exe_bytes=" + (Get-Item -LiteralPath $link).Length) }
   register: ludus_so_agent_detect_final
   changed_when: false
 

@@ -80,10 +80,26 @@
       register: ludus_so_agent_bin_linux
       when: ludus_so_agent_os == 'linux'
 
+    # SO leaves a 0-byte elastic-agent.exe stub at the install root; the real
+    # binary lives under data\elastic-agent-*\. Treat stub-only as absent.
     - name: Check for installed Elastic Agent binary (Windows)
-      ansible.windows.win_stat:
-        path: "{{ ludus_so_agent_install_path_windows }}\\elastic-agent.exe"
+      ansible.windows.win_shell: |
+        $root = '{{ ludus_so_agent_install_path_windows }}'
+        $marker = Join-Path $root '.installed'
+        $link = Join-Path $root 'elastic-agent.exe'
+        $ok = $false
+        if (Test-Path -LiteralPath $marker) { $ok = $true }
+        elseif ((Test-Path -LiteralPath $link) -and ((Get-Item -LiteralPath $link).Length -gt 0)) { $ok = $true }
+        else {
+          $nested = Get-ChildItem -Path (Join-Path $root 'data') -Filter 'elastic-agent.exe' -Recurse -ErrorAction SilentlyContinue |
+            Where-Object { $_.Length -gt 0 } |
+            Select-Object -First 1
+          if ($nested) { $ok = $true }
+          elseif (Get-Service -Name 'Elastic Agent' -ErrorAction SilentlyContinue) { $ok = $true }
+        }
+        Write-Output ("agent_present=" + ($(if ($ok) { 'true' } else { 'false' })))
       register: ludus_so_agent_bin_win
+      changed_when: false
       when: ludus_so_agent_os == 'windows'
 
     - name: Decode Linux marker text
@@ -110,7 +126,10 @@
         ludus_so_agent_bin_present: >-
           {{
             (ludus_so_agent_os == 'linux' and ludus_so_agent_bin_linux.stat.exists | default(false))
-            or (ludus_so_agent_os == 'windows' and ludus_so_agent_bin_win.stat.exists | default(false))
+            or (
+              ludus_so_agent_os == 'windows'
+              and ('agent_present=true' in (ludus_so_agent_bin_win.stdout | default('')))
+            )
           }}
 
     - name: Set enroll skip / install flags
