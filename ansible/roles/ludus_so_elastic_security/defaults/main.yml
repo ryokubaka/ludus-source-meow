@@ -59,7 +59,7 @@ ludus_so_setup_marker: /etc/ludus-so-setup-complete
 # Alerts and Rules, index all on restricted indices, and the default space
 # left with no features disabled.
 ludus_so_elastic_security_grant_admin: true
-ludus_so_elastic_security_admin_user: "{{ ludus_so_web_user | default('onionadmin@ludus.local', true) }}"
+ludus_so_elastic_security_admin_user: "{{ ludus_so_web_user | default('onion@ludus.local', true) }}"
 ludus_so_elastic_security_admin_role: ludus-all
 ludus_so_elastic_security_admin_role_file: /opt/so/saltstack/local/salt/elasticsearch/roles/ludus-all.json
 

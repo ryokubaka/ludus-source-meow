@@ -1,4 +1,4 @@
-# ludus_securityonion (1.2.20)
+# ludus_securityonion (1.2.21)
 
 Automates Security Onion **lab** installs on Ludus and keeps the SOC grid healthy afterward.
 

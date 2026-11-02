@@ -53,7 +53,7 @@ ludus_so_force_pci_rescan: false
 ludus_so_min_nics: 2
 
 # SOC / web user for TESTING profiles (overridden by so-setup defaults when TESTING=true)
-ludus_so_web_user: "onionadmin@ludus.local"
+ludus_so_web_user: "onion@ludus.local"
 ludus_so_web_password: "MeowMeow123"
 
 # Kept for compatibility. The analyst/SOC group is always 0.0.0.0/0;

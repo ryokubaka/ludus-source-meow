@@ -64,7 +64,7 @@ graph TB
 | Account | Username | Password | Scope |
 |---|---|---|---|
 | OS | onion | onion | SO SSH |
-| SOC | onionadmin@ludus.local | MeowMeow123 | Console |
+| SOC | onion@ludus.local | MeowMeow123 | Console |
 | Domain admin | `MEOW\domainadmin` | `password` | `meow.local` (Ludus defaults) |
 | Domain user | `MEOW\domainuser` | `password` | `meow.local` |
 | Windows local | `localuser` | `password` | DC / Win11 local admin |

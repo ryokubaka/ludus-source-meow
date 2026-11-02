@@ -1,4 +1,4 @@
-# ludus_so_elastic_security (1.0.13)
+# ludus_so_elastic_security (1.0.14)
 
 Apply to the **Security Onion manager** VM after `ryokubaka.ludus_securityonion`.
 
@@ -17,7 +17,7 @@ This role turns that into a deterministic post-setup pass: trial → Defend dete
 3. **Elastic Defend** — on `elastic-defend-endpoints` / `endpoints-initial`, set preset `EDRComplete` and malware/ransomware/memory/behavior to **detect** (configurable)
 4. **Windows logs** — enable AppLocker, Packaged app, and Windows Defender channels on `windows-endpoints` (Sysmon stays on; install Sysmon with `ludus_sysmon`)
 5. **Detection rules** — Fleet package `security_detection_engine`, then the same “Add Elastic rules” install path, then bulk-enable. Installs in chunks and retries when Kibana drops the connection
-6. **Admin grants** — SOC `superuser` plus Elasticsearch role `ludus-all` with Kibana feature `.all` privileges. On **SO 3**, `so-user` keeps SOC roles in Kratos and never rewrites `users_roles`; the role writes the ES mapping after `so-user` so Kibana authorization works
+6. **Admin grants** — SOC `superuser` plus Elasticsearch role `ludus-all` with Kibana feature `.all` privileges. Then `FORCE_SYNC=1 so-user sync` so the SOC email exists in the Elasticsearch file realm (required for Hunt/Alerts `run_as`). Do not hand-edit `users_roles` — that leaves no `users` entry and SOC returns HTTP 500 on `/api/events/`
 
 ## endpoints-initial on Security Onion 3.3
 

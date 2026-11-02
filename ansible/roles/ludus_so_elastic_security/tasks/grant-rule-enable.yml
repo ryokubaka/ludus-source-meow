@@ -63,15 +63,43 @@
       echo "missing ${ROLES_FILE}; cannot map ${ROLE_NAME} onto ${user}" >&2
       exit 1
     fi
-    mapping="${ROLE_NAME}:${user}"
-    if ! grep -qF "$mapping" "$ROLES_FILE"; then
-      if [[ -s "$ROLES_FILE" ]] && [[ -n "$(tail -c1 "$ROLES_FILE")" ]]; then
-        printf '\n' >> "$ROLES_FILE"
+    # Append after so-user sync (grant-admin). Sync regenerates users_roles from
+    # Kratos and would drop this mapping if we wrote it beforehand. Also mirror
+    # into the live conf file ES mounts — salt apply can lag.
+    CONF_ROLES=/opt/so/conf/elasticsearch/users_roles
+    ensure_mapping() {
+      local file="$1"
+      local mapping="$2"
+      [[ -f "$file" ]] || return 1
+      if grep -qF "$mapping" "$file"; then
+        return 1
       fi
-      printf '%s\n' "$mapping" >> "$ROLES_FILE"
+      if [[ -s "$file" ]] && [[ -n "$(tail -c1 "$file")" ]]; then
+        printf '\n' >> "$file"
+      fi
+      printf '%s\n' "$mapping" >> "$file"
+      return 0
+    }
+    mapping="${ROLE_NAME}:${user}"
+    updated=0
+    if ensure_mapping "$ROLES_FILE" "$mapping"; then
+      updated=1
       echo "roles_file=updated"
     else
       echo "roles_file=present"
+    fi
+    if [[ -f "$CONF_ROLES" ]]; then
+      if ensure_mapping "$CONF_ROLES" "$mapping"; then
+        updated=1
+        chown 930:939 "$CONF_ROLES" 2>/dev/null || true
+        chmod 660 "$CONF_ROLES" 2>/dev/null || true
+        echo "conf_roles=updated"
+      else
+        echo "conf_roles=present"
+      fi
+    fi
+    if [[ "$updated" == 1 ]]; then
+      echo "roles_mapping=changed"
     fi
 
     auth=""
@@ -89,7 +117,7 @@
   args:
     executable: /bin/bash
   register: ludus_so_elastic_security_rule_priv
-  changed_when: "'roles_file=updated' in (ludus_so_elastic_security_rule_priv.stdout | default(''))"
+  changed_when: "'roles_mapping=changed' in (ludus_so_elastic_security_rule_priv.stdout | default(''))"
   become: true
 
 - name: Report detection-rule privilege grant

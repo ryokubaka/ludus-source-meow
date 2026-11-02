@@ -4,6 +4,13 @@
 # feature privileges), and the default space, which ships with those features
 # disabled. Grant every feature .all privilege without the base privilege, allow
 # the restricted alerts index, and leave the default space with nothing disabled.
+#
+# SOC Hunt/Alerts query Elasticsearch with es-security-runas-user set to the
+# logged-in email. That only works when so-user has synced the Kratos identity
+# into the Elasticsearch file realm (users + users_roles). Do not append the
+# email to users_roles by hand — sed on every "superuser:" line corrupts
+# so_logstash/so_beats mappings and never creates the users entry, which leaves
+# Hunt returning HTTP 500 (so_elastic unauthorized to run as <email>).
 
 - name: Grant SOC superuser and every Kibana privilege
   ansible.builtin.shell: |
@@ -12,8 +19,7 @@
     USER="{{ ludus_so_elastic_security_admin_user }}"
     ROLE="{{ ludus_so_elastic_security_admin_role }}"
     ROLE_FILE="{{ ludus_so_elastic_security_admin_role_file }}"
-    SALT_ROLES=/opt/so/saltstack/local/salt/elasticsearch/files/users_roles
-    CONF_ROLES=/opt/so/conf/elasticsearch/users_roles
+    CONF_USERS=/opt/so/conf/elasticsearch/users
     BODY=/tmp/ludus-all-role.json
 
     priv_json=$(curl -sS -k -K "$CFG" 'https://localhost:9200/_security/privilege/kibana-.kibana')
@@ -78,7 +84,7 @@
     grant() {
       local role="$1"
       local out rc=0
-      out=$(/usr/sbin/so-user addrole --email "$USER" --role "$role" 2>&1) || rc=$?
+      out=$(/usr/sbin/so-user addrole --email "$USER" --role "$role" --skip-sync 2>&1) || rc=$?
       printf '%s\n' "$out"
       if grep -q 'already has the role' <<<"$out"; then
         echo "soc_${role}=present"
@@ -94,40 +100,36 @@
     grant superuser
     grant "$ROLE"
 
-    # SO 3 keeps SOC roles in so-user/Kratos. The Elasticsearch file realm
-    # users_roles list stays service accounts only, so waiting for so-user to
-    # rewrite it never succeeds. Append the mapping ourselves when absent.
-    ensure_users_roles_line() {
-      local file="$1"
-      local role="$2"
-      local user="$3"
-      mkdir -p "$(dirname "$file")"
-      touch "$file"
-      if grep -qiE "^${role}:${user}$|^${role}:${user},|^${role}:.*,${user}$|^${role}:.*,${user}," "$file"; then
-        return 0
-      fi
-      if grep -qE "^${role}:" "$file"; then
-        sed -i -E "s|^(${role}:.*)|\1,${user}|" "$file"
-      else
-        printf '%s\n' "${role}:${user}" >> "$file"
-      fi
-    }
-    ensure_users_roles_line "$SALT_ROLES" "$ROLE" "$USER"
-    ensure_users_roles_line "$SALT_ROLES" superuser "$USER"
-    echo "roles_file=present"
+    # Rebuild Elasticsearch file-realm users + users_roles from Kratos / so-user.
+    # This creates the email entry Hunt needs for so_elastic run_as.
+    echo "elastic_sync=start"
+    FORCE_SYNC=1 /usr/sbin/so-user sync
+    echo "elastic_sync=done"
 
-    if [[ -f "$CONF_ROLES" ]]; then
-      ensure_users_roles_line "$CONF_ROLES" "$ROLE" "$USER"
-      ensure_users_roles_line "$CONF_ROLES" superuser "$USER"
-      chown 930:939 "$CONF_ROLES" 2>/dev/null || true
-      chmod 660 "$CONF_ROLES" 2>/dev/null || true
-      echo "conf_roles=present"
-    else
-      cp "$SALT_ROLES" "$CONF_ROLES"
-      chown 930:939 "$CONF_ROLES" 2>/dev/null || true
-      chmod 660 "$CONF_ROLES" 2>/dev/null || true
-      echo "conf_roles=copied"
+    synced=0
+    for _try in $(seq 1 90); do
+      if [[ -f "$CONF_USERS" ]] && grep -Fq "$USER" "$CONF_USERS"; then
+        synced=1
+        break
+      fi
+      sleep 2
+    done
+    if [[ "$synced" != 1 ]]; then
+      echo "Elasticsearch users file never listed ${USER} after so-user sync" >&2
+      exit 1
     fi
+    echo "file_realm_user=present"
+
+    # Confirm so_elastic can impersonate the SOC account (Hunt/Alerts path).
+    runas=$(curl -sS -k -K "$CFG" -w '\n%{http_code}' \
+      -H "es-security-runas-user: ${USER}" \
+      'https://localhost:9200/_security/_authenticate')
+    runas_code=$(tail -n1 <<<"$runas")
+    if [[ "$runas_code" != 200 ]]; then
+      echo "so_elastic run_as ${USER} failed (http ${runas_code}): $(printf '%s' "$runas" | head -c 400)" >&2
+      exit 1
+    fi
+    echo "run_as=ok"
 
     space_json=$(curl -sS -k -K "$CFG" \
       -H 'kbn-xsrf: true' \
@@ -159,7 +161,7 @@
   register: ludus_so_elastic_security_admin_grant
   changed_when: >-
     '=added' in (ludus_so_elastic_security_admin_grant.stdout | default(''))
-    or 'conf_roles=copied' in (ludus_so_elastic_security_admin_grant.stdout | default(''))
+    or 'elastic_sync=done' in (ludus_so_elastic_security_admin_grant.stdout | default(''))
     or 'space_features=opened' in (ludus_so_elastic_security_admin_grant.stdout | default(''))
   become: true
 

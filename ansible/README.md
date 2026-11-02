@@ -8,8 +8,8 @@ Place each role under [`roles/`](./roles/) — either a normal directory or a **
 
 | Role | Version | Purpose |
 |---|---|---|
-| [`ludus_securityonion`](./roles/ludus_securityonion/) | 1.2.20 | Attach sniff NIC via Proxmox API; run Security Onion `so-setup` (standalone-net default); heal sniff bond, `/nsm`, containers, and Fleet Server policy so `so-boot-highstate` does not leave the grid Fault |
-| [`ludus_so_elastic_security`](./roles/ludus_so_elastic_security/) | 1.0.13 | On SO manager: Elastic trial, Elastic Defend detect-mode on `endpoints-initial`, install/enable Kibana prebuilt rules, grant SOC/Kibana admin (GOAD-mod elk parity). SO 3 writes `users_roles` after `so-user` because Kratos owns SOC roles |
+| [`ludus_securityonion`](./roles/ludus_securityonion/) | 1.2.21 | Attach sniff NIC via Proxmox API; run Security Onion `so-setup` (standalone-net default); heal sniff bond, `/nsm`, containers, and Fleet Server policy so `so-boot-highstate` does not leave the grid Fault |
+| [`ludus_so_elastic_security`](./roles/ludus_so_elastic_security/) | 1.0.14 | On SO manager: Elastic trial, Elastic Defend detect-mode on `endpoints-initial`, install/enable Kibana prebuilt rules, grant SOC/Kibana admin and force `so-user sync` so Hunt can `run_as` the SOC email |
 | [`ludus_so_elastic_agent`](./roles/ludus_so_elastic_agent/) | 1.0.13 | Deploy SO Elastic Agent to range endpoints (Linux/Windows) via Fleet `endpoints-initial`; reinstalls on each run; maps `manager` → SO IP; Windows falls back to the SO bootstrapper when MSI QuietExec fails and polls past async `bootstrap_rc=1` |
 | [`ludus_sysmon`](./roles/ludus_sysmon/) | 1.0.5 | Install Sysmon64 on Windows hosts (SO `windows-endpoints` already collects the Sysmon channel) |
 | [`ludus_adaptix_deps`](./roles/ludus_adaptix_deps/) | 1.0.2 | Install Qt6 Svg/Qml/private-dev, expose private Gui headers, and fix Extension-Kit git ownership so Adaptix v1.2 client builds and redeploys |

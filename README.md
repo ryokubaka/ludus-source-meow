@@ -68,8 +68,8 @@ Roles are vendored under [`ansible/roles/`](./ansible/roles/). Full tables and s
 
 | Role | Version | Runs on | Why it exists |
 |---|---|---|---|
-| [`ludus_securityonion`](./ansible/roles/ludus_securityonion/) | 1.2.20 | SO manager | Attach sniff NIC, run `so-setup`, heal `/nsm` / containers / Fleet grid so boot highstate does not leave SOC on Fault |
-| [`ludus_so_elastic_security`](./ansible/roles/ludus_so_elastic_security/) | 1.0.13 | SO manager | Trial license, Elastic Defend detect mode, prebuilt Kibana rules, SOC/Kibana admin grants (GOAD-mod elk parity) |
+| [`ludus_securityonion`](./ansible/roles/ludus_securityonion/) | 1.2.21 | SO manager | Attach sniff NIC, run `so-setup`, heal `/nsm` / containers / Fleet grid so boot highstate does not leave SOC on Fault |
+| [`ludus_so_elastic_security`](./ansible/roles/ludus_so_elastic_security/) | 1.0.14 | SO manager | Trial license, Elastic Defend detect mode, prebuilt Kibana rules, SOC/Kibana admin grants + file-realm sync for Hunt |
 | [`ludus_so_elastic_agent`](./ansible/roles/ludus_so_elastic_agent/) | 1.0.13 | Endpoints | Enroll Linux/Windows into SO Fleet `endpoints-initial`; Windows uses SO bootstrapper when MSI QuietExec lies and waits out async install |
 | [`ludus_sysmon`](./ansible/roles/ludus_sysmon/) | 1.0.5 | Windows | Install Sysmon64 so `windows-endpoints` has the Operational channel SO already collects |
 | [`ludus_adaptix_deps`](./ansible/roles/ludus_adaptix_deps/) | 1.0.2 | Kali | Qt6 Svg/Qml/private headers + git safe.directory / Extension-Kit ownership for Adaptix redeploys |
