@@ -5,3 +5,8 @@ ludus_adaptix_deps_packages:
   - qt6-svg-dev
   - qt6-declarative-dev
   - qt6-base-private-dev
+
+# Upstream clones Extension-Kit as ansible_user; mark these before that task.
+ludus_adaptix_git_safe_directories:
+  - /opt/adaptix
+  - /opt/adaptix/Extension-Kit

@@ -43,3 +43,40 @@
   when:
     - ludus_adaptix_qt_private_paths.stdout_lines | length >= 2
     - ludus_adaptix_qt_private_paths.stdout_lines[0] != ludus_adaptix_qt_private_paths.stdout_lines[1]
+
+# After a successful Adaptix server install the tree is chown'd to adaptix:.
+# badsectorlabs.ludus_adaptix_c2 clones Extension-Kit as ansible_user without
+# become, so redeploy fails with "dubious ownership" / cannot create under
+# /opt/adaptix. Pre-mark safe.directory and hand Extension-Kit to ansible_user.
+- name: Check for an existing Adaptix install tree
+  ansible.builtin.stat:
+    path: /opt/adaptix
+  register: ludus_adaptix_opt_stat
+
+- name: Mark Adaptix git paths safe for root
+  ansible.builtin.command:
+    cmd: "git config --global --add safe.directory {{ item }}"
+  loop: "{{ ludus_adaptix_git_safe_directories }}"
+  become: true
+  changed_when: false
+  failed_when: false
+
+- name: Mark Adaptix git paths safe for the Ansible user
+  ansible.builtin.command:
+    cmd: "git config --global --add safe.directory {{ item }}"
+  loop: "{{ ludus_adaptix_git_safe_directories }}"
+  become: true
+  become_user: "{{ ansible_user }}"
+  changed_when: false
+  failed_when: false
+
+- name: Ensure Extension-Kit is owned by the Ansible user for upstream clone
+  ansible.builtin.file:
+    path: /opt/adaptix/Extension-Kit
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0755"
+    recurse: true
+  become: true
+  when: ludus_adaptix_opt_stat.stat.exists | default(false)

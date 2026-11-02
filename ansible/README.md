@@ -12,7 +12,7 @@ Place each role under [`roles/`](./roles/) — either a normal directory or a **
 | [`ludus_so_elastic_security`](./roles/ludus_so_elastic_security/) | 1.0.13 | On SO manager: Elastic trial, Elastic Defend detect-mode on `endpoints-initial`, install/enable Kibana prebuilt rules, grant SOC/Kibana admin (GOAD-mod elk parity). SO 3 writes `users_roles` after `so-user` because Kratos owns SOC roles |
 | [`ludus_so_elastic_agent`](./roles/ludus_so_elastic_agent/) | 1.0.12 | Deploy SO Elastic Agent to range endpoints (Linux/Windows) via Fleet `endpoints-initial`; reinstalls on each run; maps `manager` → SO IP; Windows falls back to the SO bootstrapper when MSI QuietExec fails |
 | [`ludus_sysmon`](./roles/ludus_sysmon/) | 1.0.5 | Install Sysmon64 on Windows hosts (SO `windows-endpoints` already collects the Sysmon channel) |
-| [`ludus_adaptix_deps`](./roles/ludus_adaptix_deps/) | 1.0.1 | Install Qt6 Svg/Qml/private-dev and expose versioned private Gui headers so Adaptix v1.2 `make client` can build |
+| [`ludus_adaptix_deps`](./roles/ludus_adaptix_deps/) | 1.0.2 | Install Qt6 Svg/Qml/private-dev, expose private Gui headers, and fix Extension-Kit git ownership so Adaptix v1.2 client builds and redeploys |
 | [`ludus_adaptix_c2_fix`](./roles/ludus_adaptix_c2_fix/) | 1.0.0 | After `badsectorlabs.ludus_adaptix_c2` on Adaptix v1.2+: YAML teamserver profile (token TTLs + renamed extender paths) and a systemd unit without `MemoryDenyWriteExecute` |
 
 Galaxy / third-party roles used by blueprints (declared in blueprint `requirements.yml`, not vendored here):

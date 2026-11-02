@@ -1,4 +1,4 @@
-# ludus_adaptix_deps (1.0.1)
+# ludus_adaptix_deps (1.0.2)
 
 Install the Qt 6 packages Adaptix C2’s **client** build needs on Kali, then expose private Gui headers at the include path KDDockWidgets expects.
 
@@ -25,6 +25,8 @@ while the include wants `QtGui/private/...`. Without a symlink (or a GuiPrivate 
 1. `apt` install `ludus_adaptix_deps_packages` (update cache)
 2. Discover the directory that contains `qtx11extras_p.h`
 3. Symlink that directory to `/usr/include/<multiarch>/qt6/QtGui/private` when it is not already the unversioned path
+4. Mark `/opt/adaptix` and `/opt/adaptix/Extension-Kit` as git `safe.directory` for root and `ansible_user`
+5. If `/opt/adaptix` already exists, ensure `Extension-Kit` is owned by `ansible_user` so the upstream role’s non-`become` clone/update does not fail with “dubious ownership” after the tree was `chown`’d to `adaptix`
 
 ## Blueprint usage
 
@@ -45,6 +47,7 @@ role_vars:
 | Variable | Default | Purpose |
 |---|---|---|
 | `ludus_adaptix_deps_packages` | `qt6-svg-dev`, `qt6-declarative-dev`, `qt6-base-private-dev` | Apt packages to ensure present |
+| `ludus_adaptix_git_safe_directories` | `/opt/adaptix`, `/opt/adaptix/Extension-Kit` | Paths added to git `safe.directory` before upstream clone |
 
 ## Notes
 
