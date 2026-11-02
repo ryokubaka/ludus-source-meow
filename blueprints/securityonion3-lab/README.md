@@ -1,6 +1,16 @@
 # Security Onion 3 Lab
 
-Standalone Security Onion 3.3.0 with a `meow.local` domain (Win2019 DC + domain-joined Win11), Kali attacker with [Adaptix C2](https://github.com/badsectorlabs/ludus_adaptix_c2), Sysmon, and Fleet agents on the AD hosts. Same topology as `securityonion-lab`; uses `securityonion-3.3-x64-template`.
+Standalone Security Onion 3.3.0 with a `meow.local` domain (Win2019 DC + domain-joined Win11), Kali attacker with [Adaptix C2](https://github.com/badsectorlabs/ludus_adaptix_c2) **v1.2**, Sysmon, and Fleet agents on the AD hosts. Same topology as `securityonion-lab`; uses `securityonion-3.3-x64-template`.
+
+### Role stack on this blueprint
+
+| VM | Roles (order) |
+|---|---|
+| `{{ range_id }}-so` | `ludus_securityonion` → `ludus_so_elastic_security` |
+| `{{ range_id }}-dc01` / `win11` | `ludus_sysmon` → `ludus_so_elastic_agent` (depends_on SO) |
+| `{{ range_id }}-kali` | `ludus_adaptix_deps` → `badsectorlabs.ludus_adaptix_c2` → `ludus_adaptix_c2_fix` |
+
+Kali pins `ludus_adaptix_c2_version: v1.2` and `ludus_adaptix_c2_go_version: "1.25.4"`. See role READMEs under [`ansible/roles/`](../../ansible/roles/) for why each step exists.
 
 ## Quick Start
 
@@ -80,4 +90,7 @@ roles:
 
 - Ludus v2.0+
 - Templates built: `securityonion-3.3-x64-template`, `win2019-server-x64-template`, `win11-22h2-x64-enterprise-template`, `kali-x64-desktop-template`
+- Source roles: `ludus_securityonion`, `ludus_so_elastic_security`, `ludus_so_elastic_agent`, `ludus_sysmon`, `ludus_adaptix_deps`, `ludus_adaptix_c2_fix`
 - Galaxy role: `badsectorlabs.ludus_adaptix_c2` (declared in `requirements.yml`)
+- **Testing Mode off** (or SO repo hosts allowlisted) before first SO setup
+- ~28 GB RAM free on the Proxmox node for a full deploy

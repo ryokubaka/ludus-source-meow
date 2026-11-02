@@ -94,27 +94,39 @@
     grant superuser
     grant "$ROLE"
 
-    found=0
-    for _try in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30; do
-      if [[ -f "$SALT_ROLES" ]] && grep -q "^${ROLE}:" "$SALT_ROLES" && grep -qi "$USER" "$SALT_ROLES"; then
-        found=1
-        break
+    # SO 3 keeps SOC roles in so-user/Kratos. The Elasticsearch file realm
+    # users_roles list stays service accounts only, so waiting for so-user to
+    # rewrite it never succeeds. Append the mapping ourselves when absent.
+    ensure_users_roles_line() {
+      local file="$1"
+      local role="$2"
+      local user="$3"
+      mkdir -p "$(dirname "$file")"
+      touch "$file"
+      if grep -qiE "^${role}:${user}$|^${role}:${user},|^${role}:.*,${user}$|^${role}:.*,${user}," "$file"; then
+        return 0
       fi
-      sleep 1
-    done
-    if [[ "$found" != 1 ]]; then
-      echo "users_roles never listed ${ROLE} for ${USER}" >&2
-      exit 1
-    fi
+      if grep -qE "^${role}:" "$file"; then
+        sed -i -E "s|^(${role}:.*)|\1,${user}|" "$file"
+      else
+        printf '%s\n' "${role}:${user}" >> "$file"
+      fi
+    }
+    ensure_users_roles_line "$SALT_ROLES" "$ROLE" "$USER"
+    ensure_users_roles_line "$SALT_ROLES" superuser "$USER"
     echo "roles_file=present"
 
-    if [[ -f "$CONF_ROLES" ]] && ! grep -q "^${ROLE}:" "$CONF_ROLES"; then
+    if [[ -f "$CONF_ROLES" ]]; then
+      ensure_users_roles_line "$CONF_ROLES" "$ROLE" "$USER"
+      ensure_users_roles_line "$CONF_ROLES" superuser "$USER"
+      chown 930:939 "$CONF_ROLES" 2>/dev/null || true
+      chmod 660 "$CONF_ROLES" 2>/dev/null || true
+      echo "conf_roles=present"
+    else
       cp "$SALT_ROLES" "$CONF_ROLES"
       chown 930:939 "$CONF_ROLES" 2>/dev/null || true
       chmod 660 "$CONF_ROLES" 2>/dev/null || true
       echo "conf_roles=copied"
-    else
-      echo "conf_roles=present"
     fi
 
     space_json=$(curl -sS -k -K "$CFG" \

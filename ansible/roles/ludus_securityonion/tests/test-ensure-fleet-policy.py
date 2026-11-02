@@ -8,6 +8,7 @@ import os
 import stat
 import subprocess
 import sys
+import tempfile
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -37,6 +38,7 @@ class FleetState:
         ]
         self.posts: list[str] = []
         self.puts: list[str] = []
+        self.status_http = 200
 
 
 def handler_for(state: FleetState):
@@ -61,7 +63,15 @@ def handler_for(state: FleetState):
         def do_GET(self) -> None:
             path = self.path.split("?", 1)[0]
             if path == "/api/status":
-                self._json(200, {"status": {"overall": {"level": "available"}}, "name": "fleet-server", "status": "HEALTHY"})
+                required = getattr(state, "require_basic", None)
+                if required and self.headers.get("Authorization") != required:
+                    self._json(401, {"message": "unauthorized"})
+                    return
+                level = "available" if state.status_http == 200 else "unavailable"
+                self._json(state.status_http, {"status": {"overall": {"level": level}}})
+                return
+            if path == "/fleet-ok":
+                self._json(200, {"name": "fleet-server", "status": "HEALTHY"})
                 return
             if path == "/api/fleet/outputs":
                 self._json(200, {"items": [
@@ -111,22 +121,28 @@ def handler_for(state: FleetState):
     return Handler
 
 
-def serve(state: FleetState) -> tuple[ThreadingHTTPServer, str]:
+def serve(state: FleetState, context: object | None = None) -> tuple[ThreadingHTTPServer, str]:
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler_for(state))
+    scheme = "http"
+    if context is not None:
+        server.socket = context.wrap_socket(server.socket, server_side=True)
+        scheme = "https"
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     host, port = server.server_address
-    return server, f"http://{host}:{port}"
+    return server, f"{scheme}://{host}:{port}"
 
 
-def run(url: str, config: Path, extra: list[str]) -> subprocess.CompletedProcess[str]:
+def run(url: str, config: Path, extra: list[str], fleet_status: str | None = None) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env.update({
         "LUDUS_SO_KIBANA_URL": url,
-        "LUDUS_SO_FLEET_STATUS_URL": url + "/api/status",
+        "LUDUS_SO_FLEET_STATUS_URL": fleet_status or (url + "/api/status"),
         "LUDUS_SO_CURL_CONFIG": str(config),
         "LUDUS_SO_HOSTNAME": HOST,
         "LUDUS_SO_KIBANA_WAIT": "2",
+        "LUDUS_SO_FLEET_WAIT": "1",
+        "LUDUS_SO_DOCKER": "/bin/true",
         "LUDUS_SO_FLEET_TEMPLATE": "/no/such/fleet-server.json",
     })
     return subprocess.run([str(SCRIPT), *extra], env=env, capture_output=True, text=True)
@@ -155,8 +171,10 @@ def test_create_and_idempotent(tmp: Path) -> int:
             return fail(f"create said {first.stdout!r}")
         if state.policy.get("data_output_id") != "so-manager_elasticsearch":
             return fail(f"output {state.policy}")
-        if not state.puts:
-            return fail("policy was not pointed at elasticsearch")
+        if state.policy.get("monitoring_output_id") != "so-manager_elasticsearch":
+            return fail(f"monitoring output {state.policy}")
+        if "/api/fleet/agent_policies" not in state.posts:
+            return fail("policy create was not posted")
         second = run(url, config, ["--require-healthy"])
         if second.returncode != 0 or "policy=present" not in second.stdout or "integration=present" not in second.stdout:
             return fail(f"second run {second.returncode} {second.stdout!r}")
@@ -165,6 +183,58 @@ def test_create_and_idempotent(tmp: Path) -> int:
     finally:
         server.shutdown()
     print("PASS: creates the hostname policy and stays quiet the next time")
+    return 0
+
+
+def test_https_status_needs_auth(tmp: Path) -> int:
+    import base64
+    import ssl as ssl_mod
+
+    config = tmp / "curl.config"
+    config.write_text('user = "elastic:secret"\n')
+    cert = tmp / "cert.pem"
+    key = tmp / "key.pem"
+    made = subprocess.run(
+        [
+            "openssl", "req", "-x509", "-newkey", "rsa:2048",
+            "-keyout", str(key), "-out", str(cert),
+            "-days", "1", "-nodes", "-subj", "/CN=localhost",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if made.returncode != 0:
+        return fail(f"openssl {made.stderr}")
+    context = ssl_mod.SSLContext(ssl_mod.PROTOCOL_TLS_SERVER)
+    context.load_cert_chain(cert, key)
+    state = FleetState()
+    state.require_basic = "Basic " + base64.b64encode(b"elastic:secret").decode()
+    server, url = serve(state, context)
+    try:
+        proc = run(url, config, ["--require-healthy"], fleet_status=url + "/fleet-ok")
+        if proc.returncode != 0 or "policy=created" not in proc.stdout:
+            return fail(f"https {proc.returncode} {proc.stdout!r} {proc.stderr!r}")
+        if not url.startswith("https://"):
+            return fail(f"url {url}")
+    finally:
+        server.shutdown()
+    print("PASS: Kibana on HTTPS accepts the elastic user")
+    return 0
+
+
+def test_status_503_still_uses_fleet_api(tmp: Path) -> int:
+    config = tmp / "curl.config"
+    config.write_text('user = "elastic:secret"\n')
+    state = FleetState()
+    state.status_http = 503
+    server, url = serve(state)
+    try:
+        proc = run(url, config, ["--require-healthy"], fleet_status=url + "/fleet-ok")
+        if proc.returncode != 0 or "policy=created" not in proc.stdout:
+            return fail(f"503 {proc.returncode} {proc.stdout!r} {proc.stderr!r}")
+    finally:
+        server.shutdown()
+    print("PASS: Fleet API is enough when Kibana status stays 503")
     return 0
 
 
@@ -178,6 +248,8 @@ def test_best_effort_when_kibana_is_down(tmp: Path) -> int:
         "LUDUS_SO_CURL_CONFIG": str(config),
         "LUDUS_SO_HOSTNAME": HOST,
         "LUDUS_SO_KIBANA_WAIT": "0",
+        "LUDUS_SO_FLEET_WAIT": "1",
+        "LUDUS_SO_DOCKER": "/bin/true",
     })
     proc = subprocess.run([str(SCRIPT), "--best-effort"], env=env, capture_output=True, text=True)
     if proc.returncode != 0 or "kibana=down" not in proc.stdout:
@@ -195,10 +267,15 @@ def main() -> int:
     rc = test_shebang()
     if rc:
         return rc
-    import tempfile
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         rc = test_create_and_idempotent(root)
+        if rc:
+            return rc
+        rc = test_https_status_needs_auth(root)
+        if rc:
+            return rc
+        rc = test_status_503_still_uses_fleet_api(root)
         if rc:
             return rc
         return test_best_effort_when_kibana_is_down(root)

@@ -1,0 +1,12 @@
+---
+# Adaptix v1.2 client links Qt6 Svg/Qml and KDDockWidgets needs private QtGui
+# headers (qtx11extras_p.h). The upstream Adaptix role does not install these.
+ludus_adaptix_deps_packages:
+  - qt6-svg-dev
+  - qt6-declarative-dev
+  - qt6-base-private-dev
+
+# Upstream clones Extension-Kit as ansible_user; mark these before that task.
+ludus_adaptix_git_safe_directories:
+  - /opt/adaptix
+  - /opt/adaptix/Extension-Kit

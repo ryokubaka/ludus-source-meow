@@ -9,7 +9,7 @@
   become: false
   vars:
     ansible_connection: local
-    ansible_remote_tmp: "{{ lookup('env', 'HOME') }}/.goad/ansible-remote"
+    ansible_remote_tmp: "{{ ludus_controller_remote_tmp }}"
     ansible_shell_type: sh
 
 - name: Fetch installer from SO manager to controller

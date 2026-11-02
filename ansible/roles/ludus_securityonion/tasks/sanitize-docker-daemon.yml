@@ -52,9 +52,19 @@
   register: ludus_so_docker_daemon_fix
   changed_when: "'daemon-json-sanitized' in ludus_so_docker_daemon_fix.stdout"
 
+- name: Check whether the docker unit is installed
+  ansible.builtin.command: systemctl cat docker.service
+  register: ludus_so_docker_unit
+  changed_when: false
+  failed_when: false
+  become: true
+  when: ludus_so_docker_daemon_fix is changed
+
 - name: Restart docker after daemon.json sanitize
   ansible.builtin.service:
     name: docker
     state: restarted
   become: true
-  when: ludus_so_docker_daemon_fix is changed
+  when:
+    - ludus_so_docker_daemon_fix is changed
+    - ludus_so_docker_unit.rc | default(1) | int == 0

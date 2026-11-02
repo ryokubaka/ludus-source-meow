@@ -1,0 +1,26 @@
+---
+- name: Write Adaptix v1.2 YAML teamserver profile
+  ansible.builtin.template:
+    src: profile.yaml.j2
+    dest: /opt/adaptix/profile.yaml
+    owner: adaptix
+    group: adaptix
+    mode: "0644"
+  become: true
+  notify: Restart adaptix-c2
+
+- name: Install Adaptix systemd unit that Go can run under
+  ansible.builtin.template:
+    src: adaptix-c2.service.j2
+    dest: /etc/systemd/system/adaptix-c2.service
+    mode: "0644"
+  become: true
+  notify: Restart adaptix-c2
+
+- name: Ensure adaptix-c2 is enabled and started
+  ansible.builtin.systemd:
+    name: adaptix-c2
+    enabled: true
+    state: started
+    daemon_reload: true
+  become: true

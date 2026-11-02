@@ -104,7 +104,7 @@
   connection: local
   vars:
     ansible_connection: local
-    ansible_remote_tmp: "{{ lookup('env', 'HOME') }}/.goad/ansible-remote"
+    ansible_remote_tmp: "{{ ludus_controller_remote_tmp }}"
     ansible_python_interpreter: "{{ ansible_playbook_python }}"
   become: false
   register: ludus_so_pve_resources
@@ -191,7 +191,7 @@
   connection: local
   vars:
     ansible_connection: local
-    ansible_remote_tmp: "{{ lookup('env', 'HOME') }}/.goad/ansible-remote"
+    ansible_remote_tmp: "{{ ludus_controller_remote_tmp }}"
     ansible_python_interpreter: "{{ ansible_playbook_python }}"
   become: false
   register: ludus_so_pve_config
@@ -201,17 +201,64 @@
   ansible.builtin.set_fact:
     ludus_so_existing_net1: "{{ ludus_so_pve_config.json.data.net1 | default('') }}"
 
-- name: Fail when net1 already configured for a different sniff setup
+- name: Read the management NIC bridge
+  ansible.builtin.set_fact:
+    ludus_so_net0_bridge: >-
+      {{
+        (
+          ludus_so_pve_config.json.data.net0
+          | default('')
+          | split(',')
+          | select('match', '^bridge=')
+          | map('regex_replace', '^bridge=', '')
+          | list
+          | first
+        )
+        | default('', true)
+      }}
+
+- name: Use the management NIC bridge for the sniff NIC
+  ansible.builtin.set_fact:
+    ludus_so_vmbr: "{{ ludus_so_net0_bridge }}"
+  when: ludus_so_net0_bridge | default('') | length > 0
+
+- name: Use the SDN range vnet when this range has no classic vmbr
+  ansible.builtin.set_fact:
+    ludus_so_vmbr: "r{{ ludus_so_range_number_resolved }}"
+  when:
+    - ludus_so_net0_bridge | default('') | length == 0
+    - ludus_cluster_mode | default(false) | bool
+
+- name: Rebuild sniff net1 spec for the selected bridge
+  ansible.builtin.set_fact:
+    ludus_so_net1_spec: >-
+      {{
+        'virtio,bridge=' ~ ludus_so_vmbr ~ ',tag=' ~ (ludus_so_sniff_tag | string) ~ ',firewall=0'
+        ~ (
+          (',mtu=' ~ (ludus_so_sniff_mtu | string))
+          if ludus_so_sniff_mtu | default('') | string | length > 0
+          else ''
+        )
+      }}
+
+- name: Fail when net1 is an unrelated NIC
   ansible.builtin.fail:
     msg: >-
       VM {{ inventory_hostname }} (VMID {{ ludus_so_pve_vmid }}) net1={{ ludus_so_existing_net1 }};
       expected bridge {{ ludus_so_vmbr }} tag {{ ludus_so_sniff_tag }}.
-  when: >
-    ludus_so_existing_net1 | length > 0
-    and (
-      ('bridge=' ~ ludus_so_vmbr) not in ludus_so_existing_net1
-      or ('tag=' ~ (ludus_so_sniff_tag | string)) not in ludus_so_existing_net1
-    )
+  when:
+    - ludus_so_existing_net1 | length > 0
+    - ('bridge=' ~ ludus_so_vmbr) not in ludus_so_existing_net1
+    - ('tag=' ~ (ludus_so_sniff_tag | string)) not in ludus_so_existing_net1
+
+- name: Detect sniff net1 attached to the wrong bridge
+  ansible.builtin.set_fact:
+    ludus_so_net1_needs_bridge_fix: >-
+      {{
+        ludus_so_existing_net1 | length > 0
+        and ('bridge=' ~ ludus_so_vmbr) not in ludus_so_existing_net1
+        and ('tag=' ~ (ludus_so_sniff_tag | string)) in ludus_so_existing_net1
+      }}
 
 - name: Detect sniff net1 with wrong jumbo MTU (Ludus bridges are 1500)
   ansible.builtin.set_fact:
@@ -253,7 +300,7 @@
   connection: local
   vars:
     ansible_connection: local
-    ansible_remote_tmp: "{{ lookup('env', 'HOME') }}/.goad/ansible-remote"
+    ansible_remote_tmp: "{{ ludus_controller_remote_tmp }}"
     ansible_python_interpreter: "{{ ansible_playbook_python }}"
   become: false
   register: ludus_so_net1_add
@@ -274,7 +321,7 @@
   connection: local
   vars:
     ansible_connection: local
-    ansible_remote_tmp: "{{ lookup('env', 'HOME') }}/.goad/ansible-remote"
+    ansible_remote_tmp: "{{ ludus_controller_remote_tmp }}"
     ansible_python_interpreter: "{{ ansible_playbook_python }}"
   become: false
   register: ludus_so_net1_mtu_fix
@@ -295,15 +342,36 @@
   connection: local
   vars:
     ansible_connection: local
-    ansible_remote_tmp: "{{ lookup('env', 'HOME') }}/.goad/ansible-remote"
+    ansible_remote_tmp: "{{ ludus_controller_remote_tmp }}"
     ansible_python_interpreter: "{{ ansible_playbook_python }}"
   become: false
   register: ludus_so_net1_spec_update
   when: ludus_so_net1_needs_spec_update | default(false) | bool
 
+- name: Move sniff net1 onto the range bridge
+  ansible.builtin.uri:
+    url: "{{ ludus_so_proxmox_url }}/api2/json/nodes/{{ ludus_so_pve_node }}/qemu/{{ ludus_so_pve_vmid }}/config"
+    method: PUT
+    headers:
+      Authorization: "{{ ludus_so_pve_auth }}"
+    body_format: form-urlencoded
+    body:
+      net1: "{{ ludus_so_net1_spec }}"
+    status_code: [200]
+    validate_certs: false
+  delegate_to: localhost
+  connection: local
+  vars:
+    ansible_connection: local
+    ansible_remote_tmp: "{{ ludus_controller_remote_tmp }}"
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  become: false
+  register: ludus_so_net1_bridge_fix
+  when: ludus_so_net1_needs_bridge_fix | default(false) | bool
+
 - name: Record whether net1 was newly hot-plugged
   ansible.builtin.set_fact:
-    ludus_so_net1_was_added: "{{ ludus_so_existing_net1 | length == 0 }}"
+    ludus_so_net1_was_added: "{{ (ludus_so_existing_net1 | length == 0) or (ludus_so_net1_needs_bridge_fix | default(false) | bool) }}"
     ludus_so_net1_was_updated: >-
       {{
         (ludus_so_net1_has_bad_mtu | default(false) | bool)

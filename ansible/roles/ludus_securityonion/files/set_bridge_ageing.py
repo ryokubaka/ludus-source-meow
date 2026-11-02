@@ -28,7 +28,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-BRIDGE_RE = re.compile(r"^vmbr[0-9]+$")
+BRIDGE_RE = re.compile(r"^(?:vmbr[0-9]+|r[0-9]+)$")
 HOST_RE = re.compile(r"^[A-Za-z0-9._:-]+$")
 IFACE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,30}$")
 CONDONE_LINE = "bridge-ports-condone-regex ^(tap|fwpr|fwln|veth)"
@@ -81,6 +81,47 @@ def find_node(base: str, auth: str, names: list[str]) -> str:
     if not node:
         raise SystemExit("Proxmox VM record has no node.")
     return node
+
+
+def nic_bridge(base: str, auth: str, node: str, names: list[str]) -> str:
+    """Bridge on the VM's sniff NIC, or its management NIC if sniff is absent."""
+    try:
+        data = http_json(base + "/cluster/resources?type=vm", auth).get("data") or []
+    except SystemExit:
+        return ""
+    if not isinstance(data, list):
+        return ""
+    wanted = {name for name in names if name}
+    matches = [
+        vm
+        for vm in data
+        if vm.get("type") == "qemu"
+        and vm.get("name") in wanted
+        and (not node or vm.get("node") == node)
+    ]
+    if not matches:
+        matches = [
+            vm
+            for vm in data
+            if vm.get("type") == "qemu"
+            and str(vm.get("name") or "").endswith("-so")
+            and (not node or vm.get("node") == node)
+        ]
+    if not matches:
+        return ""
+    vm = matches[0]
+    try:
+        cfg = http_json(
+            f"{base}/nodes/{urllib.parse.quote(str(vm.get('node') or node))}/qemu/{vm.get('vmid')}/config",
+            auth,
+        ).get("data") or {}
+    except SystemExit:
+        return ""
+    for key in ("net1", "net0"):
+        for part in str(cfg.get(key) or "").split(","):
+            if part.startswith("bridge=") and BRIDGE_RE.match(part[7:]):
+                return part[7:]
+    return ""
 
 
 def ageing_path(bridge: str, sysfs_root: str) -> str:
@@ -335,9 +376,29 @@ def set_ageing(url: str, auth: str, node: str, bridge: str, vm_names: list[str])
         print(f"bridge={bridge} node={node or 'local'} ageing=0 changed=no method=present")
         return 0
     method = write_local(path)
+    if method is None and re.fullmatch(r"r[0-9]+", bridge):
+        # SDN vnets are not classic ifupdown bridges. Reloading every
+        # bridge through the node network API drops live taps.
+        print(
+            f"bridge={bridge} node={node or 'local'} "
+            f"ageing={before if before is not None else 'unknown'} "
+            "changed=no method=skipped"
+        )
+        return 0
+    if method is None and not node:
+        node = find_node(api_base(url), auth, vm_names)
+    if method is None and not os.path.exists(path):
+        alt = nic_bridge(api_base(url), auth, node, vm_names)
+        if alt and alt != bridge:
+            bridge = alt
+            path = ageing_path(bridge, sysfs_root)
+            if re.fullmatch(r"r[0-9]+", bridge):
+                print(
+                    f"bridge={bridge} node={node or 'local'} "
+                    "ageing=unknown changed=no method=skipped"
+                )
+                return 0
     if method is None:
-        if not node:
-            node = find_node(api_base(url), auth, vm_names)
         tried = []
         for host in ssh_targets(url, node):
             tried.append(host)

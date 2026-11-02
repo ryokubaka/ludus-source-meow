@@ -93,6 +93,7 @@ Vendored copies under `ansible/roles/` or `ansible/collections/` win — Ludus i
 
 ```text
 ansible/roles/my_helper/
+├── README.md                # required — what / why / task flow / variables
 ├── tasks/main.yml
 ├── defaults/main.yml
 ├── handlers/main.yml
@@ -100,7 +101,17 @@ ansible/roles/my_helper/
 └── meta/version.yml         # optional display version override
 ```
 
-Reference by directory name under `roles:` in range configs.
+Every vendored role README should cover:
+
+1. **What** the role does (one short paragraph)
+2. **Why** it exists (the Ludus/SO/Adaptix failure mode it prevents)
+3. **Task flow** or numbered steps
+4. **Variables** table with defaults
+5. Blueprint wiring / ordering notes when the role depends on another
+
+Also list the role in the root [`README.md`](./README.md) high-level table and [`ansible/README.md`](./ansible/README.md).
+
+Reference by directory name under `roles:` in range configs (Ludus source roles appear as `ryokubaka.<dirname>` when installed from this source).
 
 Prefer git submodules with absolute URLs in `.gitmodules`, pinned to release tags:
 

@@ -1,0 +1,82 @@
+---
+- name: Install Qt modules required to build the Adaptix client
+  ansible.builtin.apt:
+    name: "{{ ludus_adaptix_deps_packages }}"
+    state: present
+    update_cache: true
+  become: true
+
+# Debian/Kali ship Qt private headers under QtGui/<version>/QtGui/private/, but
+# KDDockWidgets includes <QtGui/private/qtx11extras_p.h>. Expose them at the
+# unversioned path so make client can find them without a private-module cmake link.
+- name: Discover Qt6 Gui private header paths
+  ansible.builtin.shell: |
+    set -e
+    multiarch="$(dpkg-architecture -qDEB_HOST_MULTIARCH)"
+    base="/usr/include/${multiarch}/qt6/QtGui"
+    dest="${base}/private"
+    src=""
+    for candidate in "${base}"/[0-9]*/QtGui/private "${dest}"; do
+      if [ -f "${candidate}/qtx11extras_p.h" ]; then
+        src="${candidate}"
+        break
+      fi
+    done
+    if [ -z "${src}" ]; then
+      echo "qtx11extras_p.h not found under ${base}" >&2
+      exit 1
+    fi
+    printf '%s\n%s\n' "${src}" "${dest}"
+  args:
+    executable: /bin/bash
+  register: ludus_adaptix_qt_private_paths
+  changed_when: false
+  become: true
+
+- name: Expose Qt6 Gui private headers at QtGui/private
+  ansible.builtin.file:
+    src: "{{ ludus_adaptix_qt_private_paths.stdout_lines[0] }}"
+    dest: "{{ ludus_adaptix_qt_private_paths.stdout_lines[1] }}"
+    state: link
+    force: true
+  become: true
+  when:
+    - ludus_adaptix_qt_private_paths.stdout_lines | length >= 2
+    - ludus_adaptix_qt_private_paths.stdout_lines[0] != ludus_adaptix_qt_private_paths.stdout_lines[1]
+
+# After a successful Adaptix server install the tree is chown'd to adaptix:.
+# badsectorlabs.ludus_adaptix_c2 clones Extension-Kit as ansible_user without
+# become, so redeploy fails with "dubious ownership" / cannot create under
+# /opt/adaptix. Pre-mark safe.directory and hand Extension-Kit to ansible_user.
+- name: Check for an existing Adaptix install tree
+  ansible.builtin.stat:
+    path: /opt/adaptix
+  register: ludus_adaptix_opt_stat
+
+- name: Mark Adaptix git paths safe for root
+  ansible.builtin.command:
+    cmd: "git config --global --add safe.directory {{ item }}"
+  loop: "{{ ludus_adaptix_git_safe_directories }}"
+  become: true
+  changed_when: false
+  failed_when: false
+
+- name: Mark Adaptix git paths safe for the Ansible user
+  ansible.builtin.command:
+    cmd: "git config --global --add safe.directory {{ item }}"
+  loop: "{{ ludus_adaptix_git_safe_directories }}"
+  become: true
+  become_user: "{{ ansible_user }}"
+  changed_when: false
+  failed_when: false
+
+- name: Ensure Extension-Kit is owned by the Ansible user for upstream clone
+  ansible.builtin.file:
+    path: /opt/adaptix/Extension-Kit
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0755"
+    recurse: true
+  become: true
+  when: ludus_adaptix_opt_stat.stat.exists | default(false)

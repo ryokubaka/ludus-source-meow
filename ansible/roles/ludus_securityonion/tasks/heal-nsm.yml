@@ -1,0 +1,76 @@
+---
+# Elasticsearch and most SO containers bind-mount /nsm. A dirty XFS log leaves
+# /nsm unreadable (I/O error / Structure needs cleaning), so so-elasticsearch
+# cannot recreate and Kibana stays 503.
+- name: Probe /nsm readability
+  ansible.builtin.shell: |
+    set +e
+    if ! findmnt -n /nsm >/dev/null 2>&1; then
+      echo "state=unmounted"
+      exit 0
+    fi
+    if ls /nsm >/dev/null 2>&1 && touch /nsm/.ludus-so-nsm-probe 2>/dev/null; then
+      rm -f /nsm/.ludus-so-nsm-probe
+      echo "state=ok"
+      exit 0
+    fi
+    echo "state=broken"
+  args:
+    executable: /bin/bash
+  register: ludus_so_nsm_probe
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: Parse /nsm probe
+  ansible.builtin.set_fact:
+    ludus_so_nsm_state: >-
+      {{
+        (ludus_so_nsm_probe.stdout_lines | select('match', '^state=') | first | default('state=broken'))
+        | regex_replace('^state=', '')
+      }}
+
+- name: Report /nsm probe
+  ansible.builtin.debug:
+    msg: "/nsm state={{ ludus_so_nsm_state }}"
+
+- name: Repair /nsm XFS when unreadable
+  ansible.builtin.shell: |
+    set -euo pipefail
+    DEV="$(findmnt -n -o SOURCE /nsm 2>/dev/null || true)"
+    if [ -z "${DEV}" ]; then
+      DEV=/dev/mapper/system-nsm
+    fi
+    umount -l /nsm 2>/dev/null || true
+    # Mount may still fail with "Structure needs cleaning" while the log is dirty.
+    if mount /nsm 2>/dev/null && ls /nsm >/dev/null 2>&1; then
+      echo "repaired=remount"
+      exit 0
+    fi
+    umount -l /nsm 2>/dev/null || true
+    # Lab ranges: clear a dirty log that blocks mount. Data loss is limited to
+    # in-flight NSM writes; without this Elasticsearch never comes back.
+    xfs_repair -L "$DEV"
+    mount /nsm
+    ls /nsm >/dev/null
+    echo "repaired=xfs_repair"
+  args:
+    executable: /bin/bash
+  register: ludus_so_nsm_repair
+  when:
+    - ludus_so_heal_nsm | default(true) | bool
+    - ludus_so_nsm_state | default('ok') != 'ok'
+  become: true
+  changed_when: true
+
+- name: Fail when /nsm is still unreadable after repair
+  ansible.builtin.fail:
+    msg: >
+      /nsm is still unreadable after repair
+      ({{ ludus_so_nsm_repair.stdout | default(ludus_so_nsm_state) }}).
+      Elasticsearch cannot start until the NSM volume mounts cleanly.
+  when:
+    - ludus_so_heal_nsm | default(true) | bool
+    - ludus_so_nsm_state | default('ok') != 'ok'
+    - ludus_so_nsm_repair is defined
+    - ludus_so_nsm_repair.rc | default(1) != 0

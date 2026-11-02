@@ -1,14 +1,18 @@
-# ludus_sysmon
+# ludus_sysmon (1.0.5)
 
 Installs Sysmon64 on Windows Ludus hosts and applies a lab config.
 
-Security Onion `endpoints-initial` already collects `Microsoft-Windows-Sysmon/Operational` through `windows-endpoints`. This role installs the service that writes that channel. It does not change the Fleet policy.
+## Why this role exists
 
-The Sysinternals zip is downloaded on the Ansible controller and copied to the guest. Range Windows VMs use `testing.block_internet`, so the guest cannot download it.
+Security Onion’s `endpoints-initial` policy already collects `Microsoft-Windows-Sysmon/Operational` through `windows-endpoints`. Nothing writes that channel until Sysmon is installed. Range Windows VMs usually have `testing.block_internet: true`, so the guest cannot download Sysinternals itself.
+
+This role downloads the zip on the **Ansible controller**, copies it to the guest, installs the service, and applies a schema 4.90 config aimed at lab detection (process, network, unsigned loads, LSASS access, interesting files, Run keys, DNS, drivers, remote threads, pipes, tampering, deletes). Revocation checks are off for lab speed.
+
+It does **not** change Fleet policy — pair with `ludus_so_elastic_agent` for enrollment.
 
 ## Blueprint usage
 
-Put it on the Windows VMs, before the Fleet agent:
+Put it on Windows VMs **before** the Fleet agent:
 
 ```yaml
 roles:
@@ -32,4 +36,7 @@ roles:
 
 A later run applies the config only when the file hash changed. `ludus_sysmon_force=true` reinstalls the service.
 
-The bundled config (schema 4.90) logs process, network, unsigned image loads, LSASS access, interesting file creates, Run-key registry, DNS, drivers, remote threads, pipes, process tampering, and file deletes. Revocation checks are off.
+## Notes
+
+- Controller temp paths use `files/controller-remote-tmp.sh` (same Ludus `ProtectHome` pattern as the SO roles).
+- To ship a custom config, set `ludus_sysmon_config_src` to a path readable by the controller play.
