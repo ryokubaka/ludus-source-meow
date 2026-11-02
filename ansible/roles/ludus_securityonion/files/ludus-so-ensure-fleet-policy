@@ -227,8 +227,9 @@ def ensure_policy(client: Kibana, policy_id: str, hostname: str, output_id: str)
         "monitoring_output_id": output_id,
     }
     if code == 404:
-        # Fleet Server cannot use a logstash output. Create the policy first,
-        # then point it at Elasticsearch before the integration is added.
+        # Fleet Server cannot use a logstash output. so-manager_logstash is the
+        # grid default, so the create payload must pin Elasticsearch up front;
+        # inheriting the default makes POST fail with "not usable with policy".
         created = {
             "name": policy_id,
             "id": policy_id,
@@ -237,14 +238,13 @@ def ensure_policy(client: Kibana, policy_id: str, hostname: str, output_id: str)
             "monitoring_enabled": ["logs"],
             "inactivity_timeout": 120,
             "has_fleet_server": True,
+            "data_output_id": output_id,
+            "monitoring_output_id": output_id,
             "advanced_settings": {"agent_logging_level": "warning"},
         }
         status, result = client.call("POST", "/api/fleet/agent_policies", created)
         if status not in (200, 201):
             raise ValueError(f"create {policy_id} failed: {result.get('message', status)}")
-        status, result = client.call("PUT", f"/api/fleet/agent_policies/{policy_id}", payload)
-        if status != 200:
-            raise ValueError(f"update {policy_id} failed: {result.get('message', status)}")
         return "created"
     if code != 200:
         raise ValueError(f"read {policy_id} failed: {data.get('message', code)}")

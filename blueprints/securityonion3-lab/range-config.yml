@@ -131,7 +131,10 @@ ludus:
     roles:
       - name: ryokubaka.ludus_adaptix_deps
       - name: badsectorlabs.ludus_adaptix_c2
+      - name: ryokubaka.ludus_adaptix_c2_fix
     role_vars:
       ludus_adaptix_c2_install_server: true
       ludus_adaptix_c2_install_client: true
       ludus_adaptix_c2_version: v1.2
+      # Adaptix v1.2 go.mod requires 1.25.4; role default 1.24.3 cannot build the server.
+      ludus_adaptix_c2_go_version: "1.25.4"

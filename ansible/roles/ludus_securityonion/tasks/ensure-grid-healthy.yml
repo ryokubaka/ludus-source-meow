@@ -123,6 +123,9 @@
   changed_when: false
   failed_when: false
 
+# Patching ssl.sls is enough for the next highstate. Re-applying influxdb.ssl
+# while so-boot-highstate still holds the salt lock fails the deploy even when
+# /etc/pki/influxdb.crt already has DNS:manager.
 - name: Reissue the InfluxDB certificate with the manager name
   ansible.builtin.command:
     argv:
@@ -132,11 +135,12 @@
       - -l
       - warning
   become: true
-  when: >
-    ('patched ' in (ludus_so_influx_san_patch.stdout | default('')))
-    or ('DNS:manager' not in (ludus_so_influx_san.stdout | default('')))
+  when: "'DNS:manager' not in (ludus_so_influx_san.stdout | default(''))"
   register: ludus_so_influx_ssl
   changed_when: "'recreated' in (ludus_so_influx_ssl.stdout | default(''))"
+  retries: 12
+  delay: 30
+  until: ludus_so_influx_ssl.rc | default(1) == 0
 
 - name: Restart InfluxDB so it serves the new certificate
   ansible.builtin.command:

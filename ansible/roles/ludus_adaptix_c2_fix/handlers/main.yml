@@ -1,0 +1,7 @@
+---
+- name: Restart adaptix-c2
+  ansible.builtin.systemd:
+    name: adaptix-c2
+    state: restarted
+    daemon_reload: true
+  become: true

@@ -1,0 +1,5 @@
+---
+# Run after badsectorlabs.ludus_adaptix_c2 when targeting Adaptix v1.2+.
+ludus_adaptix_c2_fix_port: "{{ ludus_adaptix_c2_port | default(4321) }}"
+ludus_adaptix_c2_fix_endpoint: "{{ ludus_adaptix_c2_endpoint | default('/endpoint') }}"
+ludus_adaptix_c2_fix_password: "{{ ludus_adaptix_c2_password | default('pass') }}"

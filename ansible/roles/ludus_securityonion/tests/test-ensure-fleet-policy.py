@@ -171,8 +171,10 @@ def test_create_and_idempotent(tmp: Path) -> int:
             return fail(f"create said {first.stdout!r}")
         if state.policy.get("data_output_id") != "so-manager_elasticsearch":
             return fail(f"output {state.policy}")
-        if not state.puts:
-            return fail("policy was not pointed at elasticsearch")
+        if state.policy.get("monitoring_output_id") != "so-manager_elasticsearch":
+            return fail(f"monitoring output {state.policy}")
+        if "/api/fleet/agent_policies" not in state.posts:
+            return fail("policy create was not posted")
         second = run(url, config, ["--require-healthy"])
         if second.returncode != 0 or "policy=present" not in second.stdout or "integration=present" not in second.stdout:
             return fail(f"second run {second.returncode} {second.stdout!r}")

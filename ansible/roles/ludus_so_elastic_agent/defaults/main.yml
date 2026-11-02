@@ -53,6 +53,8 @@ ludus_so_agent_force: false
 ludus_so_agent_uninstall_before_install: true
 ludus_so_agent_install_path_linux: /opt/Elastic/Agent
 ludus_so_agent_install_path_windows: 'C:\Program Files\Elastic\Agent'
+# SO MSI drops this bootstrapper; stock Elastic uses elastic-agent.exe only.
+ludus_so_agent_windows_bootstrapper_name: so-elastic-agent_windows_amd64.exe
 # Optional Elastic Defend tamper-protection uninstall token
 ludus_so_agent_uninstall_token: ""
 

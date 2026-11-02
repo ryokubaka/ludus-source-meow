@@ -1,0 +1,43 @@
+Teamserver:
+  interface: "0.0.0.0"
+  port: {{ ludus_adaptix_c2_fix_port }}
+  endpoint: "{{ ludus_adaptix_c2_fix_endpoint }}"
+  password: "{{ ludus_adaptix_c2_fix_password }}"
+  only_password: true
+  operators: {}
+  cert: "/opt/adaptix/server.rsa.crt"
+  key: "/opt/adaptix/server.rsa.key"
+  extenders:
+    - "/opt/adaptix/dist/extenders/beacon_listener_http/config.yaml"
+    - "/opt/adaptix/dist/extenders/beacon_listener_smb/config.yaml"
+    - "/opt/adaptix/dist/extenders/beacon_listener_tcp/config.yaml"
+    - "/opt/adaptix/dist/extenders/beacon_listener_dns/config.yaml"
+    - "/opt/adaptix/dist/extenders/beacon_agent/config.yaml"
+    - "/opt/adaptix/dist/extenders/gopher_listener_tcp/config.yaml"
+    - "/opt/adaptix/dist/extenders/gopher_agent/config.yaml"
+  axscripts: []
+  access_token_live_hours: 12
+  refresh_token_live_hours: 168
+
+HttpServer:
+  error:
+    status: 404
+    headers:
+      Content-Type: "text/html; charset=UTF-8"
+      Server: "AdaptixC2"
+      Adaptix-Version: "v1.2"
+    page: "/opt/adaptix/404page.html"
+  http:
+    max_header_bytes: 8192
+    read_header_timeout_sec: 0
+    read_timeout_sec: 0
+    write_timeout_sec: 0
+    idle_timeout_sec: 0
+    request_timeout_sec: 300
+    request_timeout_message: "504 Gateway Timeout"
+    disable_keep_alives: false
+    enable_http2: true
+  tls:
+    min_version: "TLS1.2"
+    max_version: "TLS1.3"
+    prefer_server_cipher_suites: false

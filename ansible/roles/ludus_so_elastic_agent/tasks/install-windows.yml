@@ -1,11 +1,14 @@
 ---
 # SO ships the MSI without a .msi suffix; copy to a real .msi path for msiexec.
-# Verify elastic-agent.exe before writing the marker (stale MSI registration is common).
-# Do not re-register the same var on a skipped task — Ansible drops .stat and false-fails.
+# The MSI QuietExec custom action often returns ERROR_INVALID_FUNCTION while
+# msiexec still exits 0. When that happens, run the SO bootstrapper directly
+# with -token/-fleet (same args the custom action would have used).
 - name: Select Windows amd64 MSI
   ansible.builtin.set_fact:
     ludus_so_agent_installer_name: so-elastic-agent_windows_amd64_msi
     ludus_so_agent_windows_msi_path: 'C:\Windows\Temp\so-elastic-agent_windows_amd64.msi'
+    ludus_so_agent_windows_bootstrapper: >-
+      {{ ludus_so_agent_install_path_windows }}\{{ ludus_so_agent_windows_bootstrapper_name }}
 
 - name: Fetch Windows installer (cached on controller)
   ansible.builtin.include_tasks: fetch-installer.yml
@@ -55,68 +58,95 @@
       See C:\Windows\Temp\ludus-so-elastic-agent-msi.log on the guest.
   when: (ludus_so_agent_msiexec.rc | default(1) | int) not in [0, 3010]
 
-- name: Wait for Elastic Agent binary after install
-  ansible.windows.win_stat:
-    path: "{{ ludus_so_agent_install_path_windows }}\\elastic-agent.exe"
-  register: ludus_so_agent_bin_after
-  until: ludus_so_agent_bin_after.stat.exists | default(false)
-  retries: 30
-  delay: 2
-  failed_when: false
-
-# Product registered / msiexec 0 but files missing — force reinstall repair.
-- name: Force MSI reinstall when agent binary still missing
+- name: Detect Windows Elastic Agent after msiexec
   ansible.windows.win_shell: |
-    $msi = '{{ ludus_so_agent_windows_msi_path }}'
-    $log = 'C:\Windows\Temp\ludus-so-elastic-agent-msi-reinstall.log'
-    $argList = @(
-      '/i', $msi,
-      'TOKEN={{ ludus_so_agent_token }}',
-      'FLEET={{ ludus_so_agent_fleet_url_resolved }}',
-      'TIMEOUT={{ ludus_so_agent_install_timeout }}',
-      'REINSTALL=ALL',
-      'REINSTALLMODE=vomus',
-      '/qn', '/norestart',
-      '/l*v', $log
-    )
-    $p = Start-Process -FilePath 'msiexec.exe' -ArgumentList $argList -Wait -PassThru
-    Write-Output ("msiexec_reinstall_rc=" + $p.ExitCode)
-    if ($p.ExitCode -notin @(0, 3010)) {
-      if (Test-Path -LiteralPath $log) {
-        Get-Content -LiteralPath $log -Tail 60 | ForEach-Object { Write-Output $_ }
-      }
+    $root = '{{ ludus_so_agent_install_path_windows }}'
+    $link = Join-Path $root 'elastic-agent.exe'
+    $marker = Join-Path $root '.installed'
+    $svc = Get-Service -Name 'Elastic Agent' -ErrorAction SilentlyContinue
+    $ok = $false
+    if (Test-Path -LiteralPath $marker) { $ok = $true }
+    if (Test-Path -LiteralPath $link) { $ok = $true }
+    if ($svc) { $ok = $true }
+    Write-Output ("agent_present=" + ($(if ($ok) { 'true' } else { 'false' })))
+    if ($svc) { Write-Output ("service_status=" + $svc.Status) }
+  register: ludus_so_agent_detect_after
+  changed_when: false
+
+# msiexec 0 with a failed QuietExec custom action leaves only the bootstrapper.
+# The bootstrapper can also fail once with a Windows "I/O device error" while
+# copying components; retry a few times before giving up.
+- name: Enroll with the SO Windows bootstrapper when msiexec left no agent
+  ansible.windows.win_shell: |
+    $boot = '{{ ludus_so_agent_windows_bootstrapper }}'
+    if (-not (Test-Path -LiteralPath $boot)) {
+      Write-Output "bootstrapper_missing=$boot"
+      exit 2
     }
-    exit $p.ExitCode
-  register: ludus_so_agent_msiexec_reinstall
+    $out = 'C:\Windows\Temp\ludus-so-elastic-agent-bootstrap.out'
+    $err = 'C:\Windows\Temp\ludus-so-elastic-agent-bootstrap.err'
+    $argList = @(
+      '-token', '{{ ludus_so_agent_token }}',
+      '-timeout', '{{ ludus_so_agent_install_timeout }}',
+      '-fleet', '{{ ludus_so_agent_fleet_url_resolved }}'
+    )
+    $rc = 1
+    foreach ($try in 1..5) {
+      Remove-Item $out, $err -ErrorAction SilentlyContinue
+      Write-Output ("bootstrap_try=" + $try)
+      $p = Start-Process -FilePath $boot -ArgumentList $argList -Wait -PassThru -NoNewWindow `
+        -RedirectStandardOutput $out -RedirectStandardError $err
+      $rc = $p.ExitCode
+      Write-Output ("bootstrap_rc=" + $rc)
+      if (Test-Path -LiteralPath $out) { Get-Content -LiteralPath $out -Tail 40 }
+      if (Test-Path -LiteralPath $err) { Get-Content -LiteralPath $err -Tail 40 }
+      $marker = Join-Path '{{ ludus_so_agent_install_path_windows }}' '.installed'
+      $link = Join-Path '{{ ludus_so_agent_install_path_windows }}' 'elastic-agent.exe'
+      if (($rc -eq 0) -or (Test-Path -LiteralPath $marker) -or (Test-Path -LiteralPath $link)) {
+        exit 0
+      }
+      Start-Sleep -Seconds 10
+    }
+    exit $rc
+  register: ludus_so_agent_bootstrap
   no_log: true
   failed_when: false
-  when: not (ludus_so_agent_bin_after.stat.exists | default(false))
+  when: "'agent_present=true' not in (ludus_so_agent_detect_after.stdout | default(''))"
 
-- name: Wait for Elastic Agent binary after forced reinstall
-  ansible.windows.win_stat:
-    path: "{{ ludus_so_agent_install_path_windows }}\\elastic-agent.exe"
-  register: ludus_so_agent_bin_reinstall
-  until: ludus_so_agent_bin_reinstall.stat.exists | default(false)
-  retries: 30
-  delay: 2
-  failed_when: false
-  when: not (ludus_so_agent_bin_after.stat.exists | default(false))
+- name: Detect Windows Elastic Agent after bootstrapper
+  ansible.windows.win_shell: |
+    $root = '{{ ludus_so_agent_install_path_windows }}'
+    $link = Join-Path $root 'elastic-agent.exe'
+    $marker = Join-Path $root '.installed'
+    $svc = Get-Service -Name 'Elastic Agent' -ErrorAction SilentlyContinue
+    $ok = $false
+    if (Test-Path -LiteralPath $marker) { $ok = $true }
+    if (Test-Path -LiteralPath $link) { $ok = $true }
+    if ($svc) { $ok = $true }
+    if ($svc -and $svc.Status -ne 'Running') {
+      try { Start-Service -Name 'Elastic Agent' -ErrorAction Stop } catch {}
+      Start-Sleep -Seconds 3
+      $svc = Get-Service -Name 'Elastic Agent' -ErrorAction SilentlyContinue
+    }
+    Write-Output ("agent_present=" + ($(if ($ok) { 'true' } else { 'false' })))
+    if ($svc) { Write-Output ("service_status=" + $svc.Status) }
+  register: ludus_so_agent_detect_final
+  changed_when: false
 
 - name: Set binary-present fact after install
   ansible.builtin.set_fact:
     ludus_so_agent_bin_ok: >-
-      {{
-        (ludus_so_agent_bin_after.stat.exists | default(false))
-        or (ludus_so_agent_bin_reinstall.stat.exists | default(false))
-      }}
+      {{ 'agent_present=true' in (ludus_so_agent_detect_final.stdout | default('')) }}
 
-- name: Fail when Elastic Agent binary missing after install
+- name: Fail when Elastic Agent missing after install
   ansible.builtin.fail:
     msg: >-
-      Elastic Agent install reported success but
-      {{ ludus_so_agent_install_path_windows }}\elastic-agent.exe is missing on
-      {{ inventory_hostname }}. Marker NOT written. Check MSI logs under
-      C:\Windows\Temp\ludus-so-elastic-agent-msi*.log
+      Elastic Agent install reported success but no agent is present on
+      {{ inventory_hostname }} under {{ ludus_so_agent_install_path_windows }}.
+      msiexec_rc={{ ludus_so_agent_msiexec.rc | default('n/a') }}
+      bootstrap_rc={{ ludus_so_agent_bootstrap.rc | default('skipped') }}.
+      Check C:\Windows\Temp\ludus-so-elastic-agent-msi.log and
+      C:\Windows\Temp\ludus-so-elastic-agent-bootstrap.*.
   when: not (ludus_so_agent_bin_ok | bool)
 
 - name: Write Windows install marker
