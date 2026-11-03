@@ -159,6 +159,29 @@ def write_local(path: str) -> str | None:
     return None
 
 
+def lux_host_set(bridge: str, sysfs_root: str) -> bool:
+    """Set ageing via LUX's passwordless lux-host helper (SDN-safe)."""
+    sudo = shutil.which("sudo")
+    lux = os.environ.get("LUDUS_SO_LUX_HOST", "/usr/local/sbin/lux-host")
+    if not sudo or not lux or not os.path.isfile(lux):
+        return False
+    try:
+        proc = subprocess.run(
+            [sudo, "-n", lux, "bridge-ageing", bridge],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    if proc.returncode != 0:
+        return False
+    after = read_ageing(ageing_path(bridge, sysfs_root))
+    if after is not None:
+        return after == 0
+    return "ageing=0" in (proc.stdout or "")
+
+
 def ssh_targets(url: str, node: str) -> list[str]:
     hosts: list[str] = []
     parsed = urllib.parse.urlparse(url)
@@ -376,15 +399,8 @@ def set_ageing(url: str, auth: str, node: str, bridge: str, vm_names: list[str])
         print(f"bridge={bridge} node={node or 'local'} ageing=0 changed=no method=present")
         return 0
     method = write_local(path)
-    if method is None and re.fullmatch(r"r[0-9]+", bridge):
-        # SDN vnets are not classic ifupdown bridges. Reloading every
-        # bridge through the node network API drops live taps.
-        print(
-            f"bridge={bridge} node={node or 'local'} "
-            f"ageing={before if before is not None else 'unknown'} "
-            "changed=no method=skipped"
-        )
-        return 0
+    if method is None and lux_host_set(bridge, sysfs_root):
+        method = "lux-host"
     if method is None and not node:
         node = find_node(api_base(url), auth, vm_names)
     if method is None and not os.path.exists(path):
@@ -392,12 +408,33 @@ def set_ageing(url: str, auth: str, node: str, bridge: str, vm_names: list[str])
         if alt and alt != bridge:
             bridge = alt
             path = ageing_path(bridge, sysfs_root)
-            if re.fullmatch(r"r[0-9]+", bridge):
-                print(
-                    f"bridge={bridge} node={node or 'local'} "
-                    "ageing=unknown changed=no method=skipped"
-                )
-                return 0
+            if method is None and lux_host_set(bridge, sysfs_root):
+                method = "lux-host"
+    # SDN vnets are not classic ifupdown bridges. Reloading every bridge
+    # through the node network API drops live taps, so never use the API
+    # path for rN — lux-host / local / SSH only.
+    if method is None and re.fullmatch(r"r[0-9]+", bridge):
+        tried = []
+        for host in ssh_targets(url, node):
+            tried.append(host)
+            if ssh_set(host, bridge):
+                method = f"ssh:{host}"
+                break
+        if method is None:
+            raise SystemExit(
+                f"Could not set SDN bridge {bridge} ageing_time to 0. "
+                "Passwordless sudo for lux-host bridge-ageing was not available, "
+                f"and root SSH failed for: {', '.join(tried) or '(none)'}. "
+                "Network API reload is refused for SDN vnets because it drops live taps. "
+                f"On the Proxmox node run: echo 0 > /sys/class/net/{bridge}/bridge/ageing_time "
+                "or install lux-host with the bridge-ageing operation."
+            )
+        changed = "yes"
+        print(
+            f"bridge={bridge} node={node or 'local'} ageing=0 changed={changed} "
+            f"method={method}"
+        )
+        return 0
     if method is None:
         tried = []
         for host in ssh_targets(url, node):
