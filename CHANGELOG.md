@@ -21,6 +21,8 @@ bump is not a patch. Do not invent a version heading on a feature branch.
 
 ## [Unreleased]
 
+## [1.2.20] - 2026-11-04
+
 - [Fix] **`ludus_securityonion` 1.2.22** — Set SDN range-bridge hub mode (`rN` ageing_time 0) through `lux-host bridge-ageing` instead of silently skipping. Without hub mode the sniff NIC only sees L2 broadcasts, so Win11→server unicast never reaches Zeek/Suricata. Fail the deploy when lux-host and root SSH cannot set it; never reload SDN vnets through the network API.
 
 ## [1.2.19] - 2026-11-02
