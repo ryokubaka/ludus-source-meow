@@ -105,7 +105,7 @@ getent hosts repo.securityonion.net
 
 - Ludus range bridges use **MTU 1500**; `mtu=9000` on `net1` fails on virtio. The role passes `MTU=1500` into `so-setup`.
 - A failed install can leave `bond0` behind; prepare tasks remove it so TESTING picks mgmt (`ens18`) not `bond0`.
-- Hub mode is set through the Proxmox API with a keep-taps option so `ifreload` does not drop other ranges’ VM taps. SDN `rN` vnets are not force-reloaded.
+- Hub mode prefers a local/sysfs write, then `sudo -n lux-host bridge-ageing`, then root SSH. Classic `vmbr` bridges can also use the Proxmox network API with a keep-taps option. SDN `rN` vnets never go through that API reload (it drops live taps).
 - Zeek/Suricata listen on **`bond0`**. If sniff is not enslaved, `bond0` is NO-CARRIER and NSM is empty.
 - Fleet Server policies created here pin the **Elasticsearch** output. When the grid default is `so-manager_logstash`, an unpinned create inherits Logstash and Kibana rejects Fleet Server policies.
 - Marker: `/etc/ludus-so-setup-complete` (also accepts `/opt/so/state/setup-complete` and backfills the Ludus marker for downstream roles).
