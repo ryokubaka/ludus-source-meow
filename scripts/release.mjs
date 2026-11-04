@@ -126,7 +126,25 @@ export function promoteUnreleased(changelog, nextVersion, date) {
 }
 
 /**
- * @param {{ changelog: string, version: string, tagExists: boolean, releaseExists?: boolean, bump?: BumpRequest, date?: string }} input
+ * Next semver after `from` for `bump`, skipping versions whose tags already exist.
+ * A squash merge can drop a ## [X.Y.Z] heading while the git tag remains; CI must
+ * not try to recreate that tag.
+ * @param {string} from
+ * @param {SemverBump} bump
+ * @param {(version: string) => boolean} [tagTaken]
+ */
+export function nextFreeVersion(from, bump, tagTaken) {
+  let to = bumpSemver(from, bump);
+  if (!tagTaken) return to;
+  for (let i = 0; i < 100; i += 1) {
+    if (!tagTaken(to)) return to;
+    to = bumpSemver(to, "patch");
+  }
+  throw new Error(`no free version after ${from} (${bump})`);
+}
+
+/**
+ * @param {{ changelog: string, version: string, tagExists: boolean, releaseExists?: boolean, bump?: BumpRequest, date?: string, tagTaken?: (version: string) => boolean }} input
  */
 export function planRelease(input) {
   const version = parseSemver(input.version) && input.version;
@@ -145,7 +163,7 @@ export function planRelease(input) {
   }
   if (hasUnreleasedNotes(input.changelog)) {
     const bump = bumpFromUnreleased(unreleasedBody(input.changelog), bumpRequest);
-    const to = bumpSemver(version, bump);
+    const to = nextFreeVersion(version, bump, input.tagTaken);
     const notes = notesForRelease(unreleasedBody(input.changelog));
     return {
       kind: "promote",
@@ -237,6 +255,7 @@ function runPlan(root, bump) {
     version,
     tagExists: exists,
     releaseExists: exists ? githubReleaseExists(root, version) : false,
+    tagTaken: (candidate) => tagExists(root, candidate),
     bump,
     date: new Date().toISOString().slice(0, 10),
   });

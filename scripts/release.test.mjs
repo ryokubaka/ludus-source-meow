@@ -9,6 +9,7 @@ import {
   bumpSemver,
   hasUnreleasedNotes,
   latestChangelogVersion,
+  nextFreeVersion,
   notesForRelease,
   ciShouldContinue,
   planRelease,
@@ -91,6 +92,21 @@ describe("release notes", () => {
     assert.equal(plan.bump, "patch");
     assert.equal(plan.notes, "- Packer scripts run via bash.");
     assert.equal(hasUnreleasedNotes(plan.changelog), false);
+  });
+
+  it("skips promote targets whose tags already exist", () => {
+    assert.equal(nextFreeVersion("1.2.18", "patch", (v) => v === "1.2.19"), "1.2.20");
+    const plan = planRelease({
+      changelog: SAMPLE,
+      version: "1.1.2",
+      tagExists: true,
+      releaseExists: true,
+      date: "2026-09-02",
+      tagTaken: (v) => v === "1.1.3" || v === "1.1.4",
+    });
+    assert.equal(plan.kind, "promote");
+    assert.equal(plan.to, "1.1.5");
+    assert.match(plan.changelog, /## \[1\.1\.5\] - 2026-09-02/);
   });
 
   it("tags the current version first, then CI continues to promote Unreleased", () => {
