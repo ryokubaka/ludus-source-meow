@@ -46,7 +46,7 @@ network:
 
 ludus:
   - vm_name: "{{ range_id }}-so"
-    hostname: "{{ range_id }}-so"
+    hostname: "so33"
     template: securityonion-3.3-x64-template
     vlan: 20
     ip_last_octet: 20
@@ -73,7 +73,7 @@ ludus:
       ludus_so_web_password: "MeowMeow123"
 
   - vm_name: "{{ range_id }}-dc01"
-    hostname: "{{ range_id }}-DC01"
+    hostname: "DC01"
     template: win2019-server-x64-template
     vlan: 10
     ip_last_octet: 10
@@ -96,7 +96,7 @@ ludus:
             role: ryokubaka.ludus_securityonion
 
   - vm_name: "{{ range_id }}-win11"
-    hostname: "{{ range_id }}-WIN11"
+    hostname: "WIN11-25H2"
     template: win11-25h2-x64-enterprise-template
     vlan: 10
     ip_last_octet: 11
@@ -118,7 +118,7 @@ ludus:
             role: ryokubaka.ludus_securityonion
 
   - vm_name: "{{ range_id }}-kali"
-    hostname: "{{ range_id }}-kali"
+    hostname: "kali"
     template: kali-x64-desktop-template
     vlan: 99
     ip_last_octet: 1
