@@ -97,7 +97,7 @@ ludus:
 
   - vm_name: "{{ range_id }}-win11"
     hostname: "{{ range_id }}-WIN11"
-    template: win11-22h2-x64-enterprise-template
+    template: win11-25h2-x64-enterprise-template
     vlan: 10
     ip_last_octet: 11
     ram_gb: 4
