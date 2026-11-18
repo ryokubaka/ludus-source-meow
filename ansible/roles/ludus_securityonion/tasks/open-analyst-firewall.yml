@@ -1,0 +1,92 @@
+---
+# so-setup records the SOC address in the standalone hostgroup and leaves
+# analyst empty. DOCKER-USER then accepts tcp/443 only from the SOC itself
+# and drops every other client. The range router is what limits access.
+
+- name: Locate so-firewall
+  ansible.builtin.shell: |
+    set -euo pipefail
+    for cmd in /sbin/so-firewall /usr/sbin/so-firewall; do
+      if [[ -x "${cmd}" ]]; then
+        echo "${cmd}"
+        exit 0
+      fi
+    done
+    if command -v so-firewall >/dev/null 2>&1; then
+      command -v so-firewall
+    fi
+  args:
+    executable: /bin/bash
+  register: ludus_so_firewall_bin
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: Add the open analyst CIDR
+  ansible.builtin.command:
+    argv:
+      - "{{ ludus_so_firewall_bin.stdout | trim }}"
+      - --apply
+      - includehost
+      - analyst
+      - "0.0.0.0/0"
+  register: ludus_so_analyst_fw
+  changed_when: >-
+    'Successfully added' in (
+      (ludus_so_analyst_fw.stdout | default('')) ~ (ludus_so_analyst_fw.stderr | default(''))
+    )
+  failed_when: ludus_so_analyst_fw.rc | int not in [0, 3]
+  become: true
+  when: ludus_so_firewall_bin.stdout | default('') | trim | length > 0
+
+- name: Check whether tcp/443 is open beyond the SOC address
+  ansible.builtin.shell: |
+    set -euo pipefail
+    iptables -S DOCKER-USER \
+      | grep -E -- '-p tcp .*--dport 443 -j ACCEPT' \
+      | grep -Eqv -- '-s [1-9]'
+  args:
+    executable: /bin/bash
+  register: ludus_so_analyst_open
+  changed_when: false
+  failed_when: false
+  become: true
+  when: ludus_so_firewall_bin.stdout | default('') | trim | length > 0
+
+- name: Apply the Security Onion firewall
+  ansible.builtin.command:
+    argv:
+      - "{{ ludus_so_firewall_bin.stdout | trim }}"
+      - apply
+  register: ludus_so_analyst_apply
+  changed_when: ludus_so_analyst_apply.rc | int == 0
+  become: true
+  when:
+    - ludus_so_firewall_bin.stdout | default('') | trim | length > 0
+    - ludus_so_analyst_open.rc | default(1) | int != 0
+
+- name: Recheck tcp/443 after applying the firewall
+  ansible.builtin.shell: |
+    set -euo pipefail
+    iptables -S DOCKER-USER \
+      | grep -E -- '-p tcp .*--dport 443 -j ACCEPT' \
+      | grep -Eqv -- '-s [1-9]'
+  args:
+    executable: /bin/bash
+  register: ludus_so_analyst_open_after
+  changed_when: false
+  failed_when: false
+  become: true
+  when:
+    - ludus_so_firewall_bin.stdout | default('') | trim | length > 0
+    - ludus_so_analyst_open.rc | default(1) | int != 0
+
+- name: Fail when the SOC web port is still closed to the range
+  ansible.builtin.fail:
+    msg: >-
+      Security Onion still accepts tcp/443 only from its own address.
+      so-firewall did not add 0.0.0.0/0 to the analyst hostgroup.
+  when:
+    - ludus_so_firewall_bin.stdout | default('') | trim | length > 0
+    - ludus_so_analyst_open.rc | default(0) | int != 0
+    - ludus_so_analyst_open_after.rc | default(1) | int != 0

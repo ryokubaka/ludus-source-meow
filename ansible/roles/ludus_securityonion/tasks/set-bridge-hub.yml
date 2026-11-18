@@ -1,7 +1,7 @@
-# Hub mode has to be set on the Proxmox node that owns vmbr10XX. The range
-# user cannot sudo, and the API token's console stops at a login prompt. The
-# token updates every Linux bridge so a network reload keeps live VM taps,
-# then sets ageing_time 0 on this range's bridge.
+# Hub mode is ageing_time 0 on this range's bridge only. lux-host writes
+# that one sysfs file. A root SSH key or the SSH password in the environment
+# does the same write. Proxmox network reload is not used, because it
+# rewrites every bridge.
 
 - name: Load Proxmox API credentials for hub-mode
   ansible.builtin.set_fact:
@@ -176,6 +176,8 @@
     LUDUS_SO_VMBR: "{{ ludus_so_vmbr }}"
     LUDUS_SO_PVE_NODE: "{{ ludus_so_pve_node | default('') }}"
     LUDUS_SO_VM_NAMES: "{{ ludus_so_pve_name_candidates | join(',') }}"
+    LUDUS_SO_SSH_USER: "{{ lookup('env', 'PROXMOX_SSH_USER') | default('root', true) }}"
+    LUDUS_SO_SSH_PASSWORD: "{{ lookup('env', 'PROXMOX_SSH_PASSWORD') | default('', true) }}"
   delegate_to: localhost
   connection: local
   vars:

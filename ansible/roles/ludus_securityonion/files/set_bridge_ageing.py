@@ -191,6 +191,58 @@ def ssh_targets(url: str, node: str) -> list[str]:
     return hosts
 
 
+def ssh_password_set(host: str, bridge: str) -> bool:
+    """Write one bridge as the SSH account, using a password from the environment.
+
+    The password stays in SSHPASS for sshpass. It is not a command argument.
+    """
+    password = os.environ.get("LUDUS_SO_SSH_PASSWORD", "")
+    user = os.environ.get("LUDUS_SO_SSH_USER", "root") or "root"
+    if not password or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_-]{0,31}", user):
+        return False
+    if not HOST_RE.match(host) or not BRIDGE_RE.match(bridge):
+        return False
+    sshpass = shutil.which("sshpass")
+    if not sshpass:
+        return False
+    remote = (
+        f"f=/sys/class/net/{bridge}/bridge/ageing_time; "
+        "test -e \"$f\" || exit 2; "
+        "before=$(cat \"$f\"); "
+        "echo 0 > \"$f\" || exit 1; "
+        "echo LUDUS_AGEING_BEFORE=$before; "
+        "echo LUDUS_AGEING=$(cat \"$f\")"
+    )
+    cmd = [
+        sshpass,
+        "-e",
+        os.environ.get("LUDUS_SO_SSH", "ssh"),
+        "-o",
+        "PreferredAuthentications=password",
+        "-o",
+        "PubkeyAuthentication=no",
+        "-o",
+        "NumberOfPasswordPrompts=1",
+        "-o",
+        "StrictHostKeyChecking=accept-new",
+        "-o",
+        "UserKnownHostsFile=/dev/null",
+        "-o",
+        "ConnectTimeout=8",
+        "-o",
+        "LogLevel=ERROR",
+        f"{user}@{host}",
+        remote,
+    ]
+    env = os.environ.copy()
+    env["SSHPASS"] = password
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=20, env=env)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return proc.returncode == 0 and "LUDUS_AGEING=0" in proc.stdout
+
+
 def ssh_set(host: str, bridge: str) -> bool:
     remote = (
         f"f=/sys/class/net/{bridge}/bridge/ageing_time; "
@@ -410,31 +462,8 @@ def set_ageing(url: str, auth: str, node: str, bridge: str, vm_names: list[str])
             path = ageing_path(bridge, sysfs_root)
             if method is None and lux_host_set(bridge, sysfs_root):
                 method = "lux-host"
-    # SDN vnets are not classic ifupdown bridges. Reloading every bridge
-    # through the node network API drops live taps, so never use the API
-    # path for rN — lux-host / local / SSH only.
-    if method is None and re.fullmatch(r"r[0-9]+", bridge):
-        tried = []
-        for host in ssh_targets(url, node):
-            tried.append(host)
-            if ssh_set(host, bridge):
-                method = f"ssh:{host}"
-                break
-        if method is None:
-            raise SystemExit(
-                f"Could not set SDN bridge {bridge} ageing_time to 0. "
-                "Passwordless sudo for lux-host bridge-ageing was not available, "
-                f"and root SSH failed for: {', '.join(tried) or '(none)'}. "
-                "Network API reload is refused for SDN vnets because it drops live taps. "
-                f"On the Proxmox node run: echo 0 > /sys/class/net/{bridge}/bridge/ageing_time "
-                "or install lux-host with the bridge-ageing operation."
-            )
-        changed = "yes"
-        print(
-            f"bridge={bridge} node={node or 'local'} ageing=0 changed={changed} "
-            f"method={method}"
-        )
-        return 0
+    # One bridge, written in place. A Proxmox network reload rewrites every
+    # bridge and drops live taps on other ranges, so this never calls it.
     if method is None:
         tried = []
         for host in ssh_targets(url, node):
@@ -442,79 +471,25 @@ def set_ageing(url: str, auth: str, node: str, bridge: str, vm_names: list[str])
             if ssh_set(host, bridge):
                 method = f"ssh:{host}"
                 break
-        remote = not os.path.exists(path)
-        if method is None and not condone_supported() and not (
-            remote and pve_has_condone(api_base(url), auth)
-        ):
+            if ssh_password_set(host, bridge):
+                method = f"ssh-password:{host}"
+                break
+        if method is None:
             raise SystemExit(
                 f"Could not set {bridge} ageing_time to 0. "
-                "The Proxmox API console stops at a login prompt, so it cannot run the command. "
-                f"Passwordless sudo was not available, and root SSH failed for: {', '.join(tried) or '(none)'}. "
-                "ifupdown2 has no bridge-ports-condone-regex, so networking was not reloaded. "
-                f"On the Proxmox node run: echo 0 > /sys/class/net/{bridge}/bridge/ageing_time"
+                "Only this bridge would be changed. "
+                "Passwordless lux-host bridge-ageing was not available, "
+                f"root SSH key failed for: {', '.join(tried) or '(none)'}, "
+                "and no SSH password was available. "
+                "Network config was not reloaded."
             )
-        if method is None:
-            ports_before = bridge_ports(sysfs_root)
-            addrs_before = bridge_addrs()
-            # Loopback is pveproxy only when this host owns the bridge. A Ludus
-            # controller that cannot see the bridge must use the API URL it
-            # already reached.
-            api_target = url if remote else loopback_url(url)
-            try:
-                reload_status = apply_via_api(api_base(api_target), auth, node, bridge)
-            except SystemExit as exc:
-                raise SystemExit(
-                    f"Could not set {bridge} ageing_time to 0. "
-                    "The Proxmox API console stops at a login prompt, so it cannot run the command. "
-                    f"Passwordless sudo was not available, and root SSH failed for: {', '.join(tried) or '(none)'}. "
-                    f"{exc}"
-                ) from exc
-            missing = []
-            ports_after = bridge_ports(sysfs_root)
-            for name, ports in ports_before.items():
-                after_ports = ports_after.get(name)
-                if after_ports is None:
-                    missing.extend(f"{name}/{port}" for port in ports)
-                    continue
-                missing.extend(f"{name}/{port}" for port in ports if port not in after_ports)
-            lost_addrs = []
-            addrs_after = bridge_addrs() if addrs_before else {}
-            if addrs_before and addrs_after:
-                for name, addrs in addrs_before.items():
-                    if not name.startswith("vmbr"):
-                        continue
-                    gone = addrs - addrs_after.get(name, set())
-                    lost_addrs.extend(f"{name}/{addr}" for addr in sorted(gone))
-            after = read_ageing(path)
-            remote_unverified = remote and after is None and not missing and not lost_addrs
-            if remote_unverified and reload_status not in ("OK", ""):
-                raise SystemExit(
-                    f"Hub mode was not verified on {bridge}. "
-                    f"Network reload exit: {reload_status}. "
-                    "Refusing to report success."
-                )
-            if not remote_unverified and (missing or lost_addrs or after != 0):
-                raise SystemExit(
-                    f"Hub mode was not verified on {bridge}. "
-                    f"ageing_time reads {after!r}. "
-                    f"Bridge ports removed: {', '.join(missing) or 'none'}. "
-                    f"Addresses removed: {', '.join(lost_addrs) or 'none'}. "
-                    f"Network reload exit: {reload_status}. "
-                    "Refusing to report success."
-                )
-            method = "api"
-            reload_note = f" reload={reload_status}"
-        else:
-            reload_note = ""
-    else:
-        reload_note = ""
     if method in ("local", "sudo"):
         changed = "no" if before == 0 else "yes"
     else:
         changed = "yes"
     print(
         f"bridge={bridge} node={node or 'local'} ageing=0 changed={changed} "
-        f"method={method}{reload_note}"
+        f"method={method}"
     )
     return 0
 

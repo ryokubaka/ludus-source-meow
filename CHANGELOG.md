@@ -21,6 +21,8 @@ bump is not a patch. Do not invent a version heading on a feature branch.
 
 ## [Unreleased]
 
+- [Fix] **`ludus_securityonion` 1.2.23** — Open the SOC web ports. so-setup leaves the analyst hostgroup empty, so the host firewall accepts tcp/443 only from the SOC's own address and drops every other client, including the target VLAN. The role adds `0.0.0.0/0` to that group and fails the deploy when `DOCKER-USER` still has no open 443 accept. The range router remains the access control.
+
 ## [1.2.20] - 2026-11-04
 
 - [Fix] **`ludus_securityonion` 1.2.22** — Set SDN range-bridge hub mode (`rN` ageing_time 0) through `lux-host bridge-ageing` instead of silently skipping. Without hub mode the sniff NIC only sees L2 broadcasts, so Win11→server unicast never reaches Zeek/Suricata. Fail the deploy when lux-host and root SSH cannot set it; never reload SDN vnets through the network API.

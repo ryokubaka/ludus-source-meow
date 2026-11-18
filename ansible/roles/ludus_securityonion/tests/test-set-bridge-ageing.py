@@ -126,6 +126,51 @@ def test_ssh() -> int:
     return 0
 
 
+def test_ssh_password() -> int:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        bindir = root / "bin"
+        bindir.mkdir()
+        log = root / "ssh.log"
+        write_exec(bindir / "ssh", "#!/bin/bash\nexit 255\n")
+        write_exec(
+            bindir / "sshpass",
+            "#!/bin/bash\n"
+            f"printf '%s\\n' \"$*\" >> {log}\n"
+            "test -n \"$SSHPASS\" || exit 1\n"
+            "case \"$SSHPASS\" in\n"
+            "  *' '*) exit 3;;\n"
+            "esac\n"
+            "case \"$*\" in\n"
+            "  *vmbr1004*) echo LUDUS_AGEING_BEFORE=30000; echo LUDUS_AGEING=0; exit 0;;\n"
+            "  *) exit 255;;\n"
+            "esac\n",
+        )
+        proc = run_script(
+            {
+                "PATH": f"{bindir}:{os.environ.get('PATH', '')}",
+                "LUDUS_SO_PVE_AUTH": "token",
+                "LUDUS_SO_PVE_URL": "https://10.1.1.1:8006",
+                "LUDUS_SO_VMBR": "vmbr1004",
+                "LUDUS_SO_PVE_NODE": "rocky",
+                "LUDUS_SO_SYSFS_ROOT": str(root / "missing"),
+                "LUDUS_SO_SSH_USER": "root",
+                "LUDUS_SO_SSH_PASSWORD": "secret-value",
+            }
+        )
+        if proc.returncode != 0:
+            return fail(proc.stderr or proc.stdout)
+        if "method=ssh-password:127.0.0.1" not in proc.stdout:
+            return fail(proc.stdout)
+        logged = log.read_text()
+        if "vmbr1004" not in logged or "secret-value" in logged:
+            return fail(logged)
+        if "vmbr1001" in logged or "vmbr0" in logged:
+            return fail(logged)
+    print("PASS: an SSH password sets only the named bridge")
+    return 0
+
+
 def test_all_fail() -> int:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -148,7 +193,9 @@ def test_all_fail() -> int:
         text = (proc.stderr or "") + (proc.stdout or "")
         if proc.returncode == 0 or "ageing=0" in proc.stdout:
             return fail(f"failure was reported as success: {text}")
-        if "login prompt" not in text or "root SSH failed" not in text or "not reloaded" not in text:
+        if "root SSH key failed" not in text or "Network config was not reloaded" not in text:
+            return fail(text)
+        if "vmbr0" in text or "/network/" in text:
             return fail(text)
     print("PASS: missing root access fails instead of pretending the bridge is a hub")
     return 0
@@ -220,11 +267,11 @@ def test_api_without_local_sysfs() -> int:
         finally:
             server.shutdown()
         text = (proc.stdout or "") + (proc.stderr or "")
-        if proc.returncode != 0 or "method=api" not in (proc.stdout or "") or "reload=OK" not in (proc.stdout or ""):
+        if proc.returncode == 0 or any(item.startswith("PUT ") for item in seen):
+            return fail(f"network API was used: {text} {seen}")
+        if "Network config was not reloaded" not in text:
             return fail(text)
-        if not any(item.startswith("PUT ") and item.endswith("/network/vmbr1004") for item in seen):
-            return fail(f"API did not update the bridge: {seen}")
-    print("PASS: a controller that cannot see the bridge sets hub mode through the API")
+    print("PASS: a controller that cannot see the bridge does not reload Proxmox networking")
     return 0
 
 
@@ -379,7 +426,7 @@ def test_sdn_without_lux_host_fails() -> int:
         text = (proc.stderr or "") + (proc.stdout or "")
         if proc.returncode == 0 or "ageing=0" in (proc.stdout or ""):
             return fail(f"SDN failure was reported as success: {text}")
-        if "SDN bridge" not in text or reloads["n"] != 0:
+        if "Network config was not reloaded" not in text or reloads["n"] != 0:
             return fail(f"reloads={reloads['n']} {text}")
     print("PASS: SDN hub mode fails loudly when lux-host and root SSH are unavailable")
     return 0
@@ -432,7 +479,7 @@ def test_old_pve_does_not_reload() -> int:
         finally:
             server.shutdown()
         text = (proc.stdout or "") + (proc.stderr or "")
-        if proc.returncode == 0 or reloads["n"] != 0 or "not reloaded" not in text:
+        if proc.returncode == 0 or reloads["n"] != 0 or "Network config was not reloaded" not in text:
             return fail(f"reloads={reloads['n']} {text}")
     print("PASS: an old Proxmox node is not reloaded when tap-keep cannot be confirmed")
     return 0
@@ -606,27 +653,24 @@ def test_api_keeps_other_bridges() -> int:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         proc, state, ifreload_log = _run_api(root)
-        if proc.returncode != 0:
-            return fail(proc.stderr or proc.stdout)
-        if "method=api" not in proc.stdout or "ageing=0" not in proc.stdout:
-            return fail(proc.stdout)
+        text = (proc.stdout or "") + (proc.stderr or "")
+        if proc.returncode == 0 or "method=api" in (proc.stdout or ""):
+            return fail(text)
         ageing = (root / "class" / "net" / "vmbr1004" / "bridge" / "ageing_time").read_text().strip()
         other = (root / "class" / "net" / "vmbr0" / "bridge" / "ageing_time").read_text().strip()
         ports = {
             "vmbr1004": sorted(path.name for path in (root / "class/net/vmbr1004/brif").iterdir()),
             "vmbr0": sorted(path.name for path in (root / "class/net/vmbr0/brif").iterdir()),
         }
-        if ageing != "0" or other != "30000":
+        if ageing != "30000" or other != "30000":
             return fail(f"ageing target={ageing} other={other}")
         if ports != {"vmbr1004": ["tap101i0"], "vmbr0": ["fwpr1p0"]}:
             return fail(f"ports {ports}")
-        if set(state.updates) != {"vmbr1004", "vmbr0"} or state.reloads != 1:
-            return fail(f"updates={state.updates} reloads={state.reloads}")
+        if state.updates or state.reloads != 0:
+            return fail(f"other bridges were updated: {state.updates} reloads={state.reloads}")
         if ifreload_log.exists():
-            return fail("local ifreload ran; the reload has to go through the API")
-        if "nic0" in state.updates:
-            return fail("updated a non-bridge")
-    print("PASS: API reload hubs one bridge and keeps the other bridge's tap and address")
+            return fail("ifreload ran")
+    print("PASS: hub mode does not rewrite any other bridge")
     return 0
 
 
@@ -636,11 +680,12 @@ def test_api_drop_fails() -> int:
         text = (proc.stdout or "") + (proc.stderr or "")
         if proc.returncode == 0 or "ageing=0" in (proc.stdout or ""):
             return fail(f"dropped ports were reported as hub mode: {text}")
-        if "Bridge ports removed" not in text or "tap101i0" not in text:
-            return fail(text)
-        if state.reloads != 1:
-            return fail("expected the reload so the port check can fail closed")
-    print("PASS: a reload that removes bridge ports fails closed")
+        if state.reloads != 0 or state.updates:
+            return fail(f"network reload ran: {state.updates}")
+        other = (Path(tmp) / "class" / "net" / "vmbr0" / "bridge" / "ageing_time").read_text().strip()
+        if other != "30000":
+            return fail(f"other bridge ageing changed to {other}")
+    print("PASS: hub mode leaves every other bridge alone")
     return 0
 
 
@@ -683,7 +728,7 @@ def test_no_ifreload() -> int:
             return fail("ifreload ran; that detaches VM taps on other ranges")
         if ageing.read_text().strip() != "30000":
             return fail(f"sysfs changed to {ageing.read_text()!r}")
-        if "bridge-ports-condone-regex" not in text or "not reloaded" not in text:
+        if "Network config was not reloaded" not in text:
             return fail(text)
     print("PASS: networking stays up when ifupdown2 cannot keep VM taps")
     return 0
@@ -694,6 +739,7 @@ def main() -> int:
         test_shebang,
         test_sudo,
         test_ssh,
+        test_ssh_password,
         test_all_fail,
         test_api_without_local_sysfs,
         test_missing_vmbr_uses_vm_bridge,

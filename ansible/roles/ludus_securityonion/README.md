@@ -54,7 +54,7 @@ Controller helpers that write under `delegate_to: localhost` use `files/controll
 
 ### Always (fresh or redeploy)
 
-1. Open analyst firewall hostgroup
+1. Open analyst firewall hostgroup (`so-firewall --apply includehost analyst 0.0.0.0/0`). Fail if tcp/443 is still accepted only from the SOC address. The range router enforces access.
 2. **Enslave sniff → `bond0`** (+ `ludus-so-enslave-sniff.service` for boot)
 3. **Reboot if needed** — so-soc reboot pill / `needs-restarting` after kernel update
 4. **Heal `/nsm`** — remount or `xfs_repair -L` when the volume returns I/O errors (otherwise ES gone, Kibana 503)

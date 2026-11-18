@@ -154,19 +154,16 @@
         mode: "0644"
       become: true
 
-# Analyst/SOC is open. The range router decides who can reach this VM.
+  always:
+    # so-setup can finish after the wait task has already failed. Open the
+    # analyst group whenever so-firewall is present, including that case.
+    - name: Open the Security Onion analyst firewall after setup
+      ansible.builtin.include_tasks: open-analyst-firewall.yml
+
+# Redeploy skips so-setup. The analyst group still has to be open.
 - name: Open the Security Onion analyst firewall
-  ansible.builtin.command:
-    argv:
-      - /sbin/so-firewall
-      - includehost
-      - analyst
-      - 0.0.0.0/0
-      - --apply
-  become: true
-  register: ludus_so_analyst_fw
-  changed_when: ludus_so_analyst_fw.rc | int == 0
-  failed_when: ludus_so_analyst_fw.rc | int not in [0, 3]
+  ansible.builtin.include_tasks: open-analyst-firewall.yml
+  when: ludus_so_already_setup | bool
 
 # Sensors listen on bond0 — BNICS must stay enslaved or zeek/suricata see nothing.
 # Runs after fresh setup and on redeploy when marker already exists (heal).
