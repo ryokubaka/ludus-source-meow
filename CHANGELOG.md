@@ -21,6 +21,8 @@ bump is not a patch. Do not invent a version heading on a feature branch.
 
 ## [Unreleased]
 
+## [1.2.22] - 2026-11-18
+
 - [Fix] **Security Onion labs** — `Allow targets to Red` uses `protocol: all` and `ports: all`, the same shape as `Allow Kali to targets`. `protocol: tcp` with `ports: all` left that path under the inter-VLAN drop.
 
 ## [1.2.21] - 2026-11-18
