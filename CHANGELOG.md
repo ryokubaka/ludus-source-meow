@@ -21,6 +21,8 @@ bump is not a patch. Do not invent a version heading on a feature branch.
 
 ## [Unreleased]
 
+## [1.2.23] - 2026-11-18
+
 - [Fix] **`ludus_securityonion` 1.2.24** — Enslave the sniff NIC to `bond0` even when the so-setup wait has already failed the play, and keep Salt's `sensor.mtu` at the NIC MTU. so-setup leaves the bond at 9000, the kernel refuses the 1500-byte virtio slave, and Zeek watches an empty bond. A boot unit and a one-minute timer put the slave back after a range reboot or a Salt highstate.
 
 ## [1.2.22] - 2026-11-18
