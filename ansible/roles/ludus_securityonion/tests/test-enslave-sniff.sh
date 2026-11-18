@@ -168,6 +168,48 @@ else
   echo "PASS: nmcli exit 8 is ignored"
 fi
 
+# Salt highstate reads sensor.mtu. 9000 must become the NIC MTU or the
+# next boot drops the slave again.
+PILLAR="$TMP/pillar"
+mkdir -p "$PILLAR"
+cat > "$PILLAR/manager_standalone.sls" <<'EOF'
+sensor:
+  interface: 'bond0'
+  mtu: 9000
+  channels: 1
+zeek:
+  enabled: True
+EOF
+SYS4="$TMP/sys4"
+LOG4="$TMP/ip4.log"
+: > "$LOG4"
+install_fake_ip
+export LUDUS_TEST_IP_LOG="$LOG4"
+make_nic "$SYS4" ens19 1500
+make_nic "$SYS4" bond0 9000
+mkdir -p "$SYS4/bond0/bonding"
+: > "$SYS4/bond0/bonding/slaves"
+set +e
+out4=$(PATH="$TMP/bin:/usr/bin:/bin" \
+  LUDUS_SO_SYSFS="$SYS4" \
+  LUDUS_SO_ENSLAVE_CONF="$TMP/missing.conf" \
+  LUDUS_SO_SKIP_NM=1 \
+  LUDUS_SO_PILLAR_DIR="$PILLAR" \
+  SNIFF=ens19 MTU=1500 \
+  bash "$HELPER" 2>"$TMP/err4")
+rc4=$?
+set -e
+assert "pillar rewrite still enslaves" "0" "$rc4"
+assert "sensor.mtu follows the nic" "1500" "$(awk '/^  mtu:/{print $2}' "$PILLAR/manager_standalone.sls")"
+if grep -q 'pillar-mtu=manager_standalone.sls:1500' <<<"$out4"; then
+  pass=$((pass + 1))
+  echo "PASS: helper reports the pillar change"
+else
+  fail=$((fail + 1))
+  echo "FAIL: helper reports the pillar change" >&2
+  echo "  stdout: $out4" >&2
+fi
+
 echo
 echo "${pass} passed, ${fail} failed"
 [[ "$fail" -eq 0 ]]

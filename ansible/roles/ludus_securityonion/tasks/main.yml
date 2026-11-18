@@ -159,6 +159,12 @@
     # analyst group whenever so-firewall is present, including that case.
     - name: Open the Security Onion analyst firewall after setup
       ansible.builtin.include_tasks: open-analyst-firewall.yml
+    # The same failed wait skips every task after this block, which is where
+    # the sniff bond unit is installed. Heal it here when the NIC exists.
+    - name: Enslave the sniff NIC when setup did not finish the play
+      ansible.builtin.include_tasks: ensure-sniff-bond.yml
+      vars:
+        ludus_so_sniff_bond_optional: true
 
 # Redeploy skips so-setup. The analyst group still has to be open.
 - name: Open the Security Onion analyst firewall

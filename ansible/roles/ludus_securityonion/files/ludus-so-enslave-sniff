@@ -13,6 +13,7 @@ SNIFF="${SNIFF:-}"
 BOND="${BOND:-bond0}"
 MTU="${MTU:-1500}"
 SYS="${LUDUS_SO_SYSFS:-/sys/class/net}"
+PILLAR_DIR="${LUDUS_SO_PILLAR_DIR:-/opt/so/saltstack/local/pillar/minions}"
 
 [[ -n "$SNIFF" ]] || { echo "sniff-unset"; exit 1; }
 [[ -d "$SYS/$SNIFF" ]] || { echo "sniff-missing=$SNIFF"; exit 1; }
@@ -65,6 +66,44 @@ lower_bond_mtu() {
   ip link set "$BOND" down 2>/dev/null || true
   ip link set "$BOND" mtu "$target"
   ip link set "$SNIFF" mtu "$target" 2>/dev/null || true
+}
+
+# so-setup records sensor.mtu 9000. The next Salt highstate then raises
+# bond0 and the kernel drops the 1500-byte virtio slave. Keep the pillar
+# at the NIC MTU so a reboot highstate does not undo the enslave.
+patch_sensor_mtu() {
+  local target
+  target=$(target_mtu)
+  [[ -d "$PILLAR_DIR" ]] || return 0
+  command -v python3 >/dev/null 2>&1 || return 0
+  LUDUS_SO_PILLAR_DIR="$PILLAR_DIR" LUDUS_SO_TARGET_MTU="$target" python3 - <<'PY'
+import os
+import pathlib
+root = pathlib.Path(os.environ["LUDUS_SO_PILLAR_DIR"])
+target = os.environ["LUDUS_SO_TARGET_MTU"]
+for path in sorted(root.glob("*.sls")):
+    text = path.read_text()
+    lines = text.splitlines(keepends=True)
+    in_sensor = False
+    changed = False
+    out = []
+    for line in lines:
+        stripped = line.lstrip()
+        if line.startswith("sensor:"):
+            in_sensor = True
+        elif stripped and not line.startswith((" ", "\t", "#")):
+            in_sensor = False
+        if in_sensor and stripped.startswith("mtu:"):
+            ending = "\n" if line.endswith("\n") else ""
+            new = f"  mtu: {target}{ending}"
+            if line != new:
+                changed = True
+                line = new
+        out.append(line)
+    if changed:
+        path.write_text("".join(out))
+        print(f"pillar-mtu={path.name}:{target}")
+PY
 }
 
 add_slave() {
@@ -120,6 +159,8 @@ if [[ ! -d "$SYS/$BOND" ]]; then
   fi
   echo "created-bond0"
 fi
+
+patch_sensor_mtu || true
 
 slaves=$(cat "$SYS/$BOND/bonding/slaves" 2>/dev/null || true)
 if [[ " $slaves " == *" $SNIFF "* ]]; then

@@ -25,120 +25,125 @@
     msg: >
       Cannot heal sniff bond — no non-mgmt NIC found (expected ens19).
       Check Proxmox net1 / guest interfaces.
-  when: ludus_so_sniff_nic_detect.rc != 0
+  when:
+    - ludus_so_sniff_nic_detect.rc != 0
+    - not (ludus_so_sniff_bond_optional | default(false) | bool)
 
-- name: Set sniff NIC fact
-  ansible.builtin.set_fact:
-    ludus_so_sniff_nic: "{{ ludus_so_sniff_nic_detect.stdout | trim }}"
+- name: Heal the sniff bond
+  when: ludus_so_sniff_nic_detect.rc == 0
+  block:
+    - name: Set sniff NIC fact
+      ansible.builtin.set_fact:
+        ludus_so_sniff_nic: "{{ ludus_so_sniff_nic_detect.stdout | trim }}"
 
-- name: Install ludus-so-enslave-sniff config
-  ansible.builtin.copy:
-    dest: /etc/ludus-so-enslave-sniff.conf
-    mode: "0644"
-    content: |
-      SNIFF={{ ludus_so_sniff_nic }}
-      MTU={{ ludus_so_bond_mtu | int }}
-  become: true
+    - name: Install ludus-so-enslave-sniff config
+      ansible.builtin.copy:
+        dest: /etc/ludus-so-enslave-sniff.conf
+        mode: "0644"
+        content: |
+          SNIFF={{ ludus_so_sniff_nic }}
+          MTU={{ ludus_so_bond_mtu | int }}
+      become: true
 
-- name: Install ludus-so-enslave-sniff helper
-  ansible.builtin.copy:
-    src: ludus-so-enslave-sniff
-    dest: /usr/local/sbin/ludus-so-enslave-sniff
-    mode: "0755"
-  become: true
+    - name: Install ludus-so-enslave-sniff helper
+      ansible.builtin.copy:
+        src: ludus-so-enslave-sniff
+        dest: /usr/local/sbin/ludus-so-enslave-sniff
+        mode: "0755"
+      become: true
 
-- name: Install sensor wait helper
-  ansible.builtin.copy:
-    src: ludus-so-wait-sensors
-    dest: /usr/local/sbin/ludus-so-wait-sensors
-    mode: "0755"
-  become: true
+    - name: Install sensor wait helper
+      ansible.builtin.copy:
+        src: ludus-so-wait-sensors
+        dest: /usr/local/sbin/ludus-so-wait-sensors
+        mode: "0755"
+      become: true
 
-- name: Install systemd unit for sniff bond on boot
-  ansible.builtin.copy:
-    dest: /etc/systemd/system/ludus-so-enslave-sniff.service
-    mode: "0644"
-    content: |
-      [Unit]
-      Description=Ensure Security Onion bond0 + sniff NIC slave
-      After=network-online.target
-      Wants=network-online.target
-      Before=docker.service
-      StartLimitIntervalSec=300
-      StartLimitBurst=30
+    - name: Install systemd unit for sniff bond on boot
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/ludus-so-enslave-sniff.service
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Ensure Security Onion bond0 + sniff NIC slave
+          After=network-online.target
+          Wants=network-online.target
+          Before=docker.service
+          StartLimitIntervalSec=300
+          StartLimitBurst=30
 
-      [Service]
-      Type=oneshot
-      ExecStart=/usr/local/sbin/ludus-so-enslave-sniff
-      RemainAfterExit=yes
-      Restart=on-failure
-      RestartSec=5
+          [Service]
+          Type=oneshot
+          ExecStart=/usr/local/sbin/ludus-so-enslave-sniff
+          RemainAfterExit=yes
+          Restart=on-failure
+          RestartSec=5
 
-      [Install]
-      WantedBy=multi-user.target
-  become: true
-  register: ludus_so_sniff_unit
+          [Install]
+          WantedBy=multi-user.target
+      become: true
+      register: ludus_so_sniff_unit
 
-- name: Install systemd timer to re-assert the sniff bond
-  ansible.builtin.copy:
-    dest: /etc/systemd/system/ludus-so-enslave-sniff.timer
-    mode: "0644"
-    content: |
-      [Unit]
-      Description=Re-assert Security Onion sniff bond after boot and Salt
+    - name: Install systemd timer to re-assert the sniff bond
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/ludus-so-enslave-sniff.timer
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Re-assert Security Onion sniff bond after boot and Salt
 
-      [Timer]
-      OnBootSec=20s
-      OnUnitActiveSec=60s
-      AccuracySec=10s
+          [Timer]
+          OnBootSec=20s
+          OnUnitActiveSec=60s
+          AccuracySec=10s
 
-      [Install]
-      WantedBy=timers.target
-  become: true
+          [Install]
+          WantedBy=timers.target
+      become: true
 
-- name: Enable ludus-so-enslave-sniff.service
-  ansible.builtin.systemd:
-    name: ludus-so-enslave-sniff.service
-    enabled: true
-    daemon_reload: true
-  become: true
+    - name: Enable ludus-so-enslave-sniff.service
+      ansible.builtin.systemd:
+        name: ludus-so-enslave-sniff.service
+        enabled: true
+        daemon_reload: true
+      become: true
 
-- name: Enable ludus-so-enslave-sniff.timer
-  ansible.builtin.systemd:
-    name: ludus-so-enslave-sniff.timer
-    enabled: true
-    state: started
-    daemon_reload: true
-  become: true
+    - name: Enable ludus-so-enslave-sniff.timer
+      ansible.builtin.systemd:
+        name: ludus-so-enslave-sniff.timer
+        enabled: true
+        state: started
+        daemon_reload: true
+      become: true
 
-- name: Run sniff bond create/enslave now
-  ansible.builtin.command: /usr/local/sbin/ludus-so-enslave-sniff
-  become: true
-  register: ludus_so_enslave_now
-  changed_when: >-
-    'enslaved' in (ludus_so_enslave_now.stdout | default(''))
-    or 'created-bond0' in (ludus_so_enslave_now.stdout | default(''))
+    - name: Run sniff bond create/enslave now
+      ansible.builtin.command: /usr/local/sbin/ludus-so-enslave-sniff
+      become: true
+      register: ludus_so_enslave_now
+      changed_when: >-
+        'enslaved' in (ludus_so_enslave_now.stdout | default(''))
+        or 'created-bond0' in (ludus_so_enslave_now.stdout | default(''))
 
-- name: Fail when bond0 could not be created
-  ansible.builtin.fail:
-    msg: >
-      Failed to create/enslave bond0 for sniff NIC {{ ludus_so_sniff_nic }}.
-      Output: {{ ludus_so_enslave_now.stdout | default('') }}
-      {{ ludus_so_enslave_now.stderr | default('') }}
-  when: ludus_so_enslave_now.rc | default(1) != 0
+    - name: Fail when bond0 could not be created
+      ansible.builtin.fail:
+        msg: >
+          Failed to create/enslave bond0 for sniff NIC {{ ludus_so_sniff_nic }}.
+          Output: {{ ludus_so_enslave_now.stdout | default('') }}
+          {{ ludus_so_enslave_now.stderr | default('') }}
+      when: ludus_so_enslave_now.rc | default(1) != 0
 
-- name: Re-assert Proxmox range bridge hub-mode (ageing 0)
-  ansible.builtin.include_tasks: set-bridge-hub.yml
+    - name: Re-assert Proxmox range bridge hub-mode (ageing 0)
+      ansible.builtin.include_tasks: set-bridge-hub.yml
 
-# Boot highstate creates so-zeek and so-suricata. so-*-restart queues behind
-# that Salt call. A 5 minute async cap failed the deploy while Zeek was still
-# starting and Suricata did not exist yet. Poll until both are running.
-- name: Wait for Zeek and Suricata after the sniff bond
-  ansible.builtin.command: /usr/local/sbin/ludus-so-wait-sensors
-  become: true
-  when: ludus_so_enslave_now is changed
-  register: ludus_so_sensor_wait
-  until: ludus_so_sensor_wait.rc == 0
-  retries: "{{ ludus_so_sensor_wait_retries | int }}"
-  delay: "{{ ludus_so_sensor_wait_delay | int }}"
-  changed_when: "'started-sensors' in (ludus_so_sensor_wait.stdout | default(''))"
+    # Boot highstate creates so-zeek and so-suricata. so-*-restart queues behind
+    # that Salt call. A 5 minute async cap failed the deploy while Zeek was still
+    # starting and Suricata did not exist yet. Poll until both are running.
+    - name: Wait for Zeek and Suricata after the sniff bond
+      ansible.builtin.command: /usr/local/sbin/ludus-so-wait-sensors
+      become: true
+      when: ludus_so_enslave_now is changed
+      register: ludus_so_sensor_wait
+      until: ludus_so_sensor_wait.rc == 0
+      retries: "{{ ludus_so_sensor_wait_retries | int }}"
+      delay: "{{ ludus_so_sensor_wait_delay | int }}"
+      changed_when: "'started-sensors' in (ludus_so_sensor_wait.stdout | default(''))"

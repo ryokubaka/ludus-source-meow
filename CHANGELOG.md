@@ -21,6 +21,8 @@ bump is not a patch. Do not invent a version heading on a feature branch.
 
 ## [Unreleased]
 
+- [Fix] **`ludus_securityonion` 1.2.24** — Enslave the sniff NIC to `bond0` even when the so-setup wait has already failed the play, and keep Salt's `sensor.mtu` at the NIC MTU. so-setup leaves the bond at 9000, the kernel refuses the 1500-byte virtio slave, and Zeek watches an empty bond. A boot unit and a one-minute timer put the slave back after a range reboot or a Salt highstate.
+
 ## [1.2.22] - 2026-11-18
 
 - [Fix] **Security Onion labs** — `Allow targets to Red` uses `protocol: all` and `ports: all`, the same shape as `Allow Kali to targets`. `protocol: tcp` with `ports: all` left that path under the inter-VLAN drop.
